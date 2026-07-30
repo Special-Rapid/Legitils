@@ -210,15 +210,19 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    /** Defers a Nick's pre-game player-chat notice until the start message reveals the game team. */
+    /**
+     * Announces a Nick immediately when they chat in pre-game, then preserves a
+     * separate delayed notice for the game-start team formatting.
+     */
     public static void onPregameNickChat(UUID playerId, String serverPresentedName) {
         if (!STARTED.get() || !nickDetectionEnabled || playerId == null || playerId.version() != 1
             || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
         if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
+        PENDING_NICK_NOTICES.add(pregameNickNotice(serverPresentedName, null));
         PREGAME_NICK_CHATTERS.put(playerId, serverPresentedName);
     }
 
-    /** Releases only pre-game Nick chat observations once Hypixel announces game start. */
+    /** Releases a second pre-game Nick notice once Hypixel announces game start and the team is available. */
     public static void onPregameGameStartChat(String rawMessage, long nowMillis) {
         if (!NickChatSignal.isGameStart(rawMessage)) return;
         for (Map.Entry<UUID, String> entry : PREGAME_NICK_CHATTERS.entrySet()) {
