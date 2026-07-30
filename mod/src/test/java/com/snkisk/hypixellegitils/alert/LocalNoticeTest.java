@@ -1,5 +1,6 @@
 package com.snkisk.hypixellegitils.alert;
 
+import com.snkisk.hypixellegitils.BuildInfo;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -9,7 +10,7 @@ public class LocalNoticeTest {
     @Test
     public void injectedNoticeUsesTheLocalLegitilsPrefix() {
         assertEquals(
-            ChatFormat.line("§aInjected!"),
+            ChatFormat.line("§aInjected! §8| §7Build §f" + BuildInfo.displayVersion()),
             LocalNotice.injectedText()
         );
     }

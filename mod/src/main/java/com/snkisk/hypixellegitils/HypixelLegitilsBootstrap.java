@@ -112,7 +112,7 @@ public final class HypixelLegitilsBootstrap {
             try {
                 store.writeRuntimeStatusAtomically(
                     ConfigPaths.runtimeStatusPath(userHome),
-                    new RuntimeStatus("0.1.0-SNAPSHOT", loaded.config.revision, loaded.usedDefaults)
+                    new RuntimeStatus(BuildInfo.displayVersion(), loaded.config.revision, loaded.usedDefaults)
                 );
             } catch (Exception exception) {
                 System.err.println("[HypixelLegitils] Runtime status unavailable: " + exception.getClass().getSimpleName());
@@ -479,7 +479,7 @@ public final class HypixelLegitilsBootstrap {
         String nickState = config.nickDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
         String partyState = config.partyDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
         return new String[] {
-            ChatFormat.line("§fStatus"),
+            ChatFormat.line("§fStatus §8| §7Build §f" + BuildInfo.displayVersion()),
             ChatFormat.continuation("§7Anti-cheat: §a" + enabledCount(config) + "§8/§a" + availableCount() + " §7detectors active"),
             ChatFormat.continuation("§7Nick detect: " + nickState),
             ChatFormat.continuation("§7Party detect: " + partyState),

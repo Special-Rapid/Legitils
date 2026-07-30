@@ -28,6 +28,20 @@ allprojects {
     }
 }
 
+def buildRevisionOutput = new ByteArrayOutputStream()
+try {
+    exec {
+        commandLine 'git', 'describe', '--always', '--dirty', '--abbrev=7'
+        standardOutput = buildRevisionOutput
+        errorOutput = new ByteArrayOutputStream()
+        ignoreExitValue = true
+    }
+} catch (Exception ignored) {
+    // Source archives may not include Git metadata; the packaged fallback stays readable.
+}
+def buildRevision = buildRevisionOutput.toString('UTF-8').trim()
+if (buildRevision.isEmpty()) buildRevision = 'unknown'
+
 project(':loader') {
     apply plugin: 'java'
 
@@ -72,6 +86,26 @@ project(':mod') {
         "caches/minecraft/de/oceanlabs/mcp/mcp_stable/${mappingRevision}/srgs/mcp-srg.srg"
     )
     def loaderDevSmokeConfig = file("${buildDir}/loader-dev-smoke.json")
+    def buildMetadataFile = file("${buildDir}/generated-resources/hypixellegitils-build.properties")
+
+    task generateBuildMetadata {
+        description = 'Embeds the Git revision used to package the MOD JAR.'
+        inputs.property 'modVersion', project.version
+        inputs.property 'buildRevision', buildRevision
+        outputs.file buildMetadataFile
+        doLast {
+            buildMetadataFile.parentFile.mkdirs()
+            buildMetadataFile.withWriter('UTF-8') { writer ->
+                writer.println("version=${project.version}")
+                writer.println("revision=${buildRevision}")
+            }
+        }
+    }
+
+    processResources {
+        dependsOn generateBuildMetadata
+        from(buildMetadataFile.parentFile)
+    }
 
     task prepareLoaderDevSmokeConfig(dependsOn: [':loader:jar', ':mod:jar']) {
         description = 'Writes the generated absolute-path config used only by the development Java Agent smoke test.'
@@ -123,7 +157,8 @@ project(':mod') {
                 'TweakOrder': '0',
                 'MixinConfigs': 'mixins.hypixellegitils.json',
                 'Implementation-Title': 'Hypixel Legitils',
-                'Implementation-Version': project.version
+                'Implementation-Version': project.version,
+                'HypixelLegitils-Build': buildRevision
             )
         }
     }
@@ -196,8 +231,14 @@ task verifyBootstrapArtifacts(dependsOn: [':loader:jar', ':mod:jar']) {
             assert manifest.getValue('TweakClass') == 'org.spongepowered.asm.launch.MixinTweaker'
             assert manifest.getValue('TweakOrder') == '0'
             assert manifest.getValue('MixinConfigs') == 'mixins.hypixellegitils.json'
+            assert manifest.getValue('HypixelLegitils-Build') == buildRevision
             assert modZip.getEntry('mixins.hypixellegitils.json') != null: 'Mixin configuration is missing'
             assert modZip.getEntry('mixins.hypixellegitils.refmap.json') != null: 'Mixin refmap is missing'
+            def buildMetadataEntry = modZip.getEntry('hypixellegitils-build.properties')
+            assert buildMetadataEntry != null: 'Build metadata is missing'
+            def buildMetadata = modZip.getInputStream(buildMetadataEntry).getText('UTF-8')
+            assert buildMetadata.contains("version=${project(':mod').version}"): 'Build metadata version is missing'
+            assert buildMetadata.contains("revision=${buildRevision}"): 'Build metadata revision is missing'
             def mixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinMinecraft.class')
             assert mixinClass != null: 'Bootstrap Mixin is missing'
             def chatMixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinGuiChat.class')
