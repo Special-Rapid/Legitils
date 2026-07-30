@@ -5,6 +5,8 @@ import com.snkisk.hypixellegitils.alert.AlertPresentation;
 import com.snkisk.hypixellegitils.alert.FlagMessage;
 import com.snkisk.hypixellegitils.alert.LocalNotice;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
+import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -26,6 +28,7 @@ import net.minecraft.util.BlockPos;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.Session;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -44,6 +47,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MixinMinecraft {
     @Shadow private EntityPlayerSP thePlayer;
     @Shadow private WorldClient theWorld;
+    @Shadow private Session session;
     private long hypixelLegitils$lastChatSequence;
     private long hypixelLegitils$lastSoundSequence;
     private long hypixelLegitils$lastObservationAtMillis;
@@ -52,6 +56,7 @@ public abstract class MixinMinecraft {
     private WorldClient hypixelLegitils$observedWorld;
     private boolean hypixelLegitils$injectedNoticeShown;
     private long hypixelLegitils$lastObservedWorldTick = -1L;
+    private UUID hypixelLegitils$selfPlayerId;
     private final Map<UUID, hypixelLegitils$VisiblePosition> hypixelLegitils$previousVisiblePositions
         = new HashMap<UUID, hypixelLegitils$VisiblePosition>();
 
@@ -69,8 +74,9 @@ public abstract class MixinMinecraft {
         hypixelLegitils$lastObservationAtMillis = nowMillis;
         hypixelLegitils$frameNowMillis = nowMillis;
         hypixelLegitils$frameGlobalLag = globalLag;
-        if (thePlayer != null && thePlayer.getUniqueID() != null) {
-            HypixelLegitilsBootstrap.onDeveloperSelfPlayerObserved(thePlayer.getUniqueID());
+        hypixelLegitils$selfPlayerId = hypixelLegitils$sessionProfileId();
+        if (thePlayer != null && hypixelLegitils$selfPlayerId != null) {
+            HypixelLegitilsBootstrap.onDeveloperSelfPlayerObserved(hypixelLegitils$selfPlayerId);
         }
         HypixelLegitilsBootstrap.onDevelopmentFrame(globalLag);
     }
@@ -136,7 +142,7 @@ public abstract class MixinMinecraft {
                 presentation.detector,
                 player.getDisplayName() == null ? null : player.getDisplayName().getFormattedText(),
                 player.getName(),
-                thePlayer == null || player.getUniqueID() == null || !player.getUniqueID().equals(thePlayer.getUniqueID())
+                hypixelLegitils$selfPlayerId == null || !presentation.playerId.equals(hypixelLegitils$selfPlayerId)
             );
         }
         ChatComponentText root = new ChatComponentText(message.chatPrefixText);
@@ -154,7 +160,7 @@ public abstract class MixinMinecraft {
         if (theWorld == null || playerId == null) return null;
         List<EntityPlayer> players = theWorld.playerEntities;
         for (EntityPlayer player : players) {
-            if (player != null && playerId.equals(player.getUniqueID())) return player;
+            if (player != null && playerId.equals(hypixelLegitils$profileId(player))) return player;
         }
         return null;
     }
@@ -174,9 +180,9 @@ public abstract class MixinMinecraft {
         List<hypixelLegitils$PlayerFrame> frames = new ArrayList<hypixelLegitils$PlayerFrame>(players.size());
         Map<UUID, hypixelLegitils$VisiblePosition> currentPositions = new HashMap<UUID, hypixelLegitils$VisiblePosition>();
         for (EntityPlayer player : players) {
-            if (player == null || player.getUniqueID() == null
+            UUID playerId = hypixelLegitils$profileId(player);
+            if (player == null || playerId == null
                 || player == thePlayer && !HypixelLegitilsBootstrap.shouldObserveLocalPlayerForDevelopment()) continue;
-            UUID playerId = player.getUniqueID();
             if (player == thePlayer) HypixelLegitilsBootstrap.onDeveloperSelfPlayerObserved(playerId);
             HypixelLegitilsBootstrap.onObservedPlayerIdentity(playerId, player.getName());
             hypixelLegitils$VisiblePosition previous = hypixelLegitils$previousVisiblePositions.get(playerId);
@@ -228,6 +234,17 @@ public abstract class MixinMinecraft {
         hypixelLegitils$previousVisiblePositions.clear();
         hypixelLegitils$previousVisiblePositions.putAll(currentPositions);
         return samples;
+    }
+
+    private UUID hypixelLegitils$sessionProfileId() {
+        GameProfile profile = session == null ? null : session.getProfile();
+        return profile == null ? null : profile.getId();
+    }
+
+    private UUID hypixelLegitils$profileId(EntityPlayer player) {
+        return player instanceof PlayerIdentityAccess
+            ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId()
+            : null;
     }
 
     private hypixelLegitils$NearbyMovement hypixelLegitils$nearbyMovement(

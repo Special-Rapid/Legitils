@@ -2,6 +2,7 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
+import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
@@ -36,6 +37,10 @@ public abstract class MixinNetHandlerPlayClient {
         Entity entity = world.getEntityByID(packet.getBreakerId());
         if (!(entity instanceof EntityPlayer) || entity == minecraft.thePlayer || position == null || !world.isBlockLoaded(position)) return;
         EntityPlayer player = (EntityPlayer) entity;
+        java.util.UUID playerId = player instanceof PlayerIdentityAccess
+            ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId()
+            : null;
+        if (playerId == null) return;
         IBlockState state = world.getBlockState(position);
         ItemStack held = player.getHeldItem();
         boolean ordinaryContext = state != null && state.getBlock().getMaterial() != net.minecraft.block.material.Material.air
@@ -43,7 +48,7 @@ public abstract class MixinNetHandlerPlayClient {
             && !player.capabilities.isCreativeMode && !player.isPotionActive(Potion.digSpeed)
             && player.getDistanceSq(position) <= 1024.0D;
         HypixelLegitilsBootstrap.onNoBreakDelayProgress(new NoBreakDelaySignalCheck.Progress(
-            player.getUniqueID(),
+            playerId,
             new NoBreakDelaySignalCheck.BlockPosition(position.getX(), position.getY(), position.getZ()),
             world.getTotalWorldTime(),
             packet.getProgress(),

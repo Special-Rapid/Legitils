@@ -1,6 +1,7 @@
 package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
+import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.entity.player.EntityPlayer;
@@ -47,8 +48,11 @@ public abstract class MixinGuiChat {
         for (Object entity : minecraft.theWorld.playerEntities) {
             if (!(entity instanceof EntityPlayer)) continue;
             EntityPlayer player = (EntityPlayer) entity;
-            if (player.getName() == null || player.getUniqueID() == null) continue;
-            players.put(player.getName().toLowerCase(Locale.ROOT), player.getUniqueID());
+            UUID playerId = player instanceof PlayerIdentityAccess
+                ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId()
+                : null;
+            if (player.getName() == null || playerId == null) continue;
+            players.put(player.getName().toLowerCase(Locale.ROOT), playerId);
         }
         return players;
     }

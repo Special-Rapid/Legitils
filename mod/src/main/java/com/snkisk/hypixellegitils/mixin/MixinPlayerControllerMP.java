@@ -1,6 +1,7 @@
 package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
+import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.multiplayer.PlayerControllerMP;
@@ -40,13 +41,16 @@ public abstract class MixinPlayerControllerMP {
         if (!HypixelLegitilsBootstrap.shouldObserveLocalPlayerForDevelopment()) return;
         Minecraft minecraft = Minecraft.getMinecraft();
         EntityPlayerSP player = minecraft == null ? null : minecraft.thePlayer;
-        if (player == null || player.worldObj == null || player.capabilities.isCreativeMode || position == null) return;
+        java.util.UUID playerId = player instanceof PlayerIdentityAccess
+            ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId()
+            : null;
+        if (player == null || playerId == null || player.worldObj == null || player.capabilities.isCreativeMode || position == null) return;
         if (!hypixelLegitils$developmentHookLogged) {
             hypixelLegitils$developmentHookLogged = true;
             System.out.println("[HypixelLegitils] NoBreakDelay development controller hook observed.");
         }
         HypixelLegitilsBootstrap.onDevelopmentNoBreakDelay(
-            player.getUniqueID(),
+            playerId,
             player.worldObj.getTotalWorldTime(),
             blockHitDelay,
             breakCompleted && blockHitDelay >= 5
