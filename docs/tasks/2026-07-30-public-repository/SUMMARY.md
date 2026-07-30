@@ -8,5 +8,6 @@ Prepared the first public Legitils repository without altering MOD behaviour.
 - Ran `./gradlew build` with Java 8 and the repository-local Gradle cache; the build and artifact checks passed.
 - Checked staged files for whitespace errors, personal absolute paths, known credential patterns, and excluded paths; all checks passed.
 - Final review found no remaining publication blocker.
+- Published the `main` branch to the public `Special-Rapid/Legitils` GitHub repository.
 
 The public repository is source and documentation only. Real Lunar normal-play, direct/proxied, and release verification remain future gates.

@@ -4,4 +4,4 @@
 - [x] Run the Java 8 Gradle build and artifact verification.
 - [x] Inspect the staged diff and run whitespace checks.
 - [x] Complete final publication review.
-- [ ] Create the public GitHub repository and verify its visibility.
+- [x] Create the public GitHub repository and verify its visibility.
