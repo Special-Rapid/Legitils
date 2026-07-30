@@ -29,10 +29,11 @@ public class LocalCommandTest {
         assertTrue(lines[5].contains("anticheat off"));
         assertTrue(lines[1].contains(".l <command>"));
         assertTrue(lines[8].contains(".l nickdetect on/off"));
-        assertTrue(lines[9].contains(".l dev on/off"));
-        assertTrue(lines[10].contains(".l notify"));
-        assertTrue(lines[14].contains(".l blacklist add/remove"));
-        assertTrue(lines[15].contains("through Mojang"));
+        assertTrue(lines[9].contains(".l partydetect on/off"));
+        assertTrue(lines[10].contains(".l dev on/off"));
+        assertTrue(lines[11].contains(".l notify"));
+        assertTrue(lines[15].contains(".l blacklist add/remove"));
+        assertTrue(lines[16].contains("through Mojang"));
     }
 
     @Test
@@ -72,6 +73,9 @@ public class LocalCommandTest {
         assertTrue(nickOn.enabled);
         assertEquals(LocalCommand.Kind.NICK_DETECT_SET_ENABLED, nickOff.kind);
         assertTrue(!nickOff.enabled);
+        LocalCommand.Request partyOff = LocalCommand.requestForUserInput(".l partydetect off", true);
+        assertEquals(LocalCommand.Kind.PARTY_DETECT_SET_ENABLED, partyOff.kind);
+        assertTrue(!partyOff.enabled);
         LocalCommand.Request dev = LocalCommand.requestForUserInput(".l dev on", true);
         assertEquals(LocalCommand.Kind.DEV_SET_ENABLED, dev.kind);
         assertTrue(dev.enabled);

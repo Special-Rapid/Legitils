@@ -3,6 +3,7 @@ package com.snkisk.hypixellegitils.mixin;
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
@@ -11,8 +12,10 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.server.S25PacketBlockBreakAnim;
+import net.minecraft.network.play.server.S02PacketChat;
 import net.minecraft.potion.Potion;
 import net.minecraft.util.BlockPos;
+import net.minecraft.util.IChatComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,6 +24,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Read-only remote break-progress adapter; it never changes packet handling. */
 @Mixin(NetHandlerPlayClient.class)
 public abstract class MixinNetHandlerPlayClient {
+    @Inject(method = "handleChat", at = @At("HEAD"), require = 0)
+    private void hypixelLegitils$observePartyJoinChat(S02PacketChat packet, CallbackInfo callbackInfo) {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        IChatComponent component = packet == null ? null : packet.getChatComponent();
+        HypixelLegitilsBootstrap.onPartyDetectorChat(
+            component == null ? null : component.getUnformattedText(),
+            System.currentTimeMillis(),
+            BedwarsPreGameState.isActive(minecraft == null ? null : minecraft.theWorld)
+        );
+    }
+
     @Inject(
         method = "handleBlockBreakAnim",
         at = @At(

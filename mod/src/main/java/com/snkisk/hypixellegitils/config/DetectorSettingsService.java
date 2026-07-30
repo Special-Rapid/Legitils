@@ -57,6 +57,12 @@ public final class DetectorSettingsService {
         return persist(changed ? updatedWithNickDetection(nickDetection) : savedConfig, changed);
     }
 
+    public synchronized Update setPartyDetectionEnabled(boolean enabled) throws IOException {
+        PartyDetectionSettings partyDetection = new PartyDetectionSettings(enabled);
+        boolean changed = !partyDetection.sameAs(savedConfig.partyDetectionSettings);
+        return persist(changed ? updatedWithPartyDetection(partyDetection) : savedConfig, changed);
+    }
+
     public synchronized Update setNotificationEnabled(NotificationChannel channel, boolean enabled) throws IOException {
         if (channel == null) throw new IllegalArgumentException("Notification channel is required");
         NotificationSettings notifications = notificationSettingsWith(channel, enabled);
@@ -84,7 +90,7 @@ public final class DetectorSettingsService {
         return new LegitilsConfig(
             savedConfig.schemaVersion, nextRevision(), enabledDetectors, savedConfig.sensitivity,
             savedConfig.notifications, savedConfig.normalCooldownMillis, savedConfig.airStallCooldownMillis,
-            savedConfig.debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings
+            savedConfig.debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings, savedConfig.partyDetectionSettings
         );
     }
 
@@ -92,7 +98,7 @@ public final class DetectorSettingsService {
         return new LegitilsConfig(
             LegitilsConfig.SCHEMA_VERSION, nextRevision(), savedConfig.enabledDetectors, savedConfig.sensitivity,
             savedConfig.notifications, savedConfig.normalCooldownMillis, savedConfig.airStallCooldownMillis,
-            savedConfig.debugEnabled, markers, savedConfig.nickDetectionSettings
+            savedConfig.debugEnabled, markers, savedConfig.nickDetectionSettings, savedConfig.partyDetectionSettings
         );
     }
 
@@ -100,7 +106,15 @@ public final class DetectorSettingsService {
         return new LegitilsConfig(
             LegitilsConfig.SCHEMA_VERSION, nextRevision(), savedConfig.enabledDetectors, savedConfig.sensitivity,
             savedConfig.notifications, savedConfig.normalCooldownMillis, savedConfig.airStallCooldownMillis,
-            savedConfig.debugEnabled, savedConfig.markerSettings, nickDetection
+            savedConfig.debugEnabled, savedConfig.markerSettings, nickDetection, savedConfig.partyDetectionSettings
+        );
+    }
+
+    private LegitilsConfig updatedWithPartyDetection(PartyDetectionSettings partyDetection) throws IOException {
+        return new LegitilsConfig(
+            LegitilsConfig.SCHEMA_VERSION, nextRevision(), savedConfig.enabledDetectors, savedConfig.sensitivity,
+            savedConfig.notifications, savedConfig.normalCooldownMillis, savedConfig.airStallCooldownMillis,
+            savedConfig.debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings, partyDetection
         );
     }
 
@@ -108,7 +122,7 @@ public final class DetectorSettingsService {
         return new LegitilsConfig(
             LegitilsConfig.SCHEMA_VERSION, nextRevision(), savedConfig.enabledDetectors, savedConfig.sensitivity,
             notifications, savedConfig.normalCooldownMillis, savedConfig.airStallCooldownMillis,
-            savedConfig.debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings
+            savedConfig.debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings, savedConfig.partyDetectionSettings
         );
     }
 
@@ -116,7 +130,7 @@ public final class DetectorSettingsService {
         return new LegitilsConfig(
             LegitilsConfig.SCHEMA_VERSION, nextRevision(), savedConfig.enabledDetectors, savedConfig.sensitivity,
             savedConfig.notifications, savedConfig.normalCooldownMillis, savedConfig.airStallCooldownMillis,
-            debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings
+            debugEnabled, savedConfig.markerSettings, savedConfig.nickDetectionSettings, savedConfig.partyDetectionSettings
         );
     }
 
@@ -158,7 +172,8 @@ public final class DetectorSettingsService {
             && left.airStallCooldownMillis == right.airStallCooldownMillis
             && left.debugEnabled == right.debugEnabled
             && left.markerSettings.sameAs(right.markerSettings)
-            && left.nickDetectionSettings.sameAs(right.nickDetectionSettings);
+            && left.nickDetectionSettings.sameAs(right.nickDetectionSettings)
+            && left.partyDetectionSettings.sameAs(right.partyDetectionSettings);
     }
 
     private EnumSet<DetectorId> copyEnabledDetectors() {

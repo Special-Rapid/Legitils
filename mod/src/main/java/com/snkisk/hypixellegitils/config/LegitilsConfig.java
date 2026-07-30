@@ -6,9 +6,10 @@ import java.util.Set;
 
 /** Immutable startup configuration shared later with the macOS Companion. */
 public final class LegitilsConfig {
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
     public static final int LEGACY_SCHEMA_VERSION = 1;
     public static final int MARKER_SCHEMA_VERSION = 2;
+    public static final int NICK_DETECTION_SCHEMA_VERSION = 3;
     public static final long DEFAULT_NORMAL_COOLDOWN_MILLIS = 1000L;
     public static final long DEFAULT_AIR_STALL_COOLDOWN_MILLIS = 30000L;
 
@@ -22,6 +23,7 @@ public final class LegitilsConfig {
     public final boolean debugEnabled;
     public final MarkerSettings markerSettings;
     public final NickDetectionSettings nickDetectionSettings;
+    public final PartyDetectionSettings partyDetectionSettings;
 
     public LegitilsConfig(
         int schemaVersion,
@@ -35,7 +37,8 @@ public final class LegitilsConfig {
     ) {
         this(
             schemaVersion, revision, enabledDetectors, sensitivity, notifications,
-            normalCooldownMillis, airStallCooldownMillis, debugEnabled, MarkerSettings.defaults(), NickDetectionSettings.defaults()
+            normalCooldownMillis, airStallCooldownMillis, debugEnabled,
+            MarkerSettings.defaults(), NickDetectionSettings.defaults(), PartyDetectionSettings.defaults()
         );
     }
 
@@ -52,7 +55,8 @@ public final class LegitilsConfig {
     ) {
         this(
             schemaVersion, revision, enabledDetectors, sensitivity, notifications,
-            normalCooldownMillis, airStallCooldownMillis, debugEnabled, markerSettings, NickDetectionSettings.defaults()
+            normalCooldownMillis, airStallCooldownMillis, debugEnabled,
+            markerSettings, NickDetectionSettings.defaults(), PartyDetectionSettings.defaults()
         );
     }
 
@@ -68,6 +72,26 @@ public final class LegitilsConfig {
         MarkerSettings markerSettings,
         NickDetectionSettings nickDetectionSettings
     ) {
+        this(
+            schemaVersion, revision, enabledDetectors, sensitivity, notifications,
+            normalCooldownMillis, airStallCooldownMillis, debugEnabled,
+            markerSettings, nickDetectionSettings, PartyDetectionSettings.defaults()
+        );
+    }
+
+    public LegitilsConfig(
+        int schemaVersion,
+        long revision,
+        Set<DetectorId> enabledDetectors,
+        SensitivityPreset sensitivity,
+        NotificationSettings notifications,
+        long normalCooldownMillis,
+        long airStallCooldownMillis,
+        boolean debugEnabled,
+        MarkerSettings markerSettings,
+        NickDetectionSettings nickDetectionSettings,
+        PartyDetectionSettings partyDetectionSettings
+    ) {
         this.schemaVersion = schemaVersion;
         this.revision = revision;
         EnumSet<DetectorId> detectorCopy = enabledDetectors.isEmpty()
@@ -81,8 +105,10 @@ public final class LegitilsConfig {
         this.debugEnabled = debugEnabled;
         if (markerSettings == null) throw new IllegalArgumentException("Marker settings are required");
         if (nickDetectionSettings == null) throw new IllegalArgumentException("Nick detection settings are required");
+        if (partyDetectionSettings == null) throw new IllegalArgumentException("Party detection settings are required");
         this.markerSettings = markerSettings;
         this.nickDetectionSettings = nickDetectionSettings;
+        this.partyDetectionSettings = partyDetectionSettings;
     }
 
     public static LegitilsConfig defaults() {
@@ -121,7 +147,8 @@ public final class LegitilsConfig {
             DEFAULT_AIR_STALL_COOLDOWN_MILLIS,
             false,
             MarkerSettings.defaults(),
-            NickDetectionSettings.defaults()
+            NickDetectionSettings.defaults(),
+            PartyDetectionSettings.defaults()
         );
     }
 

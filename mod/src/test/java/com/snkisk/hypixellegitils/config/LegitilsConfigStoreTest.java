@@ -27,6 +27,7 @@ public class LegitilsConfigStoreTest {
             assertEquals(30000L, result.config.airStallCooldownMillis);
             assertTrue(result.config.notifications.chatEnabled);
             assertFalse(result.config.notifications.overlayEnabled);
+            assertTrue(result.config.partyDetectionSettings.enabled);
         } finally {
             Files.deleteIfExists(directory.resolve("config.json"));
             Files.deleteIfExists(directory);
@@ -101,6 +102,47 @@ public class LegitilsConfigStoreTest {
             ConfigLoadResult result = new LegitilsConfigStore().load(path);
             assertFalse(result.usedDefaults);
             assertTrue(result.config.nickDetectionSettings.enabled);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
+
+    @Test
+    public void schemaThreeConfigurationKeepsPartyDetectionEnabledForCompatibility() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-schema-three-party-test");
+        Path path = directory.resolve("config.json");
+        try {
+            Files.write(path, ("{\"schemaVersion\":3,\"revision\":4,\"enabledDetectors\":[],\"sensitivity\":\"balanced\",\"notifications\":{\"chat\":true,\"overlay\":false,\"sound\":false},\"cooldowns\":{\"normalMillis\":1000,\"airStallMillis\":30000},\"debug\":false,\"markers\":{\"enabled\":false,\"threshold\":3},\"nickDetection\":{\"enabled\":true}}").getBytes("UTF-8"));
+            ConfigLoadResult result = new LegitilsConfigStore().load(path);
+            assertFalse(result.usedDefaults);
+            assertTrue(result.config.partyDetectionSettings.enabled);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
+
+    @Test
+    public void partyDetectionTogglePersistsAsSchemaFourAndMigratesSchemaThree() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-party-detect-command-test");
+        Path path = directory.resolve("config.json");
+        try {
+            LegitilsConfig defaults = LegitilsConfig.defaults();
+            LegitilsConfig schemaThree = new LegitilsConfig(
+                LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION, 3L, defaults.enabledDetectors, defaults.sensitivity,
+                defaults.notifications, defaults.normalCooldownMillis, defaults.airStallCooldownMillis,
+                defaults.debugEnabled, defaults.markerSettings, defaults.nickDetectionSettings
+            );
+            LegitilsConfigStore store = new LegitilsConfigStore();
+            store.writeAtomically(path, schemaThree);
+            DetectorSettingsService service = new DetectorSettingsService(store, path, schemaThree);
+            DetectorSettingsService.Update disabled = service.setPartyDetectionEnabled(false);
+            assertTrue(disabled.changed);
+            assertEquals(LegitilsConfig.SCHEMA_VERSION, disabled.config.schemaVersion);
+            assertFalse(disabled.config.partyDetectionSettings.enabled);
+            assertFalse(store.load(path).config.partyDetectionSettings.enabled);
+            assertFalse(service.setPartyDetectionEnabled(false).changed);
         } finally {
             Files.deleteIfExists(path);
             Files.deleteIfExists(directory);

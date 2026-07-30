@@ -6,6 +6,7 @@ import com.snkisk.hypixellegitils.alert.FlagMessage;
 import com.snkisk.hypixellegitils.alert.LocalNotice;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
@@ -83,6 +84,10 @@ public abstract class MixinMinecraft {
 
     @Inject(method = "runTick", at = @At("RETURN"))
     private void hypixelLegitils$afterClientTick(CallbackInfo callbackInfo) {
+        HypixelLegitilsBootstrap.onPartyDetectorTick(
+            hypixelLegitils$frameNowMillis,
+            BedwarsPreGameState.isActive(theWorld)
+        );
         if (theWorld != null && thePlayer != null) {
             boolean worldChanged = theWorld != hypixelLegitils$observedWorld;
             if (LocalNotice.shouldShowFor(hypixelLegitils$injectedNoticeShown, theWorld)) {
@@ -115,6 +120,9 @@ public abstract class MixinMinecraft {
                 if (response != null && !response.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(response));
             }
             for (String notice : HypixelLegitilsBootstrap.drainPendingNickNotices()) {
+                if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
+            }
+            for (String notice : HypixelLegitilsBootstrap.drainPendingPartyDetectorNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
         }

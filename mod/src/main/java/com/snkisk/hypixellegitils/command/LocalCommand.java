@@ -22,6 +22,7 @@ public final class LocalCommand {
         ChatFormat.continuation("§7Detectors: §fAutoBlock §8| §fNoSlow §8| §fKillAura §8| §fLegitScaffold"),
         ChatFormat.continuation("§fBedNuke §8| §fBlink §8| §fTimer §8| §fNoBreakDelay §8| §fall"),
         ChatFormat.continuation("§c.l nickdetect on/off §8— §ftoggle Nick detection"),
+        ChatFormat.continuation("§b.l partydetect on/off §8— §ftoggle Party Detector"),
         ChatFormat.continuation("§6.l dev on/off §8— §finclude yourself in anti-cheat checks"),
         ChatFormat.continuation("§d.l notify <chat|actionbar|sound> on/off §8— §falert delivery"),
         ChatFormat.continuation("§e.l blacklist on/off §8— §fenable auto Blacklist"),
@@ -83,6 +84,12 @@ public final class LocalCommand {
             String[] parts = input.split(" ");
             if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
                 return new Request(Kind.NICK_DETECT_SET_ENABLED, null, false, "on".equals(parts[2]));
+            }
+        }
+        if (input.startsWith(PREFIX + " partydetect ")) {
+            String[] parts = input.split(" ");
+            if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
+                return new Request(Kind.PARTY_DETECT_SET_ENABLED, null, false, "on".equals(parts[2]));
             }
         }
         if (input.startsWith(PREFIX + " dev ")) {
@@ -168,6 +175,7 @@ public final class LocalCommand {
         ANTICHEAT_LIST,
         ANTICHEAT_SET,
         NICK_DETECT_SET_ENABLED,
+        PARTY_DETECT_SET_ENABLED,
         DEV_SET_ENABLED,
         NOTIFICATION_SET_ENABLED,
         MARKER_STATUS,

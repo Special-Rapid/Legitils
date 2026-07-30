@@ -78,6 +78,7 @@ public final class LegitilsConfigStore {
         int schemaVersion = intValue(root.get("schemaVersion"), "schemaVersion");
         if (schemaVersion != LegitilsConfig.LEGACY_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.MARKER_SCHEMA_VERSION
+            && schemaVersion != LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.SCHEMA_VERSION) {
             throw new IllegalArgumentException("unsupported schemaVersion");
         }
@@ -85,8 +86,10 @@ public final class LegitilsConfigStore {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug");
         } else if (schemaVersion == LegitilsConfig.MARKER_SCHEMA_VERSION) {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers");
-        } else {
+        } else if (schemaVersion == LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION) {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection");
+        } else {
+            requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection", "partyDetection");
         }
         long revision = longValue(root.get("revision"), "revision");
         if (revision < 0L) throw new IllegalArgumentException("revision must be non-negative");
@@ -143,11 +146,19 @@ public final class LegitilsConfigStore {
         }
 
         NickDetectionSettings nickDetection = NickDetectionSettings.defaults();
-        if (schemaVersion == LegitilsConfig.SCHEMA_VERSION) {
+        if (schemaVersion >= LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION) {
             if (!(root.get("nickDetection") instanceof Map)) throw new IllegalArgumentException("nickDetection must be an object");
             Map<?, ?> rawNickDetection = (Map<?, ?>) root.get("nickDetection");
             requireOnlyKeys(rawNickDetection, "enabled");
             nickDetection = new NickDetectionSettings(booleanValue(rawNickDetection.get("enabled"), "nickDetection.enabled"));
+        }
+
+        PartyDetectionSettings partyDetection = PartyDetectionSettings.defaults();
+        if (schemaVersion >= LegitilsConfig.SCHEMA_VERSION) {
+            if (!(root.get("partyDetection") instanceof Map)) throw new IllegalArgumentException("partyDetection must be an object");
+            Map<?, ?> rawPartyDetection = (Map<?, ?>) root.get("partyDetection");
+            requireOnlyKeys(rawPartyDetection, "enabled");
+            partyDetection = new PartyDetectionSettings(booleanValue(rawPartyDetection.get("enabled"), "partyDetection.enabled"));
         }
 
         return new LegitilsConfig(
@@ -160,7 +171,8 @@ public final class LegitilsConfigStore {
             airStallCooldown,
             booleanValue(root.get("debug"), "debug"),
             markers,
-            nickDetection
+            nickDetection,
+            partyDetection
         );
     }
 
@@ -190,10 +202,15 @@ public final class LegitilsConfigStore {
             markers.put("threshold", Long.valueOf(config.markerSettings.threshold));
             root.put("markers", markers);
         }
-        if (config.schemaVersion >= LegitilsConfig.SCHEMA_VERSION) {
+        if (config.schemaVersion >= LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION) {
             Map<String, Object> nickDetection = new LinkedHashMap<String, Object>();
             nickDetection.put("enabled", Boolean.valueOf(config.nickDetectionSettings.enabled));
             root.put("nickDetection", nickDetection);
+        }
+        if (config.schemaVersion >= LegitilsConfig.SCHEMA_VERSION) {
+            Map<String, Object> partyDetection = new LinkedHashMap<String, Object>();
+            partyDetection.put("enabled", Boolean.valueOf(config.partyDetectionSettings.enabled));
+            root.put("partyDetection", partyDetection);
         }
         return SimpleJson.write(root);
     }
