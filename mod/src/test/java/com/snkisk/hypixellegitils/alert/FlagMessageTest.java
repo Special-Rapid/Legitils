@@ -39,6 +39,13 @@ public class FlagMessageTest {
     }
 
     @Test
+    public void teamFormattedNameKeepsTheVisibleTeamPrefixForNickNotices() {
+        assertEquals("§cR Flaming", FlagMessage.teamFormattedName("§cR Flaming", "Flaming"));
+        assertEquals("§fW White", FlagMessage.teamFormattedName("§7W White", "White"));
+        assertEquals("Flaming", FlagMessage.teamFormattedName(null, "Flaming"));
+    }
+
+    @Test
     public void invalidOrMissingIdentityCannotCreateACommandTarget() {
         FlagMessage invalid = FlagMessage.attributed(DetectorId.AUTO_BLOCK, "\u00a7aG Example", "Example;op");
         FlagMessage missing = FlagMessage.attributed(DetectorId.AUTO_BLOCK, "", "Example");

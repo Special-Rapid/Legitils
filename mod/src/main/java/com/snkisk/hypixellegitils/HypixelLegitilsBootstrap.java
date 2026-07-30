@@ -2,6 +2,7 @@ package com.snkisk.hypixellegitils;
 
 import com.snkisk.hypixellegitils.alert.AlertPresentation;
 import com.snkisk.hypixellegitils.alert.ChatFormat;
+import com.snkisk.hypixellegitils.alert.FlagMessage;
 import com.snkisk.hypixellegitils.alert.LocalAlertSink;
 import com.snkisk.hypixellegitils.config.ConfigLoadResult;
 import com.snkisk.hypixellegitils.config.ConfigPaths;
@@ -18,6 +19,7 @@ import com.snkisk.hypixellegitils.observation.ObservationCoordinator;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.detection.BedNukeSignalCheck;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
+import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.party.PartyJoinBurstDetector;
 import java.nio.file.Path;
 import java.io.IOException;
@@ -54,6 +56,9 @@ public final class HypixelLegitilsBootstrap {
     private static final Queue<PendingBlacklistOperation> PENDING_BLACKLIST_OPERATIONS
         = new ConcurrentLinkedQueue<PendingBlacklistOperation>();
     private static final Queue<String> PENDING_NICK_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<PendingPregameNickNotice> PENDING_PREGAME_NICK_NOTICES
+        = new ConcurrentLinkedQueue<PendingPregameNickNotice>();
+    private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final PartyJoinBurstDetector PARTY_JOIN_BURSTS = new PartyJoinBurstDetector();
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
@@ -178,7 +183,12 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /** Caches a non-nick server-presented name for an existing Blacklist entry; nick profiles stay session-only. */
-    public static void onObservedPlayerIdentity(UUID playerId, String serverPresentedName) {
+    public static void onObservedPlayerIdentity(
+        UUID playerId,
+        String serverPresentedName,
+        String formattedDisplayName,
+        boolean bedwarsPreGame
+    ) {
         if (playerId == null) return;
         if (playerId.version() != 1) {
             ObservationCoordinator active = coordinator;
@@ -186,13 +196,35 @@ public final class HypixelLegitilsBootstrap {
             return;
         }
         if (!nickDetectionEnabled) return;
+        // During pre-game, only a Nick who actually chats is announced at game
+        // start. The Tab marker remains available without creating chat noise.
+        if (bedwarsPreGame) return;
         if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
         if (serverPresentedName != null && !serverPresentedName.trim().isEmpty()) {
-            PENDING_NICK_NOTICES.add(ChatFormat.line("§c" + serverPresentedName + "§5 is nicked."));
+            PENDING_NICK_NOTICES.add(ChatFormat.line(
+                FlagMessage.teamFormattedName(formattedDisplayName, serverPresentedName) + "§5 is nicked."
+            ));
         }
         if (NICK_OBSERVATION_LOGGED.compareAndSet(false, true)) {
             System.out.println("[HypixelLegitils] Nick session marker observed for " + serverPresentedName + ".");
         }
+    }
+
+    /** Defers a Nick's pre-game player-chat notice until the start message reveals the game team. */
+    public static void onPregameNickChat(UUID playerId, String serverPresentedName) {
+        if (!STARTED.get() || !nickDetectionEnabled || playerId == null || playerId.version() != 1
+            || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
+        if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
+        PREGAME_NICK_CHATTERS.put(playerId, serverPresentedName);
+    }
+
+    /** Releases only pre-game Nick chat observations once Hypixel announces game start. */
+    public static void onPregameGameStartChat(String rawMessage, long nowMillis) {
+        if (!NickChatSignal.isGameStart(rawMessage)) return;
+        for (Map.Entry<UUID, String> entry : PREGAME_NICK_CHATTERS.entrySet()) {
+            PENDING_PREGAME_NICK_NOTICES.add(new PendingPregameNickNotice(entry.getKey(), entry.getValue(), nowMillis + 1000L));
+        }
+        PREGAME_NICK_CHATTERS.clear();
     }
 
     /** A paused, skipped, or replaced client-world tick invalidates timing signals. */
@@ -286,6 +318,21 @@ public final class HypixelLegitilsBootstrap {
         String notice;
         while ((notice = PENDING_NICK_NOTICES.poll()) != null) notices.add(notice);
         return notices.toArray(new String[notices.size()]);
+    }
+
+    public static PendingPregameNickNotice[] drainPendingPregameNickNotices(long nowMillis) {
+        List<PendingPregameNickNotice> notices = new ArrayList<PendingPregameNickNotice>();
+        while (true) {
+            PendingPregameNickNotice notice = PENDING_PREGAME_NICK_NOTICES.peek();
+            if (notice == null || nowMillis < notice.displayAfterMillis) break;
+            notice = PENDING_PREGAME_NICK_NOTICES.poll();
+            if (notice != null) notices.add(notice);
+        }
+        return notices.toArray(new PendingPregameNickNotice[notices.size()]);
+    }
+
+    public static String pregameNickNotice(String serverPresentedName, String formattedDisplayName) {
+        return ChatFormat.line(FlagMessage.teamFormattedName(formattedDisplayName, serverPresentedName) + "§5 is nicked.");
     }
 
     private static String[] updateDetectorSetting(LocalCommand.Request request) {
@@ -557,6 +604,19 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
+    /** Small client-thread payload; the pre-game alias is never persisted beyond the current world. */
+    public static final class PendingPregameNickNotice {
+        public final UUID playerId;
+        public final String serverPresentedName;
+        private final long displayAfterMillis;
+
+        private PendingPregameNickNotice(UUID playerId, String serverPresentedName, long displayAfterMillis) {
+            this.playerId = playerId;
+            this.serverPresentedName = serverPresentedName;
+            this.displayAfterMillis = displayAfterMillis;
+        }
+    }
+
     private static String[] blacklistStatusLines(LegitilsConfig config, ObservationCoordinator active) {
         return new String[] {
             ChatFormat.line("§fBlacklist"),
@@ -711,6 +771,8 @@ public final class HypixelLegitilsBootstrap {
             VISIBLE_PLAYER_OBSERVATION_STARTED.set(false);
             NICKED_SESSION_PLAYER_IDS.clear();
             PENDING_NICK_NOTICES.clear();
+            PREGAME_NICK_CHATTERS.clear();
+            PENDING_PREGAME_NICK_NOTICES.clear();
             NICK_OBSERVATION_LOGGED.set(false);
             MARKER_RENDER_LOGGED.set(false);
             TAB_RENDER_HOOK_LOGGED.set(false);

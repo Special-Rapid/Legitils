@@ -58,6 +58,11 @@ public final class FlagMessage {
         return rawPlayerName != null && PLAYER_NAME.matcher(rawPlayerName).matches();
     }
 
+    /** Uses the server's team-formatted display name when it is available. */
+    public static String teamFormattedName(String formattedDisplayName, String fallbackName) {
+        return isUsableDisplayName(formattedDisplayName) ? whiteTeamPrefix(formattedDisplayName) : fallbackName;
+    }
+
     private static boolean isUsableDisplayName(String formattedDisplayName) {
         return formattedDisplayName != null && !formattedDisplayName.trim().isEmpty();
     }

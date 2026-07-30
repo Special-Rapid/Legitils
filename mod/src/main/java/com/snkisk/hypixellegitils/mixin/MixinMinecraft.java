@@ -10,6 +10,8 @@ import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
+import net.minecraft.client.network.NetHandlerPlayClient;
+import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.player.EntityPlayer;
@@ -29,6 +31,7 @@ import net.minecraft.util.BlockPos;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.scoreboard.ScorePlayerTeam;
 import net.minecraft.util.Session;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -122,6 +125,13 @@ public abstract class MixinMinecraft {
             for (String notice : HypixelLegitilsBootstrap.drainPendingNickNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
+            for (HypixelLegitilsBootstrap.PendingPregameNickNotice notice : HypixelLegitilsBootstrap.drainPendingPregameNickNotices(hypixelLegitils$frameNowMillis)) {
+                if (notice == null) continue;
+                thePlayer.addChatMessage(new ChatComponentText(HypixelLegitilsBootstrap.pregameNickNotice(
+                    notice.serverPresentedName,
+                    hypixelLegitils$teamFormattedName(notice.playerId, notice.serverPresentedName)
+                )));
+            }
             for (String notice : HypixelLegitilsBootstrap.drainPendingPartyDetectorNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
@@ -173,6 +183,16 @@ public abstract class MixinMinecraft {
         return null;
     }
 
+    private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {
+        EntityPlayer player = hypixelLegitils$visiblePlayer(playerId);
+        if (player != null && player.getDisplayName() != null) return player.getDisplayName().getFormattedText();
+        NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
+        NetworkPlayerInfo info = handler == null || playerId == null ? null : handler.getPlayerInfo(playerId);
+        if (info == null) return fallbackName;
+        if (info.getDisplayName() != null) return info.getDisplayName().getFormattedText();
+        return ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName);
+    }
+
     @Inject(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V", at = @At("HEAD"))
     private void hypixelLegitils$beforeWorldLoad(CallbackInfo callbackInfo) {
         hypixelLegitils$lastObservationAtMillis = 0L;
@@ -192,7 +212,12 @@ public abstract class MixinMinecraft {
             if (player == null || playerId == null
                 || player == thePlayer && !HypixelLegitilsBootstrap.shouldObserveLocalPlayerForDevelopment()) continue;
             if (player == thePlayer) HypixelLegitilsBootstrap.onDeveloperSelfPlayerObserved(playerId);
-            HypixelLegitilsBootstrap.onObservedPlayerIdentity(playerId, player.getName());
+            HypixelLegitilsBootstrap.onObservedPlayerIdentity(
+                playerId,
+                player.getName(),
+                player.getDisplayName() == null ? null : player.getDisplayName().getFormattedText(),
+                BedwarsPreGameState.isActive(theWorld)
+            );
             hypixelLegitils$VisiblePosition previous = hypixelLegitils$previousVisiblePositions.get(playerId);
             boolean movementKnown = previous != null && previous.worldTick == worldTick - 1L;
             double movement = movementKnown

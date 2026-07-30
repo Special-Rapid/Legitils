@@ -3,10 +3,13 @@ package com.snkisk.hypixellegitils.mixin;
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
+import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
@@ -28,11 +31,30 @@ public abstract class MixinNetHandlerPlayClient {
     private void hypixelLegitils$observePartyJoinChat(S02PacketChat packet, CallbackInfo callbackInfo) {
         Minecraft minecraft = Minecraft.getMinecraft();
         IChatComponent component = packet == null ? null : packet.getChatComponent();
+        String message = component == null ? null : component.getUnformattedText();
+        boolean bedwarsPreGame = BedwarsPreGameState.isActive(minecraft == null ? null : minecraft.theWorld);
         HypixelLegitilsBootstrap.onPartyDetectorChat(
-            component == null ? null : component.getUnformattedText(),
+            message,
             System.currentTimeMillis(),
-            BedwarsPreGameState.isActive(minecraft == null ? null : minecraft.theWorld)
+            bedwarsPreGame
         );
+        HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
+        if (bedwarsPreGame && packet != null && packet.getType() != 2) {
+            hypixelLegitils$observePregameNickChat(minecraft, message);
+        }
+    }
+
+    private void hypixelLegitils$observePregameNickChat(Minecraft minecraft, String message) {
+        NetHandlerPlayClient handler = minecraft == null ? null : minecraft.getNetHandler();
+        if (handler == null) return;
+        for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
+            GameProfile profile = info == null ? null : info.getGameProfile();
+            if (profile == null || profile.getId() == null || profile.getId().version() != 1) continue;
+            if (NickChatSignal.isMessageFrom(message, profile.getName())) {
+                HypixelLegitilsBootstrap.onPregameNickChat(profile.getId(), profile.getName());
+                return;
+            }
+        }
     }
 
     @Inject(
