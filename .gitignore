@@ -1,6 +1,8 @@
 .gradle/
 .gradle-user/
+app-plan/
 build/
+docs/
 loader/build/
 mod/build/
 run/
