@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "modJar": "/absolute/path/to/hypixel-legitils.jar",
+  "mixinConfig": "mixins.hypixellegitils.json",
+  "injectedProperty": "hypixellegitils.agent.injected"
+}

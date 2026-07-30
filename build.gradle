@@ -1,0 +1,255 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'forge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+    }
+}
+
+allprojects {
+    group = 'com.snkisk.hypixellegitils'
+    version = '0.1.0-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'sponge'
+            url = 'https://repo.spongepowered.org/maven'
+        }
+        maven {
+            name = 'forge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+    }
+}
+
+project(':loader') {
+    apply plugin: 'java'
+
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+
+    dependencies {
+        testCompile 'junit:junit:4.13.2'
+    }
+
+    jar {
+        baseName = 'hypixel-legitils-loader'
+        manifest {
+            attributes(
+                'Premain-Class': 'com.snkisk.hypixellegitils.loader.HypixelLegitilsLoader',
+                'Implementation-Title': 'Hypixel Legitils Loader',
+                'Implementation-Version': project.version
+            )
+        }
+    }
+}
+
+project(':mod') {
+    apply plugin: 'net.minecraftforge.gradle.forge'
+
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+    archivesBaseName = 'hypixel-legitils'
+
+    minecraft {
+        version = '1.8.9-11.15.1.2318-1.8.9'
+        runDir = 'run'
+        mappings = 'stable_20'
+        clientRunArgs += '--tweakClass'
+        clientRunArgs += 'org.spongepowered.asm.launch.MixinTweaker'
+    }
+
+    def mixinRefmap = 'mixins.hypixellegitils.refmap.json'
+    def mappingRevision = '20'
+    def reobfSrg = new File(
+        gradle.gradleUserHomeDir,
+        "caches/minecraft/de/oceanlabs/mcp/mcp_stable/${mappingRevision}/srgs/mcp-srg.srg"
+    )
+    def loaderDevSmokeConfig = file("${buildDir}/loader-dev-smoke.json")
+
+    task prepareLoaderDevSmokeConfig(dependsOn: [':loader:jar', ':mod:jar']) {
+        description = 'Writes the generated absolute-path config used only by the development Java Agent smoke test.'
+        doLast {
+            def modJar = tasks.jar.archivePath.toPath().toAbsolutePath().normalize()
+            loaderDevSmokeConfig.text = """{
+  \"schemaVersion\": 1,
+  \"modJar\": \"${modJar.toString().replace('\\\\', '\\\\\\\\')}\",
+  \"mixinConfig\": \"mixins.hypixellegitils.json\",
+  \"injectedProperty\": \"hypixellegitils.agent.injected\"
+}\n"""
+        }
+    }
+
+    task printLunarSmokeArgument(dependsOn: prepareLoaderDevSmokeConfig) {
+        description = 'Prints the exact pre-launch JVM argument for the local Lunar compatibility smoke test.'
+        doLast {
+            def loaderJar = project(':loader').tasks.jar.archivePath.toPath().toAbsolutePath().normalize()
+            def configPath = loaderDevSmokeConfig.toPath().toAbsolutePath().normalize()
+            println "-javaagent:${loaderJar}=${configPath}"
+        }
+    }
+
+    dependencies {
+        // Mixin 0.7.11 is the Java 6/ASM 5 line compatible with ForgeGradle
+        // 2.1's Minecraft 1.8.9 LaunchWrapper runtime. Newer Mixin 0.8.x
+        // requires ASM 6+ and conflicts with Forge's ASM 5 transformer.
+        compile 'org.spongepowered:mixin:0.7.11-SNAPSHOT'
+        testCompile 'junit:junit:4.13.2'
+    }
+
+    // ForgeGradle 2.1 does not supply these Mixin annotation-processor inputs
+    // automatically. They map MCP method names to SRG names and emit the refmap
+    // that the production Mixin runtime needs.
+    compileJava {
+        dependsOn 'genSrgs'
+        options.compilerArgs += [
+            "-AreobfSrgFile=${reobfSrg}",
+            "-AoutSrgFile=${file("${buildDir}/mixin.srg")}",
+            "-AoutRefMapFile=${file("${buildDir}/resources/main/${mixinRefmap}")}",
+            '-AdefaultObfuscationEnv=searge'
+        ]
+    }
+
+    jar {
+        manifest {
+            attributes(
+                'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',
+                'TweakOrder': '0',
+                'MixinConfigs': 'mixins.hypixellegitils.json',
+                'Implementation-Title': 'Hypixel Legitils',
+                'Implementation-Version': project.version
+            )
+        }
+    }
+
+    if (project.hasProperty('loaderDevSmoke')) {
+        tasks.runClient.dependsOn prepareLoaderDevSmokeConfig
+        minecraft.clientJvmArgs += "-javaagent:${project(':loader').tasks.jar.archivePath.toPath().toAbsolutePath().normalize()}=${loaderDevSmokeConfig.toPath().toAbsolutePath().normalize()}"
+    }
+}
+
+task verifyBootstrapArtifacts(dependsOn: [':loader:jar', ':mod:jar']) {
+    description = 'Checks the clean-room bootstrap artifacts and their Java 8 manifests.'
+    group = 'verification'
+
+    doLast {
+        def loaderJar = project(':loader').tasks.jar.archivePath
+        def modJar = project(':mod').tasks.jar.archivePath
+        def forbidden = ['sample/', 'wtf/tatp/meowtils/', 'net/curxxed/dev/agent/']
+        def assertAllClassesJava8 = { jar, artifact ->
+            int classCount = 0
+            def entries = jar.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                if (!entry.isDirectory() && entry.name.endsWith('.class')) {
+                    classCount++
+                    def stream = jar.getInputStream(entry)
+                    try {
+                        byte[] header = new byte[8]
+                        assert stream.read(header) == 8: "Truncated class entry ${entry.name} in ${artifact.name}"
+                        boolean classMagic = header[0] == (byte) 0xca && header[1] == (byte) 0xfe && header[2] == (byte) 0xba && header[3] == (byte) 0xbe
+                        assert classMagic: "Invalid class entry ${entry.name} in ${artifact.name}"
+                        int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                        assert major == 52: "${artifact.name} contains non-Java-8 class ${entry.name} (class version ${major})"
+                    } finally {
+                        stream.close()
+                    }
+                }
+            }
+            assert classCount > 0: "No classes found in ${artifact.name}"
+        }
+
+        [loaderJar, modJar].each { artifact ->
+            assert artifact.isFile(): "Missing artifact: ${artifact}"
+            def zip = new java.util.zip.ZipFile(artifact)
+            try {
+                def entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    def name = entries.nextElement().name
+                    assert !forbidden.any { prefix -> name.startsWith(prefix) }: "Forbidden output entry ${name} in ${artifact.name}"
+                }
+            } finally {
+                zip.close()
+            }
+        }
+
+        def loaderZip = new java.util.jar.JarFile(loaderJar)
+        try {
+            def manifest = loaderZip.manifest.mainAttributes
+            assert manifest.getValue('Premain-Class') == 'com.snkisk.hypixellegitils.loader.HypixelLegitilsLoader'
+            def classEntry = loaderZip.getEntry('com/snkisk/hypixellegitils/loader/HypixelLegitilsLoader.class')
+            assert classEntry != null: 'Loader entry class is missing'
+            assertAllClassesJava8(loaderZip, loaderJar)
+        } finally {
+            loaderZip.close()
+        }
+
+        def modZip = new java.util.jar.JarFile(modJar)
+        try {
+            def manifest = modZip.manifest.mainAttributes
+            assert manifest.getValue('TweakClass') == 'org.spongepowered.asm.launch.MixinTweaker'
+            assert manifest.getValue('TweakOrder') == '0'
+            assert manifest.getValue('MixinConfigs') == 'mixins.hypixellegitils.json'
+            assert modZip.getEntry('mixins.hypixellegitils.json') != null: 'Mixin configuration is missing'
+            assert modZip.getEntry('mixins.hypixellegitils.refmap.json') != null: 'Mixin refmap is missing'
+            def mixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinMinecraft.class')
+            assert mixinClass != null: 'Bootstrap Mixin is missing'
+            def chatMixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinGuiChat.class')
+            assert chatMixinClass != null: 'Local chat Mixin is missing'
+            def guiMixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinGuiIngame.class')
+            assert guiMixinClass != null: 'Action Bar GUI Mixin is missing'
+            def worldMixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinWorldClient.class')
+            assert worldMixinClass != null: 'BedNuke WorldClient Mixin is missing'
+            def refmapSource = modZip.getInputStream(modZip.getEntry('mixins.hypixellegitils.refmap.json')).getText('UTF-8')
+            assert refmapSource.contains('com/snkisk/hypixellegitils/mixin/MixinGuiIngame'): 'Action Bar GUI Mixin is absent from refmap'
+            assert refmapSource.contains('renderGameOverlay'): 'Action Bar GUI Mixin mapping is missing'
+            assert refmapSource.contains('com/snkisk/hypixellegitils/mixin/MixinGuiChat'): 'Local chat Mixin is absent from refmap'
+            assert refmapSource.contains('keyTyped'): 'Local chat Mixin mapping is missing'
+            assert refmapSource.contains('com/snkisk/hypixellegitils/mixin/MixinWorldClient'): 'BedNuke WorldClient Mixin is absent from refmap'
+            assert refmapSource.contains('invalidateRegionAndSetBlock'): 'BedNuke block-state Mixin mapping is missing'
+            assert refmapSource.contains('doPreChunk'): 'BedNuke chunk-transition Mixin mapping is missing'
+            assert refmapSource.contains('invalidateBlockReceiveRegion'): 'BedNuke partial-chunk Mixin mapping is missing'
+            assertAllClassesJava8(modZip, modJar)
+        } finally {
+            modZip.close()
+        }
+    }
+}
+
+task verifyToolchainInputs {
+    description = 'Pins the exact legacy ForgeGradle and Mixin artifacts used by the bootstrap proof.'
+    group = 'verification'
+
+    doLast {
+        def expected = [
+            'ForgeGradle-2.1-SNAPSHOT.jar': '29f4f9a4b7ad917937d6ca761404ed4c56ee2a716cbfdd190b9aa99f25eb4695',
+            'mixin-0.7.11-SNAPSHOT.jar': 'da3d6e47b9c12b5a312d89b67bc27e2429d823c09cde8a90299e9fdcc4eefc20'
+        ]
+        def candidates = []
+        candidates.addAll(buildscript.configurations.classpath.files)
+        candidates.addAll(project(':mod').configurations.compile.files)
+
+        expected.each { fileName, hash ->
+            def matches = candidates.findAll { candidate -> candidate.name == fileName }
+            assert matches.size() == 1: "Expected exactly one resolved ${fileName}, found ${matches.size()}"
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            matches[0].eachByte(8192) { buffer, length -> digest.update(buffer, 0, length) }
+            def actual = digest.digest().collect { value -> String.format('%02x', value & 0xff) }.join()
+            assert actual == hash: "Unexpected ${fileName} SHA-256 ${actual}"
+        }
+    }
+}
+
+verifyBootstrapArtifacts.dependsOn verifyToolchainInputs
+
+[project(':loader'), project(':mod')].each { subproject ->
+    subproject.tasks.matching { candidate -> candidate.name == 'check' }.all {
+        dependsOn rootProject.tasks.verifyBootstrapArtifacts
+    }
+}

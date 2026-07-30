@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "minVersion": "0.7.11",
+  "package": "com.snkisk.hypixellegitils.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "mixins.hypixellegitils.refmap.json",
+  "client": [
+    "MixinMinecraft",
+    "MixinGuiChat",
+    "MixinGuiIngame",
+    "MixinWorldClient",
+    "MixinNetHandlerPlayClient",
+    "MixinPlayerControllerMP",
+    "MixinGuiPlayerTabOverlay",
+    "MixinEntityPlayer"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

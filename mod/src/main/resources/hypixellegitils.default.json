@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "revision": 0,
+  "enabledDetectors": [],
+  "sensitivity": "balanced",
+  "notifications": {
+    "chat": true,
+    "overlay": false,
+    "sound": false
+  },
+  "cooldowns": {
+    "normalMillis": 1000,
+    "airStallMillis": 30000
+  },
+  "debug": false
+}

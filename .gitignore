@@ -1,0 +1,11 @@
+.gradle/
+.gradle-user/
+build/
+loader/build/
+mod/build/
+run/
+sample/
+.DS_Store
+docs/logos/MirrorProxy*.png
+*.log
+!.gitkeep

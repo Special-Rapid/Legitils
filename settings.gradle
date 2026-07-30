@@ -1,0 +1,4 @@
+rootProject.name = 'hypixel-legitils'
+
+include 'loader'
+include 'mod'
