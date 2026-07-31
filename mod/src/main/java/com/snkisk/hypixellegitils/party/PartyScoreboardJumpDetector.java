@@ -1,28 +1,25 @@
 package com.snkisk.hypixellegitils.party;
 
-/**
- * Developer experiment that observes only a visible Bed Wars pre-game player-count jump.
- * A jump is not treated as proof of party membership outside the explicit developer test.
- */
+/** Observes simultaneous visible Bed Wars pre-game player-count changes. */
 public final class PartyScoreboardJumpDetector {
     private int previousCurrent = -1;
     private int previousMaximum = -1;
 
-    /** Returns the observed simultaneous arrival count, or zero when there is no qualifying jump. */
+    /** Returns the signed simultaneous count change, or zero when fewer than two players changed. */
     public synchronized int observe(BedwarsPreGameState.PlayerCount playerCount) {
         if (playerCount == null || !playerCount.preGame || playerCount.current < 0 || playerCount.maximum < playerCount.current) {
             reset();
             return 0;
         }
-        if (previousCurrent < 0 || previousMaximum != playerCount.maximum || playerCount.current < previousCurrent) {
+        if (previousCurrent < 0 || previousMaximum != playerCount.maximum) {
             previousCurrent = playerCount.current;
             previousMaximum = playerCount.maximum;
             return 0;
         }
-        int joined = playerCount.current - previousCurrent;
+        int change = playerCount.current - previousCurrent;
         previousCurrent = playerCount.current;
         previousMaximum = playerCount.maximum;
-        return joined >= 2 ? joined : 0;
+        return Math.abs(change) >= 2 ? change : 0;
     }
 
     public synchronized void reset() {

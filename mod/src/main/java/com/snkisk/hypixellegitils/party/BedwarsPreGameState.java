@@ -42,24 +42,6 @@ public final class BedwarsPreGameState {
         return playerCount(objective.getDisplayName(), lines);
     }
 
-    /** Returns sanitized, currently displayed sidebar lines for an explicit developer dump only. */
-    public static String[] visibleSidebarDebugLines(WorldClient world) {
-        if (world == null || world.getScoreboard() == null) return new String[] { "§csidebar unavailable" };
-        Scoreboard scoreboard = world.getScoreboard();
-        ScoreObjective objective = scoreboard.getObjectiveInDisplaySlot(1);
-        if (objective == null) return new String[] { "§csidebar objective unavailable" };
-        Collection<Score> scores = scoreboard.getSortedScores(objective);
-        List<String> result = new ArrayList<String>(scores.size() + 1);
-        result.add("§7title: §f" + normalized(objective.getDisplayName()));
-        for (Score score : scores) {
-            if (score == null) continue;
-            String entry = score.getPlayerName();
-            String line = ScorePlayerTeam.formatPlayerName(scoreboard.getPlayersTeam(entry), entry);
-            result.add("§7line: §f" + normalized(line));
-        }
-        return result.toArray(new String[result.size()]);
-    }
-
     static boolean isActive(String title, Iterable<String> lines) {
         return playerCount(title, lines).preGame;
     }

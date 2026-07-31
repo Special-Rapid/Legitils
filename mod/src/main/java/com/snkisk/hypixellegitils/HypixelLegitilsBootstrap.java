@@ -22,8 +22,6 @@ import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
-import com.snkisk.hypixellegitils.party.PartyDetectionMethod;
-import com.snkisk.hypixellegitils.party.PartyJoinBurstDetector;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import java.nio.file.Path;
 import java.io.IOException;
@@ -53,9 +51,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile DetectorSettingsService detectorSettings;
     private static volatile boolean nickDetectionEnabled = true;
     private static volatile boolean partyDetectionEnabled = true;
-    private static volatile PartyDetectionMethod partyDetectionMethod = PartyDetectionMethod.CHAT;
     private static volatile boolean developerSelfDetectionEnabled;
-    private static volatile boolean developerChatLoggingEnabled;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
     private static final MojangProfileResolver PROFILE_RESOLVER = new MojangProfileResolver();
@@ -66,13 +62,7 @@ public final class HypixelLegitilsBootstrap {
         = new ConcurrentLinkedQueue<PendingPregameNickNotice>();
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
-    private static final Queue<String> PENDING_DEVELOPER_NOTICES = new ConcurrentLinkedQueue<String>();
-    private static final PartyJoinBurstDetector PARTY_JOIN_BURSTS = new PartyJoinBurstDetector();
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
-    private static volatile int partyScoreboardDebugCurrent = Integer.MIN_VALUE;
-    private static volatile int partyScoreboardDebugMaximum = Integer.MIN_VALUE;
-    private static volatile boolean partyScoreboardDebugWasAvailable;
-    private static volatile String partyScoreboardDebugUnavailableReason;
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
     private static final AtomicBoolean NICK_OBSERVATION_LOGGED = new AtomicBoolean(false);
@@ -141,16 +131,6 @@ public final class HypixelLegitilsBootstrap {
         return presentation;
     }
 
-    /** Observes only trusted server chat text while the sidebar confirms Bed Wars pre-game. */
-    public static void onPartyDetectorChat(String rawMessage, long nowMillis, boolean bedwarsPreGame) {
-        if (!STARTED.get() || !partyDetectionEnabled) {
-            resetPartyDetectors();
-            return;
-        }
-        if (partyDetectionMethod != PartyDetectionMethod.CHAT) return;
-        enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.observeChat(rawMessage, nowMillis, bedwarsPreGame));
-    }
-
     /** Receives only the actor name parsed from a server Bed-destruction announcement. */
     public static void onBedDestructionChat(String rawMessage, long nowMillis) {
         String serverName = BedDestructionChatSignal.destroyedBy(rawMessage);
@@ -160,20 +140,17 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    /** Flushes the selected local-only pre-game Party Detector method. */
-    public static void onPartyDetectorTick(long nowMillis, BedwarsPreGameState.PlayerCount playerCount) {
-        if (!STARTED.get()) return;
-        observePartyScoreboardDebug(playerCount);
-        if (!partyDetectionEnabled) {
-            resetPartyDetectionState();
+    /** Observes visible Bed Wars pre-game player-count changes only. */
+    public static void onPartyDetectorTick(BedwarsPreGameState.PlayerCount playerCount) {
+        if (!STARTED.get()) {
+            resetPartyDetectors();
             return;
         }
-        if (partyDetectionMethod == PartyDetectionMethod.SCOREBOARD) {
-            observePartyScoreboardDebug(playerCount);
-            enqueuePartyDetectorNotice(PARTY_SCOREBOARD_JUMPS.observe(playerCount));
-        } else {
-            enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.onTick(nowMillis, playerCount != null && playerCount.preGame));
+        if (!partyDetectionEnabled) {
+            resetPartyDetectors();
+            return;
         }
+        enqueuePartyDetectorNotice(PARTY_SCOREBOARD_JUMPS.observe(playerCount));
     }
 
     public static String[] drainPendingPartyDetectorNotices() {
@@ -183,103 +160,21 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
-    /** Drains developer diagnostics; normal play never enqueues these messages. */
-    public static String[] drainPendingDeveloperNotices() {
-        List<String> notices = new ArrayList<String>();
-        String notice;
-        while ((notice = PENDING_DEVELOPER_NOTICES.poll()) != null) notices.add(notice);
-        return notices.toArray(new String[notices.size()]);
-    }
-
-    /** Returns an immediate, local-only scoreboard snapshot after a developer command. */
-    public static String developerScoreboardDiagnostic(BedwarsPreGameState.PlayerCount playerCount) {
-        if (!developerSelfDetectionEnabled || !developerChatLoggingEnabled) return null;
-        if (!partyDetectionEnabled) {
-            return ChatFormat.line("§8[dev] §7Party scoreboard: §cParty Detector is disabled");
+    private static void enqueuePartyDetectorNotice(int playerCountChange) {
+        if (playerCountChange >= 2) {
+            PENDING_PARTY_DETECTOR_NOTICES.add(
+                ChatFormat.line("§fParty of §c" + playerCountChange + " §fjoined.")
+            );
+        } else if (playerCountChange <= -2) {
+            PENDING_PARTY_DETECTOR_NOTICES.add(
+                ChatFormat.line("§fParty of §c" + (-playerCountChange) + " §fquit.")
+            );
         }
-        if (partyDetectionMethod != PartyDetectionMethod.SCOREBOARD) {
-            return ChatFormat.line("§8[dev] §7Party scoreboard: §cmethod is chat; use .l partydetect method scoreboard");
-        }
-        boolean available = playerCount != null && playerCount.preGame
-            && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
-        if (!available) {
-            return ChatFormat.line("§8[dev] §7Party scoreboard: §c" + unavailablePartyScoreboardReason(playerCount));
-        }
-        return ChatFormat.line(
-            "§8[dev] §7Party scoreboard: §e" + playerCount.current + "§7/§e" + playerCount.maximum + " §8(snapshot)"
-        );
-    }
-
-    private static void enqueuePartyDetectorNotice(int amount) {
-        if (amount >= 2) PENDING_PARTY_DETECTOR_NOTICES.add(ChatFormat.line("§fParty of §c" + amount + " §fjoined."));
     }
 
     private static void resetPartyDetectors() {
-        resetPartyDetectionState();
-        resetPartyScoreboardDebug();
-    }
-
-    private static void resetPartyDetectionState() {
-        PARTY_JOIN_BURSTS.reset();
         PARTY_SCOREBOARD_JUMPS.reset();
         PENDING_PARTY_DETECTOR_NOTICES.clear();
-    }
-
-    private static void resetPartyScoreboardDebug() {
-        partyScoreboardDebugCurrent = Integer.MIN_VALUE;
-        partyScoreboardDebugMaximum = Integer.MIN_VALUE;
-        partyScoreboardDebugWasAvailable = false;
-        partyScoreboardDebugUnavailableReason = null;
-    }
-
-    private static void observePartyScoreboardDebug(BedwarsPreGameState.PlayerCount playerCount) {
-        if (!developerSelfDetectionEnabled || !developerChatLoggingEnabled) return;
-        if (!partyDetectionEnabled) {
-            enqueuePartyScoreboardDebugUnavailable("Party Detector is disabled");
-            return;
-        }
-        if (partyDetectionMethod != PartyDetectionMethod.SCOREBOARD) {
-            enqueuePartyScoreboardDebugUnavailable("method is chat; use .l partydetect method scoreboard");
-            return;
-        }
-        boolean available = playerCount != null && playerCount.preGame
-            && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
-        if (!available) {
-            enqueuePartyScoreboardDebugUnavailable(unavailablePartyScoreboardReason(playerCount));
-            return;
-        }
-        partyScoreboardDebugUnavailableReason = null;
-        if (!partyScoreboardDebugWasAvailable || partyScoreboardDebugMaximum != playerCount.maximum) {
-            PENDING_DEVELOPER_NOTICES.add(ChatFormat.line(
-                "§8[dev] §7Party scoreboard: §e" + playerCount.current + "§7/§e" + playerCount.maximum + " §8(baseline)"
-            ));
-        } else if (partyScoreboardDebugCurrent != playerCount.current) {
-            int delta = playerCount.current - partyScoreboardDebugCurrent;
-            PENDING_DEVELOPER_NOTICES.add(ChatFormat.line(
-                "§8[dev] §7Party scoreboard: §e" + partyScoreboardDebugCurrent + "§7/§e" + playerCount.maximum
-                    + " §8→ §e" + playerCount.current + "§7/§e" + playerCount.maximum
-                    + (delta > 0 ? " §a(+" + delta + ")" : " §c(" + delta + ")")
-            ));
-        }
-        partyScoreboardDebugCurrent = playerCount.current;
-        partyScoreboardDebugMaximum = playerCount.maximum;
-        partyScoreboardDebugWasAvailable = true;
-    }
-
-    private static void enqueuePartyScoreboardDebugUnavailable(String reason) {
-        if (reason.equals(partyScoreboardDebugUnavailableReason)) return;
-        PENDING_DEVELOPER_NOTICES.add(ChatFormat.line("§8[dev] §7Party scoreboard: §c" + reason));
-        partyScoreboardDebugUnavailableReason = reason;
-        partyScoreboardDebugCurrent = Integer.MIN_VALUE;
-        partyScoreboardDebugMaximum = Integer.MIN_VALUE;
-        partyScoreboardDebugWasAvailable = false;
-    }
-
-    private static String unavailablePartyScoreboardReason(BedwarsPreGameState.PlayerCount playerCount) {
-        if (playerCount != null && playerCount.preGame) {
-            return "pre-game found, but Players x/y was not parsed";
-        }
-        return "waiting for Bed Wars pre-game sidebar";
     }
 
     public static void onObservedPlayers(List<PlayerSample> samples, boolean globalLag) {
@@ -376,15 +271,12 @@ public final class HypixelLegitilsBootstrap {
         if (request == null) return null;
         if (active == null || detectorSettings == null) return new String[] { ChatFormat.line("§cStatus unavailable.") };
         if (request.kind == LocalCommand.Kind.STATUS) return overallStatusLines(detectorSettings.savedConfig(), active);
-        if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines(developerSelfDetectionEnabled);
+        if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines();
         if (request.kind == LocalCommand.Kind.ANTICHEAT_LIST) return detectorListLines(active.statusText(), detectorSettings.savedConfig());
         if (request.kind == LocalCommand.Kind.ANTICHEAT_SET) return updateDetectorSetting(request);
         if (request.kind == LocalCommand.Kind.NICK_DETECT_SET_ENABLED) return updateNickDetectionSetting(request);
         if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_ENABLED) return updatePartyDetectionSetting(request);
-        if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_METHOD) return updatePartyDetectionMethod(request);
         if (request.kind == LocalCommand.Kind.DEV_SET_ENABLED) return updateDeveloperSetting(request);
-        if (request.kind == LocalCommand.Kind.DEV_LOG_SET_ENABLED) return updateDeveloperLogSetting(request);
-        if (request.kind == LocalCommand.Kind.DEV_LOG_DUMP) return developerLogDumpLines();
         if (request.kind == LocalCommand.Kind.NOTIFICATION_SET_ENABLED) return updateNotificationSetting(request);
         if (request.kind == LocalCommand.Kind.MARKER_STATUS) {
             return blacklistStatusLines(detectorSettings.savedConfig(), active);
@@ -562,21 +454,6 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    private static String[] updatePartyDetectionMethod(LocalCommand.Request request) {
-        if (!developerSelfDetectionEnabled) {
-            return new String[] { ChatFormat.line("§cParty detect experiments require §6.l dev on§c.") };
-        }
-        if (request.partyDetectionMethod == null) {
-            return new String[] { ChatFormat.line("§cChoose §fchat §cor §fscoreboard§c.") };
-        }
-        partyDetectionMethod = request.partyDetectionMethod;
-        resetPartyDetectors();
-        return new String[] {
-            ChatFormat.line("§fParty detect method §e" + partyDetectionMethod.commandName() + " §aapplied"),
-            ChatFormat.continuation("§7Developer-only and session-only; restart or §6.l dev off §7restores chat.")
-        };
-    }
-
     private static String[] updateNotificationSetting(LocalCommand.Request request) {
         try {
             DetectorSettingsService.Update update = detectorSettings.setNotificationEnabled(request.notificationChannel, request.enabled);
@@ -604,9 +481,6 @@ public final class HypixelLegitilsBootstrap {
             developerSelfDetectionEnabled = update.config.debugEnabled;
             if (!developerSelfDetectionEnabled) {
                 developmentSelfPlayerId = null;
-                partyDetectionMethod = PartyDetectionMethod.CHAT;
-                developerChatLoggingEnabled = false;
-                PENDING_DEVELOPER_NOTICES.clear();
                 resetPartyDetectors();
             }
             return new String[] {
@@ -621,36 +495,6 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    private static String[] updateDeveloperLogSetting(LocalCommand.Request request) {
-        if (!developerSelfDetectionEnabled) {
-            return new String[] { ChatFormat.line("§cDeveloper chat logging requires §6.l dev on§c.") };
-        }
-        developerChatLoggingEnabled = request.enabled;
-        PENDING_DEVELOPER_NOTICES.clear();
-        resetPartyScoreboardDebug();
-        return new String[] {
-            ChatFormat.line("§fDeveloper chat log " + (developerChatLoggingEnabled ? "§aenabled" : "§cdisabled")),
-            ChatFormat.continuation("§7Scoreboard baselines and player-count deltas are shown only while enabled.")
-        };
-    }
-
-    private static String[] developerLogDumpLines() {
-        if (!developerSelfDetectionEnabled) {
-            return new String[] { ChatFormat.line("§cDeveloper sidebar dump requires §6.l dev on§c.") };
-        }
-        if (!developerChatLoggingEnabled) {
-            return new String[] { ChatFormat.line("§cDeveloper sidebar dump requires §6.l dev log on§c.") };
-        }
-        return new String[] {
-            ChatFormat.line("§8[dev] §fVisible sidebar dump"),
-            ChatFormat.continuation("§7Only the currently displayed client sidebar is shown below.")
-        };
-    }
-
-    public static boolean isDeveloperSidebarDumpEnabled() {
-        return developerSelfDetectionEnabled && developerChatLoggingEnabled;
-    }
-
     private static String[] overallStatusLines(LegitilsConfig config, ObservationCoordinator active) {
         String nickState = config.nickDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
         String partyState = config.partyDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
@@ -659,10 +503,6 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Anti-cheat: §a" + enabledCount(config) + "§8/§a" + availableCount() + " §7detectors active"));
         lines.add(ChatFormat.continuation("§7Nick detect: " + nickState));
         lines.add(ChatFormat.continuation("§7Party detect: " + partyState));
-        if (developerSelfDetectionEnabled) {
-            lines.add(ChatFormat.continuation("§7Party experiment: §e" + partyDetectionMethod.commandName()));
-            lines.add(ChatFormat.continuation("§7Developer chat log: " + (developerChatLoggingEnabled ? "§aenabled" : "§cdisabled")));
-        }
         lines.add(ChatFormat.continuation("§7Developer self-detect: " + (config.debugEnabled ? "§aenabled" : "§cdisabled")));
         lines.add(ChatFormat.continuation("§7Auto blacklist: " + (config.markerSettings.enabled ? "§aenabled" : "§cdisabled")
             + " §8| §7threshold: §e" + config.markerSettings.threshold + " §7accepted flags"));

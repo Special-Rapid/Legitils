@@ -3,7 +3,6 @@ package com.snkisk.hypixellegitils.command;
 import com.snkisk.hypixellegitils.config.DetectorId;
 import com.snkisk.hypixellegitils.config.NotificationChannel;
 import com.snkisk.hypixellegitils.alert.ChatFormat;
-import com.snkisk.hypixellegitils.party.PartyDetectionMethod;
 import java.util.Locale;
 
 /** Parses the intentionally tiny, user-entered local diagnostic namespace. */
@@ -13,12 +12,6 @@ public final class LocalCommand {
     private static final String STATUS = PREFIX + " status";
     private static final String HELP = PREFIX + " help";
     private static final String ANTICHEAT = PREFIX + " anticheat";
-    private static final String DEV_PARTY_METHOD_HELP = ChatFormat.continuation(
-        "§6.l partydetect method <chat|scoreboard> §8— §fdeveloper experiment"
-    );
-    private static final String DEV_LOG_HELP = ChatFormat.continuation(
-        "§6.l dev log on/off/dump §8— §fshow developer chat diagnostics"
-    );
     private static final String[] HELP_LINES = new String[] {
         ChatFormat.line("§fCommands"),
         ChatFormat.continuation("§7Alias: §b.l <command>"),
@@ -61,18 +54,6 @@ public final class LocalCommand {
         return HELP_LINES.clone();
     }
 
-    /** The experimental Party Detector selector is intentionally visible only in developer mode. */
-    public static String[] helpLines(boolean developerMode) {
-        if (!developerMode) return helpLines();
-        String[] lines = new String[HELP_LINES.length + 2];
-        System.arraycopy(HELP_LINES, 0, lines, 0, 10);
-        lines[10] = DEV_PARTY_METHOD_HELP;
-        lines[11] = HELP_LINES[10];
-        lines[12] = DEV_LOG_HELP;
-        System.arraycopy(HELP_LINES, 11, lines, 13, HELP_LINES.length - 11);
-        return lines;
-    }
-
     public static String[] invalidLocalCommandLines() {
         String[] lines = new String[HELP_LINES.length + 1];
         lines[0] = ChatFormat.line("§cUnknown command. §7Use §b.l help");
@@ -110,21 +91,11 @@ public final class LocalCommand {
             if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
                 return new Request(Kind.PARTY_DETECT_SET_ENABLED, null, false, "on".equals(parts[2]));
             }
-            if (parts.length == 4 && "method".equals(parts[2])) {
-                PartyDetectionMethod method = PartyDetectionMethod.forCommand(parts[3]);
-                if (method != null) return new Request(Kind.PARTY_DETECT_SET_METHOD, null, false, false, -1, null, null, method);
-            }
         }
         if (input.startsWith(PREFIX + " dev ")) {
             String[] parts = input.split(" ");
             if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
                 return new Request(Kind.DEV_SET_ENABLED, null, false, "on".equals(parts[2]));
-            }
-            if (parts.length == 4 && "log".equals(parts[2]) && ("on".equals(parts[3]) || "off".equals(parts[3]))) {
-                return new Request(Kind.DEV_LOG_SET_ENABLED, null, false, "on".equals(parts[3]));
-            }
-            if (parts.length == 4 && "log".equals(parts[2]) && "dump".equals(parts[3])) {
-                return new Request(Kind.DEV_LOG_DUMP, null, false, false);
             }
         }
         if (input.startsWith(PREFIX + " notify ")) {
@@ -205,10 +176,7 @@ public final class LocalCommand {
         ANTICHEAT_SET,
         NICK_DETECT_SET_ENABLED,
         PARTY_DETECT_SET_ENABLED,
-        PARTY_DETECT_SET_METHOD,
         DEV_SET_ENABLED,
-        DEV_LOG_SET_ENABLED,
-        DEV_LOG_DUMP,
         NOTIFICATION_SET_ENABLED,
         MARKER_STATUS,
         MARKER_SET_ENABLED,
@@ -228,7 +196,6 @@ public final class LocalCommand {
         public final int threshold;
         public final String playerName;
         public final NotificationChannel notificationChannel;
-        public final PartyDetectionMethod partyDetectionMethod;
 
         private Request(Kind kind, DetectorId detector, boolean all, boolean enabled) {
             this(kind, detector, all, enabled, -1);
@@ -251,19 +218,6 @@ public final class LocalCommand {
             String playerName,
             NotificationChannel notificationChannel
         ) {
-            this(kind, detector, all, enabled, threshold, playerName, notificationChannel, null);
-        }
-
-        private Request(
-            Kind kind,
-            DetectorId detector,
-            boolean all,
-            boolean enabled,
-            int threshold,
-            String playerName,
-            NotificationChannel notificationChannel,
-            PartyDetectionMethod partyDetectionMethod
-        ) {
             this.kind = kind;
             this.detector = detector;
             this.all = all;
@@ -271,7 +225,6 @@ public final class LocalCommand {
             this.threshold = threshold;
             this.playerName = playerName;
             this.notificationChannel = notificationChannel;
-            this.partyDetectionMethod = partyDetectionMethod;
         }
     }
 }

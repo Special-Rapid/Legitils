@@ -87,10 +87,7 @@ public abstract class MixinMinecraft {
 
     @Inject(method = "runTick", at = @At("RETURN"))
     private void hypixelLegitils$afterClientTick(CallbackInfo callbackInfo) {
-        HypixelLegitilsBootstrap.onPartyDetectorTick(
-            hypixelLegitils$frameNowMillis,
-            BedwarsPreGameState.playerCount(theWorld)
-        );
+        HypixelLegitilsBootstrap.onPartyDetectorTick(BedwarsPreGameState.playerCount(theWorld));
         if (theWorld != null && thePlayer != null) {
             boolean worldChanged = theWorld != hypixelLegitils$observedWorld;
             if (LocalNotice.shouldShowFor(hypixelLegitils$injectedNoticeShown, theWorld)) {
@@ -133,9 +130,6 @@ public abstract class MixinMinecraft {
                 )));
             }
             for (String notice : HypixelLegitilsBootstrap.drainPendingPartyDetectorNotices()) {
-                if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
-            }
-            for (String notice : HypixelLegitilsBootstrap.drainPendingDeveloperNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
         }

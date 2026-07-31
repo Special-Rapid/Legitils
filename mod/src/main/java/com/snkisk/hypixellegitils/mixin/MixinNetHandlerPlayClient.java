@@ -31,16 +31,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(NetHandlerPlayClient.class)
 public abstract class MixinNetHandlerPlayClient {
     @Inject(method = "handleChat", at = @At("HEAD"), require = 0)
-    private void hypixelLegitils$observePartyJoinChat(S02PacketChat packet, CallbackInfo callbackInfo) {
+    private void hypixelLegitils$observeServerChat(S02PacketChat packet, CallbackInfo callbackInfo) {
         Minecraft minecraft = Minecraft.getMinecraft();
         IChatComponent component = packet == null ? null : packet.getChatComponent();
         String message = component == null ? null : component.getUnformattedText();
         boolean bedwarsPreGame = BedwarsPreGameState.isActive(minecraft == null ? null : minecraft.theWorld);
-        HypixelLegitilsBootstrap.onPartyDetectorChat(
-            message,
-            System.currentTimeMillis(),
-            bedwarsPreGame
-        );
         HypixelLegitilsBootstrap.onBedDestructionChat(message, System.currentTimeMillis());
         HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {

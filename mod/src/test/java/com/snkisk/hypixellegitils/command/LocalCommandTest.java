@@ -3,7 +3,6 @@ package com.snkisk.hypixellegitils.command;
 import com.snkisk.hypixellegitils.config.DetectorId;
 import com.snkisk.hypixellegitils.config.NotificationChannel;
 import com.snkisk.hypixellegitils.alert.ChatFormat;
-import com.snkisk.hypixellegitils.party.PartyDetectionMethod;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -36,8 +35,7 @@ public class LocalCommandTest {
         assertTrue(lines[15].contains(".l blacklist add/remove"));
         assertTrue(lines[16].contains("through Mojang"));
         assertTrue(!contains(lines, "partydetect method"));
-        assertTrue(contains(LocalCommand.helpLines(true), "partydetect method <chat|scoreboard>"));
-        assertTrue(contains(LocalCommand.helpLines(true), ".l dev log on/off/dump"));
+        assertTrue(!contains(lines, ".l dev log"));
     }
 
     @Test
@@ -80,17 +78,11 @@ public class LocalCommandTest {
         LocalCommand.Request partyOff = LocalCommand.requestForUserInput(".l partydetect off", true);
         assertEquals(LocalCommand.Kind.PARTY_DETECT_SET_ENABLED, partyOff.kind);
         assertTrue(!partyOff.enabled);
-        LocalCommand.Request partyMethod = LocalCommand.requestForUserInput(".l partydetect method scoreboard", true);
-        assertEquals(LocalCommand.Kind.PARTY_DETECT_SET_METHOD, partyMethod.kind);
-        assertEquals(PartyDetectionMethod.SCOREBOARD, partyMethod.partyDetectionMethod);
+        assertEquals(LocalCommand.Kind.USAGE, LocalCommand.requestForUserInput(".l partydetect method scoreboard", true).kind);
         LocalCommand.Request dev = LocalCommand.requestForUserInput(".l dev on", true);
         assertEquals(LocalCommand.Kind.DEV_SET_ENABLED, dev.kind);
         assertTrue(dev.enabled);
-        LocalCommand.Request devLog = LocalCommand.requestForUserInput(".l dev log on", true);
-        assertEquals(LocalCommand.Kind.DEV_LOG_SET_ENABLED, devLog.kind);
-        assertTrue(devLog.enabled);
-        LocalCommand.Request devLogDump = LocalCommand.requestForUserInput(".l dev log dump", true);
-        assertEquals(LocalCommand.Kind.DEV_LOG_DUMP, devLogDump.kind);
+        assertEquals(LocalCommand.Kind.USAGE, LocalCommand.requestForUserInput(".l dev log on", true).kind);
         LocalCommand.Request notify = LocalCommand.requestForUserInput(".l notify actionbar on", true);
         assertEquals(LocalCommand.Kind.NOTIFICATION_SET_ENABLED, notify.kind);
         assertEquals(NotificationChannel.ACTION_BAR, notify.notificationChannel);
