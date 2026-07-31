@@ -72,6 +72,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile int partyScoreboardDebugCurrent = Integer.MIN_VALUE;
     private static volatile int partyScoreboardDebugMaximum = Integer.MIN_VALUE;
     private static volatile boolean partyScoreboardDebugWasAvailable;
+    private static volatile String partyScoreboardDebugUnavailableReason;
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
     private static final AtomicBoolean NICK_OBSERVATION_LOGGED = new AtomicBoolean(false);
@@ -161,8 +162,10 @@ public final class HypixelLegitilsBootstrap {
 
     /** Flushes the selected local-only pre-game Party Detector method. */
     public static void onPartyDetectorTick(long nowMillis, BedwarsPreGameState.PlayerCount playerCount) {
-        if (!STARTED.get() || !partyDetectionEnabled) {
-            resetPartyDetectors();
+        if (!STARTED.get()) return;
+        observePartyScoreboardDebug(playerCount);
+        if (!partyDetectionEnabled) {
+            resetPartyDetectionState();
             return;
         }
         if (partyDetectionMethod == PartyDetectionMethod.SCOREBOARD) {
@@ -193,27 +196,40 @@ public final class HypixelLegitilsBootstrap {
     }
 
     private static void resetPartyDetectors() {
+        resetPartyDetectionState();
+        resetPartyScoreboardDebug();
+    }
+
+    private static void resetPartyDetectionState() {
         PARTY_JOIN_BURSTS.reset();
         PARTY_SCOREBOARD_JUMPS.reset();
         PENDING_PARTY_DETECTOR_NOTICES.clear();
+    }
+
+    private static void resetPartyScoreboardDebug() {
         partyScoreboardDebugCurrent = Integer.MIN_VALUE;
         partyScoreboardDebugMaximum = Integer.MIN_VALUE;
         partyScoreboardDebugWasAvailable = false;
+        partyScoreboardDebugUnavailableReason = null;
     }
 
     private static void observePartyScoreboardDebug(BedwarsPreGameState.PlayerCount playerCount) {
         if (!developerSelfDetectionEnabled || !developerChatLoggingEnabled) return;
+        if (!partyDetectionEnabled) {
+            enqueuePartyScoreboardDebugUnavailable("Party Detector is disabled");
+            return;
+        }
+        if (partyDetectionMethod != PartyDetectionMethod.SCOREBOARD) {
+            enqueuePartyScoreboardDebugUnavailable("method is chat; use .l partydetect method scoreboard");
+            return;
+        }
         boolean available = playerCount != null && playerCount.preGame
             && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
         if (!available) {
-            if (partyScoreboardDebugWasAvailable) {
-                PENDING_DEVELOPER_NOTICES.add(ChatFormat.line("§8[dev] §7Party scoreboard: §cunavailable"));
-            }
-            partyScoreboardDebugWasAvailable = false;
-            partyScoreboardDebugCurrent = Integer.MIN_VALUE;
-            partyScoreboardDebugMaximum = Integer.MIN_VALUE;
+            enqueuePartyScoreboardDebugUnavailable("waiting for Bed Wars pre-game sidebar");
             return;
         }
+        partyScoreboardDebugUnavailableReason = null;
         if (!partyScoreboardDebugWasAvailable || partyScoreboardDebugMaximum != playerCount.maximum) {
             PENDING_DEVELOPER_NOTICES.add(ChatFormat.line(
                 "§8[dev] §7Party scoreboard: §e" + playerCount.current + "§7/§e" + playerCount.maximum + " §8(baseline)"
@@ -229,6 +245,15 @@ public final class HypixelLegitilsBootstrap {
         partyScoreboardDebugCurrent = playerCount.current;
         partyScoreboardDebugMaximum = playerCount.maximum;
         partyScoreboardDebugWasAvailable = true;
+    }
+
+    private static void enqueuePartyScoreboardDebugUnavailable(String reason) {
+        if (reason.equals(partyScoreboardDebugUnavailableReason)) return;
+        PENDING_DEVELOPER_NOTICES.add(ChatFormat.line("§8[dev] §7Party scoreboard: §c" + reason));
+        partyScoreboardDebugUnavailableReason = reason;
+        partyScoreboardDebugCurrent = Integer.MIN_VALUE;
+        partyScoreboardDebugMaximum = Integer.MIN_VALUE;
+        partyScoreboardDebugWasAvailable = false;
     }
 
     public static void onObservedPlayers(List<PlayerSample> samples, boolean globalLag) {
@@ -575,9 +600,7 @@ public final class HypixelLegitilsBootstrap {
         }
         developerChatLoggingEnabled = request.enabled;
         PENDING_DEVELOPER_NOTICES.clear();
-        partyScoreboardDebugCurrent = Integer.MIN_VALUE;
-        partyScoreboardDebugMaximum = Integer.MIN_VALUE;
-        partyScoreboardDebugWasAvailable = false;
+        resetPartyScoreboardDebug();
         return new String[] {
             ChatFormat.line("§fDeveloper chat log " + (developerChatLoggingEnabled ? "§aenabled" : "§cdisabled")),
             ChatFormat.continuation("§7Scoreboard baselines and player-count deltas are shown only while enabled.")
