@@ -55,6 +55,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile boolean partyDetectionEnabled = true;
     private static volatile PartyDetectionMethod partyDetectionMethod = PartyDetectionMethod.CHAT;
     private static volatile boolean developerSelfDetectionEnabled;
+    private static volatile boolean developerChatLoggingEnabled;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
     private static final MojangProfileResolver PROFILE_RESOLVER = new MojangProfileResolver();
@@ -65,8 +66,12 @@ public final class HypixelLegitilsBootstrap {
         = new ConcurrentLinkedQueue<PendingPregameNickNotice>();
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<String> PENDING_DEVELOPER_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final PartyJoinBurstDetector PARTY_JOIN_BURSTS = new PartyJoinBurstDetector();
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
+    private static volatile int partyScoreboardDebugCurrent = Integer.MIN_VALUE;
+    private static volatile int partyScoreboardDebugMaximum = Integer.MIN_VALUE;
+    private static volatile boolean partyScoreboardDebugWasAvailable;
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
     private static final AtomicBoolean NICK_OBSERVATION_LOGGED = new AtomicBoolean(false);
@@ -161,6 +166,7 @@ public final class HypixelLegitilsBootstrap {
             return;
         }
         if (partyDetectionMethod == PartyDetectionMethod.SCOREBOARD) {
+            observePartyScoreboardDebug(playerCount);
             enqueuePartyDetectorNotice(PARTY_SCOREBOARD_JUMPS.observe(playerCount));
         } else {
             enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.onTick(nowMillis, playerCount != null && playerCount.preGame));
@@ -174,6 +180,14 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
+    /** Drains developer diagnostics; normal play never enqueues these messages. */
+    public static String[] drainPendingDeveloperNotices() {
+        List<String> notices = new ArrayList<String>();
+        String notice;
+        while ((notice = PENDING_DEVELOPER_NOTICES.poll()) != null) notices.add(notice);
+        return notices.toArray(new String[notices.size()]);
+    }
+
     private static void enqueuePartyDetectorNotice(int amount) {
         if (amount >= 2) PENDING_PARTY_DETECTOR_NOTICES.add(ChatFormat.line("§fParty of §c" + amount + " §fjoined."));
     }
@@ -182,6 +196,39 @@ public final class HypixelLegitilsBootstrap {
         PARTY_JOIN_BURSTS.reset();
         PARTY_SCOREBOARD_JUMPS.reset();
         PENDING_PARTY_DETECTOR_NOTICES.clear();
+        partyScoreboardDebugCurrent = Integer.MIN_VALUE;
+        partyScoreboardDebugMaximum = Integer.MIN_VALUE;
+        partyScoreboardDebugWasAvailable = false;
+    }
+
+    private static void observePartyScoreboardDebug(BedwarsPreGameState.PlayerCount playerCount) {
+        if (!developerSelfDetectionEnabled || !developerChatLoggingEnabled) return;
+        boolean available = playerCount != null && playerCount.preGame
+            && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
+        if (!available) {
+            if (partyScoreboardDebugWasAvailable) {
+                PENDING_DEVELOPER_NOTICES.add(ChatFormat.line("§8[dev] §7Party scoreboard: §cunavailable"));
+            }
+            partyScoreboardDebugWasAvailable = false;
+            partyScoreboardDebugCurrent = Integer.MIN_VALUE;
+            partyScoreboardDebugMaximum = Integer.MIN_VALUE;
+            return;
+        }
+        if (!partyScoreboardDebugWasAvailable || partyScoreboardDebugMaximum != playerCount.maximum) {
+            PENDING_DEVELOPER_NOTICES.add(ChatFormat.line(
+                "§8[dev] §7Party scoreboard: §e" + playerCount.current + "§7/§e" + playerCount.maximum + " §8(baseline)"
+            ));
+        } else if (partyScoreboardDebugCurrent != playerCount.current) {
+            int delta = playerCount.current - partyScoreboardDebugCurrent;
+            PENDING_DEVELOPER_NOTICES.add(ChatFormat.line(
+                "§8[dev] §7Party scoreboard: §e" + partyScoreboardDebugCurrent + "§7/§e" + playerCount.maximum
+                    + " §8→ §e" + playerCount.current + "§7/§e" + playerCount.maximum
+                    + (delta > 0 ? " §a(+" + delta + ")" : " §c(" + delta + ")")
+            ));
+        }
+        partyScoreboardDebugCurrent = playerCount.current;
+        partyScoreboardDebugMaximum = playerCount.maximum;
+        partyScoreboardDebugWasAvailable = true;
     }
 
     public static void onObservedPlayers(List<PlayerSample> samples, boolean globalLag) {
@@ -285,6 +332,7 @@ public final class HypixelLegitilsBootstrap {
         if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_ENABLED) return updatePartyDetectionSetting(request);
         if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_METHOD) return updatePartyDetectionMethod(request);
         if (request.kind == LocalCommand.Kind.DEV_SET_ENABLED) return updateDeveloperSetting(request);
+        if (request.kind == LocalCommand.Kind.DEV_LOG_SET_ENABLED) return updateDeveloperLogSetting(request);
         if (request.kind == LocalCommand.Kind.NOTIFICATION_SET_ENABLED) return updateNotificationSetting(request);
         if (request.kind == LocalCommand.Kind.MARKER_STATUS) {
             return blacklistStatusLines(detectorSettings.savedConfig(), active);
@@ -505,6 +553,8 @@ public final class HypixelLegitilsBootstrap {
             if (!developerSelfDetectionEnabled) {
                 developmentSelfPlayerId = null;
                 partyDetectionMethod = PartyDetectionMethod.CHAT;
+                developerChatLoggingEnabled = false;
+                PENDING_DEVELOPER_NOTICES.clear();
                 resetPartyDetectors();
             }
             return new String[] {
@@ -519,6 +569,21 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
+    private static String[] updateDeveloperLogSetting(LocalCommand.Request request) {
+        if (!developerSelfDetectionEnabled) {
+            return new String[] { ChatFormat.line("§cDeveloper chat logging requires §6.l dev on§c.") };
+        }
+        developerChatLoggingEnabled = request.enabled;
+        PENDING_DEVELOPER_NOTICES.clear();
+        partyScoreboardDebugCurrent = Integer.MIN_VALUE;
+        partyScoreboardDebugMaximum = Integer.MIN_VALUE;
+        partyScoreboardDebugWasAvailable = false;
+        return new String[] {
+            ChatFormat.line("§fDeveloper chat log " + (developerChatLoggingEnabled ? "§aenabled" : "§cdisabled")),
+            ChatFormat.continuation("§7Scoreboard baselines and player-count deltas are shown only while enabled.")
+        };
+    }
+
     private static String[] overallStatusLines(LegitilsConfig config, ObservationCoordinator active) {
         String nickState = config.nickDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
         String partyState = config.partyDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
@@ -529,6 +594,7 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Party detect: " + partyState));
         if (developerSelfDetectionEnabled) {
             lines.add(ChatFormat.continuation("§7Party experiment: §e" + partyDetectionMethod.commandName()));
+            lines.add(ChatFormat.continuation("§7Developer chat log: " + (developerChatLoggingEnabled ? "§aenabled" : "§cdisabled")));
         }
         lines.add(ChatFormat.continuation("§7Developer self-detect: " + (config.debugEnabled ? "§aenabled" : "§cdisabled")));
         lines.add(ChatFormat.continuation("§7Auto blacklist: " + (config.markerSettings.enabled ? "§aenabled" : "§cdisabled")
