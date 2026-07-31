@@ -203,7 +203,7 @@ public final class HypixelLegitilsBootstrap {
         boolean available = playerCount != null && playerCount.preGame
             && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
         if (!available) {
-            return ChatFormat.line("§8[dev] §7Party scoreboard: §cwaiting for Bed Wars pre-game sidebar");
+            return ChatFormat.line("§8[dev] §7Party scoreboard: §c" + unavailablePartyScoreboardReason(playerCount));
         }
         return ChatFormat.line(
             "§8[dev] §7Party scoreboard: §e" + playerCount.current + "§7/§e" + playerCount.maximum + " §8(snapshot)"
@@ -245,7 +245,7 @@ public final class HypixelLegitilsBootstrap {
         boolean available = playerCount != null && playerCount.preGame
             && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
         if (!available) {
-            enqueuePartyScoreboardDebugUnavailable("waiting for Bed Wars pre-game sidebar");
+            enqueuePartyScoreboardDebugUnavailable(unavailablePartyScoreboardReason(playerCount));
             return;
         }
         partyScoreboardDebugUnavailableReason = null;
@@ -273,6 +273,13 @@ public final class HypixelLegitilsBootstrap {
         partyScoreboardDebugCurrent = Integer.MIN_VALUE;
         partyScoreboardDebugMaximum = Integer.MIN_VALUE;
         partyScoreboardDebugWasAvailable = false;
+    }
+
+    private static String unavailablePartyScoreboardReason(BedwarsPreGameState.PlayerCount playerCount) {
+        if (playerCount != null && playerCount.preGame) {
+            return "pre-game found, but Players x/y was not parsed";
+        }
+        return "waiting for Bed Wars pre-game sidebar";
     }
 
     public static void onObservedPlayers(List<PlayerSample> samples, boolean globalLag) {

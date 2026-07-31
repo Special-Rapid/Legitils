@@ -73,4 +73,16 @@ public class PartyJoinBurstDetectorTest {
         assertEquals(false, notPregame.preGame);
         assertEquals(-1, notPregame.current);
     }
+
+    @Test
+    public void stripsNonVanillaSectionCodesBeforeParsingTheVisibleCounter() {
+        BedwarsPreGameState.PlayerCount playerCount = BedwarsPreGameState.playerCount(
+            "§x§e§f§0§0§0§0BED WARS",
+            java.util.Arrays.asList("§x§e§f§0§0§0§0Players: §a12/16", "§eWaiting...")
+        );
+
+        assertEquals(true, playerCount.preGame);
+        assertEquals(12, playerCount.current);
+        assertEquals(16, playerCount.maximum);
+    }
 }

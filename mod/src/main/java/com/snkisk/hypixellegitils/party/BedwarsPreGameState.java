@@ -63,7 +63,9 @@ public final class BedwarsPreGameState {
     }
 
     private static String normalized(String value) {
-        return value == null ? "" : value.replaceAll("(?i)\\u00a7[0-9a-fk-or]", "").toLowerCase(Locale.ROOT).trim();
+        // Lunar can preserve newer or otherwise non-vanilla section-code prefixes in
+        // the client-side scoreboard. Strip every formatting pair, not only 1.8 codes.
+        return value == null ? "" : value.replaceAll("\\u00a7.", "").toLowerCase(Locale.ROOT).trim();
     }
 
     /** A parsed visible sidebar count; -1 means that the sidebar did not expose a count. */
