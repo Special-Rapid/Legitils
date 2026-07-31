@@ -14,7 +14,9 @@ import net.minecraft.scoreboard.Scoreboard;
 
 /** Reads only the visible sidebar to limit Party Detector parsing to Bed Wars pre-game. */
 public final class BedwarsPreGameState {
-    private static final Pattern PLAYER_COUNT = Pattern.compile("^players:\\s*(\\d+)\\s*/\\s*(\\d+)$");
+    // Lunar can append a private-scoreboard entry marker after the visible text,
+    // for example "Players: 16/16🌠". Parse the visible count token only.
+    private static final Pattern PLAYER_COUNT = Pattern.compile("players:\\s*(\\d+)\\s*/\\s*(\\d+)");
 
     private BedwarsPreGameState() {
     }
@@ -72,7 +74,7 @@ public final class BedwarsPreGameState {
             String normalized = normalized(line);
             if (normalized.contains("waiting...") || normalized.contains("starting in")) preGame = true;
             Matcher playerCount = PLAYER_COUNT.matcher(normalized);
-            if (playerCount.matches()) {
+            if (playerCount.find()) {
                 current = Integer.parseInt(playerCount.group(1));
                 maximum = Integer.parseInt(playerCount.group(2));
             }

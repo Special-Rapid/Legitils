@@ -85,4 +85,16 @@ public class PartyJoinBurstDetectorTest {
         assertEquals(12, playerCount.current);
         assertEquals(16, playerCount.maximum);
     }
+
+    @Test
+    public void parsesTheVisibleCounterBeforeLunarEntryMarkerSuffix() {
+        BedwarsPreGameState.PlayerCount playerCount = BedwarsPreGameState.playerCount(
+            "BED WARS",
+            java.util.Arrays.asList("Players: 16/16🌠", "Starting in 6s⚽")
+        );
+
+        assertEquals(true, playerCount.preGame);
+        assertEquals(16, playerCount.current);
+        assertEquals(16, playerCount.maximum);
+    }
 }
