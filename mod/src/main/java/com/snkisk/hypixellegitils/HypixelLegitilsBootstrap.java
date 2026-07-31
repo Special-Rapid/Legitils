@@ -191,6 +191,25 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
+    /** Returns an immediate, local-only scoreboard snapshot after a developer command. */
+    public static String developerScoreboardDiagnostic(BedwarsPreGameState.PlayerCount playerCount) {
+        if (!developerSelfDetectionEnabled || !developerChatLoggingEnabled) return null;
+        if (!partyDetectionEnabled) {
+            return ChatFormat.line("§8[dev] §7Party scoreboard: §cParty Detector is disabled");
+        }
+        if (partyDetectionMethod != PartyDetectionMethod.SCOREBOARD) {
+            return ChatFormat.line("§8[dev] §7Party scoreboard: §cmethod is chat; use .l partydetect method scoreboard");
+        }
+        boolean available = playerCount != null && playerCount.preGame
+            && playerCount.current >= 0 && playerCount.maximum >= playerCount.current;
+        if (!available) {
+            return ChatFormat.line("§8[dev] §7Party scoreboard: §cwaiting for Bed Wars pre-game sidebar");
+        }
+        return ChatFormat.line(
+            "§8[dev] §7Party scoreboard: §e" + playerCount.current + "§7/§e" + playerCount.maximum + " §8(snapshot)"
+        );
+    }
+
     private static void enqueuePartyDetectorNotice(int amount) {
         if (amount >= 2) PENDING_PARTY_DETECTOR_NOTICES.add(ChatFormat.line("§fParty of §c" + amount + " §fjoined."));
     }

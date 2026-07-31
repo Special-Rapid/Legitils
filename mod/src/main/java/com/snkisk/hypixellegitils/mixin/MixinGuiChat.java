@@ -2,6 +2,7 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.entity.player.EntityPlayer;
@@ -36,6 +37,12 @@ public abstract class MixinGuiChat {
                 if (response != null && !response.isEmpty()) {
                     minecraft.thePlayer.addChatMessage(new ChatComponentText(response));
                 }
+            }
+            String developerDiagnostic = HypixelLegitilsBootstrap.developerScoreboardDiagnostic(
+                BedwarsPreGameState.playerCount(minecraft.theWorld)
+            );
+            if (developerDiagnostic != null && !developerDiagnostic.isEmpty()) {
+                minecraft.thePlayer.addChatMessage(new ChatComponentText(developerDiagnostic));
             }
         }
     }
