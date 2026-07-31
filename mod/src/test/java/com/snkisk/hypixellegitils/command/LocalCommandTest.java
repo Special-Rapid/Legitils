@@ -37,7 +37,7 @@ public class LocalCommandTest {
         assertTrue(lines[16].contains("through Mojang"));
         assertTrue(!contains(lines, "partydetect method"));
         assertTrue(contains(LocalCommand.helpLines(true), "partydetect method <chat|scoreboard>"));
-        assertTrue(contains(LocalCommand.helpLines(true), ".l dev log on/off"));
+        assertTrue(contains(LocalCommand.helpLines(true), ".l dev log on/off/dump"));
     }
 
     @Test
@@ -89,6 +89,8 @@ public class LocalCommandTest {
         LocalCommand.Request devLog = LocalCommand.requestForUserInput(".l dev log on", true);
         assertEquals(LocalCommand.Kind.DEV_LOG_SET_ENABLED, devLog.kind);
         assertTrue(devLog.enabled);
+        LocalCommand.Request devLogDump = LocalCommand.requestForUserInput(".l dev log dump", true);
+        assertEquals(LocalCommand.Kind.DEV_LOG_DUMP, devLogDump.kind);
         LocalCommand.Request notify = LocalCommand.requestForUserInput(".l notify actionbar on", true);
         assertEquals(LocalCommand.Kind.NOTIFICATION_SET_ENABLED, notify.kind);
         assertEquals(NotificationChannel.ACTION_BAR, notify.notificationChannel);

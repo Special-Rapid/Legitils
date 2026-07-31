@@ -1,6 +1,8 @@
 package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
+import com.snkisk.hypixellegitils.alert.ChatFormat;
+import com.snkisk.hypixellegitils.command.LocalCommand;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import net.minecraft.client.Minecraft;
@@ -26,6 +28,7 @@ public abstract class MixinGuiChat {
         )
     )
     private void hypixelLegitils$handleManualSubmit(GuiChat chat, String message) {
+        LocalCommand.Request request = LocalCommand.requestForUserInput(message, true);
         String[] responses = HypixelLegitilsBootstrap.localCommandResponses(message, true, hypixelLegitils$visiblePlayers());
         if (responses == null) {
             chat.sendChatMessage(message);
@@ -43,6 +46,14 @@ public abstract class MixinGuiChat {
             );
             if (developerDiagnostic != null && !developerDiagnostic.isEmpty()) {
                 minecraft.thePlayer.addChatMessage(new ChatComponentText(developerDiagnostic));
+            }
+            if (request != null && request.kind == LocalCommand.Kind.DEV_LOG_DUMP
+                && HypixelLegitilsBootstrap.isDeveloperSidebarDumpEnabled()) {
+                for (String line : BedwarsPreGameState.visibleSidebarDebugLines(minecraft.theWorld)) {
+                    if (line != null && !line.isEmpty()) {
+                        minecraft.thePlayer.addChatMessage(new ChatComponentText(ChatFormat.continuation(line)));
+                    }
+                }
             }
         }
     }

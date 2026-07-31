@@ -17,7 +17,7 @@ public final class LocalCommand {
         "§6.l partydetect method <chat|scoreboard> §8— §fdeveloper experiment"
     );
     private static final String DEV_LOG_HELP = ChatFormat.continuation(
-        "§6.l dev log on/off §8— §fshow developer chat diagnostics"
+        "§6.l dev log on/off/dump §8— §fshow developer chat diagnostics"
     );
     private static final String[] HELP_LINES = new String[] {
         ChatFormat.line("§fCommands"),
@@ -123,6 +123,9 @@ public final class LocalCommand {
             if (parts.length == 4 && "log".equals(parts[2]) && ("on".equals(parts[3]) || "off".equals(parts[3]))) {
                 return new Request(Kind.DEV_LOG_SET_ENABLED, null, false, "on".equals(parts[3]));
             }
+            if (parts.length == 4 && "log".equals(parts[2]) && "dump".equals(parts[3])) {
+                return new Request(Kind.DEV_LOG_DUMP, null, false, false);
+            }
         }
         if (input.startsWith(PREFIX + " notify ")) {
             String[] parts = input.split(" ");
@@ -205,6 +208,7 @@ public final class LocalCommand {
         PARTY_DETECT_SET_METHOD,
         DEV_SET_ENABLED,
         DEV_LOG_SET_ENABLED,
+        DEV_LOG_DUMP,
         NOTIFICATION_SET_ENABLED,
         MARKER_STATUS,
         MARKER_SET_ENABLED,

@@ -384,6 +384,7 @@ public final class HypixelLegitilsBootstrap {
         if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_METHOD) return updatePartyDetectionMethod(request);
         if (request.kind == LocalCommand.Kind.DEV_SET_ENABLED) return updateDeveloperSetting(request);
         if (request.kind == LocalCommand.Kind.DEV_LOG_SET_ENABLED) return updateDeveloperLogSetting(request);
+        if (request.kind == LocalCommand.Kind.DEV_LOG_DUMP) return developerLogDumpLines();
         if (request.kind == LocalCommand.Kind.NOTIFICATION_SET_ENABLED) return updateNotificationSetting(request);
         if (request.kind == LocalCommand.Kind.MARKER_STATUS) {
             return blacklistStatusLines(detectorSettings.savedConfig(), active);
@@ -631,6 +632,23 @@ public final class HypixelLegitilsBootstrap {
             ChatFormat.line("§fDeveloper chat log " + (developerChatLoggingEnabled ? "§aenabled" : "§cdisabled")),
             ChatFormat.continuation("§7Scoreboard baselines and player-count deltas are shown only while enabled.")
         };
+    }
+
+    private static String[] developerLogDumpLines() {
+        if (!developerSelfDetectionEnabled) {
+            return new String[] { ChatFormat.line("§cDeveloper sidebar dump requires §6.l dev on§c.") };
+        }
+        if (!developerChatLoggingEnabled) {
+            return new String[] { ChatFormat.line("§cDeveloper sidebar dump requires §6.l dev log on§c.") };
+        }
+        return new String[] {
+            ChatFormat.line("§8[dev] §fVisible sidebar dump"),
+            ChatFormat.continuation("§7Only the currently displayed client sidebar is shown below.")
+        };
+    }
+
+    public static boolean isDeveloperSidebarDumpEnabled() {
+        return developerSelfDetectionEnabled && developerChatLoggingEnabled;
     }
 
     private static String[] overallStatusLines(LegitilsConfig config, ObservationCoordinator active) {
