@@ -22,6 +22,11 @@ public final class HypixelLegitilsLoader {
 
     public static void premain(String agentArgs, Instrumentation instrumentation) {
         try {
+            if (!Lunar189Runtime.isSupported()) {
+                status("unsupported-minecraft-version");
+                diagnostic("Loader disabled: this build supports Lunar Minecraft 1.8.9 only.");
+                return;
+            }
             Path configPath = agentArgs == null ? null : Paths.get(agentArgs).normalize();
             LoaderConfig config = LoaderConfig.load(configPath);
             System.setProperty(config.injectedProperty, "true");

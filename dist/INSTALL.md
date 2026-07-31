@@ -16,7 +16,9 @@ This alpha validates a pre-launch Java Agent and a minimal observation-only Mixi
    ./gradlew :mod:printLunarSmokeArgument
    ```
 
-4. Fully quit and relaunch Lunar 1.8.9. A successful bootstrap smoke has a successful loader `status=...` diagnostic before Minecraft starts, plus `Bootstrap Mixin reached Minecraft.startGame; ...` in the active 1.8 profile log (for example, `~/.lunarclient/profiles/1.8/logs/latest.log`). Entering and leaving a local world should produce `World lifecycle reset.` without a crash. A different profile name can use a different `profiles/<name>/logs/latest.log` path. New configurations intentionally have all detector signals and the Action Bar disabled, so no persistent overlay or alert is expected from this smoke alone. If the status, bootstrap line, lifecycle line, or client stability is absent, remove the argument and do not treat this build as compatible.
+4. Fully quit and relaunch Lunar 1.8.9. A successful bootstrap smoke has a successful loader `status=...` diagnostic before Minecraft starts, plus `Bootstrap Mixin reached Minecraft.startGame; ...` in the active 1.8 profile log (for example, `~/.lunarclient/profiles/1.8/logs/latest.log`). Entering and leaving a local world should produce `World lifecycle reset.` without a crash. New configurations intentionally have all detector signals and the Action Bar disabled, so no persistent overlay or alert is expected from this smoke alone. If the status, bootstrap line, lifecycle line, or client stability is absent, remove the argument and do not treat this build as compatible.
+
+   The Loader checks Lunar's pre-launch Ichor profile path and only registers the MOD for the verified `profiles/1.8` (Minecraft 1.8.9) runtime. If this JVM argument is also applied when launching another Minecraft version, Legitils logs `status=unsupported-minecraft-version` and exits before adding the MOD JAR or registering Mixins.
 5. To roll back, fully quit Lunar, remove that one JVM argument, and delete the current Ichor class cache before restarting Lunar. For the current macOS Lunar 1.8 profile, the observed cache is:
 
    ```text
