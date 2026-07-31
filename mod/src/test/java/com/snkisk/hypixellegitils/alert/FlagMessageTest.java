@@ -65,9 +65,12 @@ public class FlagMessageTest {
     }
 
     @Test
-    public void bedNukeIsAlwaysAnonymousAndNeverContainsWdr() {
+    public void attributedBedNukeUsesTheConfirmedServerActor() {
         FlagMessage message = FlagMessage.attributed(DetectorId.BED_NUKE, "\u00a79B Blueteamplayer", "Blueteamplayer");
-        assertEquals(PREFIX + "\u00a7cflagged \u00a74BedNuke", message.completeChatText());
-        assertNull(message.wdrTarget);
+        assertEquals(
+            PREFIX + "\u00a79B Blueteamplayer \u00a7cflagged \u00a74BedNuke \u00a77| \u00a74[WDR]",
+            message.completeChatText()
+        );
+        assertEquals("Blueteamplayer", message.wdrTarget);
     }
 }

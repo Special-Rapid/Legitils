@@ -17,8 +17,11 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.server.S25PacketBlockBreakAnim;
 import net.minecraft.network.play.server.S02PacketChat;
 import net.minecraft.potion.Potion;
+import net.minecraft.init.Blocks;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.IChatComponent;
+import net.minecraft.util.MovingObjectPosition;
+import net.minecraft.util.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -38,6 +41,7 @@ public abstract class MixinNetHandlerPlayClient {
             System.currentTimeMillis(),
             bedwarsPreGame
         );
+        HypixelLegitilsBootstrap.onBedDestructionChat(message, System.currentTimeMillis());
         HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {
             hypixelLegitils$observePregameNickChat(minecraft, message);
@@ -78,6 +82,15 @@ public abstract class MixinNetHandlerPlayClient {
             : null;
         if (playerId == null) return;
         IBlockState state = world.getBlockState(position);
+        if (state != null && state.getBlock() == Blocks.bed && player.getDistanceSq(position) <= 144.0D) {
+            HypixelLegitilsBootstrap.onBedBreakAttempt(
+                playerId,
+                player.getName(),
+                hypixelLegitils$isBedRayObstructed(world, player, position)
+                    && hypixelLegitils$isPlausiblyAimingAtBed(player, position),
+                System.currentTimeMillis()
+            );
+        }
         ItemStack held = player.getHeldItem();
         boolean ordinaryContext = state != null && state.getBlock().getMaterial() != net.minecraft.block.material.Material.air
             && state.getBlock().isFullCube() && held != null && !held.isItemEnchanted()
@@ -91,5 +104,21 @@ public abstract class MixinNetHandlerPlayClient {
             true,
             ordinaryContext
         ));
+    }
+
+    /** Uses the Bed-targeted server animation as intent; this ray only checks physical obstruction. */
+    private boolean hypixelLegitils$isBedRayObstructed(WorldClient world, EntityPlayer player, BlockPos bedPosition) {
+        Vec3 eye = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+        Vec3 bedCenter = new Vec3(bedPosition.getX() + 0.5D, bedPosition.getY() + 0.5D, bedPosition.getZ() + 0.5D);
+        MovingObjectPosition hit = world.rayTraceBlocks(eye, bedCenter, false, true, false);
+        return hit != null && hit.getBlockPos() != null && world.getBlockState(hit.getBlockPos()).getBlock() != Blocks.bed;
+    }
+
+    /** A stale remote rotation is ambiguity, not proof: require a broadly plausible Bed-facing direction. */
+    private boolean hypixelLegitils$isPlausiblyAimingAtBed(EntityPlayer player, BlockPos bedPosition) {
+        Vec3 eye = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+        Vec3 toBed = new Vec3(bedPosition.getX() + 0.5D - eye.xCoord, bedPosition.getY() + 0.5D - eye.yCoord, bedPosition.getZ() + 0.5D - eye.zCoord).normalize();
+        Vec3 look = player.getLook(1.0F).normalize();
+        return look.dotProduct(toBed) >= 0.70D;
     }
 }

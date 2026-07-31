@@ -14,6 +14,7 @@ import com.snkisk.hypixellegitils.evidence.EvidencePolicyContext;
 import com.snkisk.hypixellegitils.evidence.PolicyDecision;
 import com.snkisk.hypixellegitils.detection.DetectionEngine;
 import com.snkisk.hypixellegitils.detection.BedNukeSignalCheck;
+import com.snkisk.hypixellegitils.detection.BedNukeAttributionGate;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
 import java.util.List;
@@ -30,6 +31,7 @@ public final class ObservationCoordinator {
     private final EvidencePolicy evidencePolicy = new EvidencePolicy();
     private final DetectionEngine detectionEngine;
     private final BedNukeSignalCheck bedNuke = new BedNukeSignalCheck();
+    private final BedNukeAttributionGate bedNukeAttribution = new BedNukeAttributionGate();
     private final NoBreakDelaySignalCheck noBreakDelay = new NoBreakDelaySignalCheck();
     private final AcceptedAlertMarkers acceptedMarkers = new AcceptedAlertMarkers();
     private final AlertSink alertSink;
@@ -69,6 +71,7 @@ public final class ObservationCoordinator {
         config = updated;
         detectionEngine.resetForObservationDiscontinuity();
         bedNuke.reset();
+        bedNukeAttribution.reset();
         noBreakDelay.reset();
     }
 
@@ -226,6 +229,7 @@ public final class ObservationCoordinator {
         globalLag = true;
         detectionEngine.resetForObservationDiscontinuity();
         bedNuke.reset();
+        bedNukeAttribution.reset();
         noBreakDelay.reset();
     }
 
@@ -234,6 +238,8 @@ public final class ObservationCoordinator {
         this.globalLag = globalLag;
         if (globalLag) {
             detectionEngine.resetForObservationDiscontinuity();
+            bedNuke.reset();
+            bedNukeAttribution.reset();
             noBreakDelay.reset();
         }
         // A normal client frame with an attached world/player is the only
@@ -244,6 +250,7 @@ public final class ObservationCoordinator {
     /** Does not alter policy/alerts; it only prevents timing state crossing an ambiguous frame. */
     public synchronized void onObservationDiscontinuity() {
         detectionEngine.resetForObservationDiscontinuity();
+        bedNukeAttribution.reset();
         noBreakDelay.reset();
     }
 
@@ -272,7 +279,9 @@ public final class ObservationCoordinator {
         players.pruneExpired(nowMillis);
         detectionEngine.pruneExpired(nowMillis);
         Evidence bedNukeEvidence = bedNuke.evaluate(nowMillis);
-        if (bedNukeEvidence != null) submit(bedNukeEvidence, nowMillis, true);
+        if (bedNukeEvidence != null) bedNukeAttribution.observeStructuralAnomaly(bedNukeEvidence, nowMillis);
+        Evidence attributedBedNuke = bedNukeAttribution.evaluate(nowMillis);
+        if (attributedBedNuke != null) submit(attributedBedNuke, nowMillis, true);
         return alertSink.presentation(nowMillis);
     }
 
@@ -284,6 +293,16 @@ public final class ObservationCoordinator {
     /** Adapter entry point for a server-applied state in a registered bed volume. */
     public synchronized void observeBedBlockState(BedNukeSignalCheck.BlockPosition position, BedNukeSignalCheck.BlockKind state, long nowMillis) {
         bedNuke.observeBlockState(position, state, nowMillis);
+    }
+
+    /** Records an actor-resolved Bed targeting animation and its physical line obstruction. */
+    public synchronized void observeBedBreakAttempt(UUID playerId, String serverName, boolean obstructed, long nowMillis) {
+        bedNukeAttribution.observeBedAttempt(playerId, serverName, obstructed, nowMillis);
+    }
+
+    /** Records only a server-issued Bed-destruction actor name from chat. */
+    public synchronized void observeBedDestructionChat(String serverName, long nowMillis) {
+        bedNukeAttribution.observeBedDestruction(serverName, nowMillis);
     }
 
     /** Records only actor-resolved mining progress from the network adapter. */
@@ -324,6 +343,7 @@ public final class ObservationCoordinator {
     /** Chunk replacement makes any stored cuboid history unreliable. */
     public synchronized void onChunkTransition() {
         bedNuke.reset();
+        bedNukeAttribution.reset();
         noBreakDelay.reset();
     }
 
@@ -332,6 +352,7 @@ public final class ObservationCoordinator {
         evidencePolicy.reset();
         detectionEngine.reset();
         bedNuke.reset();
+        bedNukeAttribution.reset();
         noBreakDelay.reset();
         alertSink.reset();
         globalLag = false;

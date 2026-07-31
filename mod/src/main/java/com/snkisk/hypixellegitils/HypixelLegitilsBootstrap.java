@@ -20,6 +20,7 @@ import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.detection.BedNukeSignalCheck;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
+import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyDetectionMethod;
 import com.snkisk.hypixellegitils.party.PartyJoinBurstDetector;
@@ -142,6 +143,15 @@ public final class HypixelLegitilsBootstrap {
         }
         if (partyDetectionMethod != PartyDetectionMethod.CHAT) return;
         enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.observeChat(rawMessage, nowMillis, bedwarsPreGame));
+    }
+
+    /** Receives only the actor name parsed from a server Bed-destruction announcement. */
+    public static void onBedDestructionChat(String rawMessage, long nowMillis) {
+        String serverName = BedDestructionChatSignal.destroyedBy(rawMessage);
+        ObservationCoordinator active = coordinator;
+        if (STARTED.get() && active != null && serverName != null) {
+            active.observeBedDestructionChat(serverName, nowMillis);
+        }
     }
 
     /** Flushes the selected local-only pre-game Party Detector method. */
@@ -734,6 +744,12 @@ public final class HypixelLegitilsBootstrap {
     public static void onBedBlockState(BedNukeSignalCheck.BlockPosition position, BedNukeSignalCheck.BlockKind state, long nowMillis) {
         ObservationCoordinator active = coordinator;
         if (STARTED.get() && active != null) active.observeBedBlockState(position, state, nowMillis);
+    }
+
+    /** Receives a remote player animation aimed at a Bed, never an inferred nearby-player identity. */
+    public static void onBedBreakAttempt(UUID playerId, String serverName, boolean obstructed, long nowMillis) {
+        ObservationCoordinator active = coordinator;
+        if (STARTED.get() && active != null) active.observeBedBreakAttempt(playerId, serverName, obstructed, nowMillis);
     }
 
     public static void onNoBreakDelayProgress(NoBreakDelaySignalCheck.Progress progress) {

@@ -34,7 +34,7 @@ public final class FlagMessage {
 
     /**
      * Uses only the server-provided formatted display string. A malformed raw
-     * profile name, a missing display value, or BedNuke always becomes anonymous.
+     * profile name or a missing display value becomes anonymous.
      */
     public static FlagMessage attributed(DetectorId detector, String formattedDisplayName, String rawPlayerName) {
         return attributed(detector, formattedDisplayName, rawPlayerName, true);
@@ -42,7 +42,7 @@ public final class FlagMessage {
 
     /** Shows a visible player identity; the caller may forbid a WDR affordance for local development samples. */
     public static FlagMessage attributed(DetectorId detector, String formattedDisplayName, String rawPlayerName, boolean allowWdr) {
-        if (detector == DetectorId.BED_NUKE || !isUsableDisplayName(formattedDisplayName) || !isValidPlayerName(rawPlayerName)) {
+        if (!isUsableDisplayName(formattedDisplayName) || !isValidPlayerName(rawPlayerName)) {
             return anonymous(detector);
         }
         String detectorText = detectorText(detector);
