@@ -89,7 +89,7 @@ public abstract class MixinMinecraft {
     private void hypixelLegitils$afterClientTick(CallbackInfo callbackInfo) {
         HypixelLegitilsBootstrap.onPartyDetectorTick(
             hypixelLegitils$frameNowMillis,
-            BedwarsPreGameState.isActive(theWorld)
+            BedwarsPreGameState.playerCount(theWorld)
         );
         if (theWorld != null && thePlayer != null) {
             boolean worldChanged = theWorld != hypixelLegitils$observedWorld;

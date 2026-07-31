@@ -55,4 +55,22 @@ public class PartyJoinBurstDetectorTest {
         assertEquals(false, BedwarsPreGameState.isActive("SkyWars", java.util.Arrays.asList("Starting in 20s")));
         assertEquals(false, BedwarsPreGameState.isActive("Bed Wars", java.util.Arrays.asList("Mode: 4v4v4v4")));
     }
+
+    @Test
+    public void exposesOnlyTheVisiblePregamePlayerCounter() {
+        BedwarsPreGameState.PlayerCount playerCount = BedwarsPreGameState.playerCount(
+            "§eBED WARS",
+            java.util.Arrays.asList("§fPlayers: §a12/16", "§fWaiting...")
+        );
+        assertEquals(true, playerCount.preGame);
+        assertEquals(12, playerCount.current);
+        assertEquals(16, playerCount.maximum);
+
+        BedwarsPreGameState.PlayerCount notPregame = BedwarsPreGameState.playerCount(
+            "§eBED WARS",
+            java.util.Arrays.asList("§fPlayers: §a12/16", "§fMode: 4v4v4v4")
+        );
+        assertEquals(false, notPregame.preGame);
+        assertEquals(-1, notPregame.current);
+    }
 }

@@ -20,7 +20,10 @@ import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.detection.BedNukeSignalCheck;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
+import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
+import com.snkisk.hypixellegitils.party.PartyDetectionMethod;
 import com.snkisk.hypixellegitils.party.PartyJoinBurstDetector;
+import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.util.Collections;
@@ -49,6 +52,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile DetectorSettingsService detectorSettings;
     private static volatile boolean nickDetectionEnabled = true;
     private static volatile boolean partyDetectionEnabled = true;
+    private static volatile PartyDetectionMethod partyDetectionMethod = PartyDetectionMethod.CHAT;
     private static volatile boolean developerSelfDetectionEnabled;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
@@ -61,6 +65,7 @@ public final class HypixelLegitilsBootstrap {
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final PartyJoinBurstDetector PARTY_JOIN_BURSTS = new PartyJoinBurstDetector();
+    private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
     private static final AtomicBoolean NICK_OBSERVATION_LOGGED = new AtomicBoolean(false);
@@ -132,20 +137,24 @@ public final class HypixelLegitilsBootstrap {
     /** Observes only trusted server chat text while the sidebar confirms Bed Wars pre-game. */
     public static void onPartyDetectorChat(String rawMessage, long nowMillis, boolean bedwarsPreGame) {
         if (!STARTED.get() || !partyDetectionEnabled) {
-            PARTY_JOIN_BURSTS.reset();
-            PENDING_PARTY_DETECTOR_NOTICES.clear();
+            resetPartyDetectors();
             return;
         }
+        if (partyDetectionMethod != PartyDetectionMethod.CHAT) return;
         enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.observeChat(rawMessage, nowMillis, bedwarsPreGame));
     }
 
-    /** Flushes a quiet pre-game join burst without retaining player names or UUIDs. */
-    public static void onPartyDetectorTick(long nowMillis, boolean bedwarsPreGame) {
+    /** Flushes the selected local-only pre-game Party Detector method. */
+    public static void onPartyDetectorTick(long nowMillis, BedwarsPreGameState.PlayerCount playerCount) {
         if (!STARTED.get() || !partyDetectionEnabled) {
-            PARTY_JOIN_BURSTS.reset();
+            resetPartyDetectors();
             return;
         }
-        enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.onTick(nowMillis, bedwarsPreGame));
+        if (partyDetectionMethod == PartyDetectionMethod.SCOREBOARD) {
+            enqueuePartyDetectorNotice(PARTY_SCOREBOARD_JUMPS.observe(playerCount));
+        } else {
+            enqueuePartyDetectorNotice(PARTY_JOIN_BURSTS.onTick(nowMillis, playerCount != null && playerCount.preGame));
+        }
     }
 
     public static String[] drainPendingPartyDetectorNotices() {
@@ -157,6 +166,12 @@ public final class HypixelLegitilsBootstrap {
 
     private static void enqueuePartyDetectorNotice(int amount) {
         if (amount >= 2) PENDING_PARTY_DETECTOR_NOTICES.add(ChatFormat.line("§fParty of §c" + amount + " §fjoined."));
+    }
+
+    private static void resetPartyDetectors() {
+        PARTY_JOIN_BURSTS.reset();
+        PARTY_SCOREBOARD_JUMPS.reset();
+        PENDING_PARTY_DETECTOR_NOTICES.clear();
     }
 
     public static void onObservedPlayers(List<PlayerSample> samples, boolean globalLag) {
@@ -253,11 +268,12 @@ public final class HypixelLegitilsBootstrap {
         if (request == null) return null;
         if (active == null || detectorSettings == null) return new String[] { ChatFormat.line("§cStatus unavailable.") };
         if (request.kind == LocalCommand.Kind.STATUS) return overallStatusLines(detectorSettings.savedConfig(), active);
-        if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines();
+        if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines(developerSelfDetectionEnabled);
         if (request.kind == LocalCommand.Kind.ANTICHEAT_LIST) return detectorListLines(active.statusText(), detectorSettings.savedConfig());
         if (request.kind == LocalCommand.Kind.ANTICHEAT_SET) return updateDetectorSetting(request);
         if (request.kind == LocalCommand.Kind.NICK_DETECT_SET_ENABLED) return updateNickDetectionSetting(request);
         if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_ENABLED) return updatePartyDetectionSetting(request);
+        if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_METHOD) return updatePartyDetectionMethod(request);
         if (request.kind == LocalCommand.Kind.DEV_SET_ENABLED) return updateDeveloperSetting(request);
         if (request.kind == LocalCommand.Kind.NOTIFICATION_SET_ENABLED) return updateNotificationSetting(request);
         if (request.kind == LocalCommand.Kind.MARKER_STATUS) {
@@ -422,8 +438,7 @@ public final class HypixelLegitilsBootstrap {
             DetectorSettingsService.Update update = detectorSettings.setPartyDetectionEnabled(request.enabled);
             partyDetectionEnabled = update.config.partyDetectionSettings.enabled;
             if (!partyDetectionEnabled) {
-                PARTY_JOIN_BURSTS.reset();
-                PENDING_PARTY_DETECTOR_NOTICES.clear();
+                resetPartyDetectors();
             }
             return new String[] {
                 ChatFormat.line("§fParty detect " + (partyDetectionEnabled ? "§aenabled" : "§cdisabled")
@@ -435,6 +450,21 @@ public final class HypixelLegitilsBootstrap {
         } catch (Exception exception) {
             return new String[] { ChatFormat.line("§cUnable to save Party detect setting. Party detect unchanged.") };
         }
+    }
+
+    private static String[] updatePartyDetectionMethod(LocalCommand.Request request) {
+        if (!developerSelfDetectionEnabled) {
+            return new String[] { ChatFormat.line("§cParty detect experiments require §6.l dev on§c.") };
+        }
+        if (request.partyDetectionMethod == null) {
+            return new String[] { ChatFormat.line("§cChoose §fchat §cor §fscoreboard§c.") };
+        }
+        partyDetectionMethod = request.partyDetectionMethod;
+        resetPartyDetectors();
+        return new String[] {
+            ChatFormat.line("§fParty detect method §e" + partyDetectionMethod.commandName() + " §aapplied"),
+            ChatFormat.continuation("§7Developer-only and session-only; restart or §6.l dev off §7restores chat.")
+        };
     }
 
     private static String[] updateNotificationSetting(LocalCommand.Request request) {
@@ -462,7 +492,11 @@ public final class HypixelLegitilsBootstrap {
             if (active == null) throw new IllegalStateException("Observation coordinator unavailable");
             active.applyRuntimeDevelopmentConfig(update.config);
             developerSelfDetectionEnabled = update.config.debugEnabled;
-            if (!developerSelfDetectionEnabled) developmentSelfPlayerId = null;
+            if (!developerSelfDetectionEnabled) {
+                developmentSelfPlayerId = null;
+                partyDetectionMethod = PartyDetectionMethod.CHAT;
+                resetPartyDetectors();
+            }
             return new String[] {
                 ChatFormat.line("§fDeveloper self-detect " + (developerSelfDetectionEnabled ? "§aenabled" : "§cdisabled")
                     + (update.changed ? " §asaved and applied" : " §7already active")),
@@ -478,20 +512,23 @@ public final class HypixelLegitilsBootstrap {
     private static String[] overallStatusLines(LegitilsConfig config, ObservationCoordinator active) {
         String nickState = config.nickDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
         String partyState = config.partyDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
-        return new String[] {
-            ChatFormat.line("§fStatus §8| §7Build §f" + BuildInfo.displayVersion()),
-            ChatFormat.continuation("§7Anti-cheat: §a" + enabledCount(config) + "§8/§a" + availableCount() + " §7detectors active"),
-            ChatFormat.continuation("§7Nick detect: " + nickState),
-            ChatFormat.continuation("§7Party detect: " + partyState),
-            ChatFormat.continuation("§7Developer self-detect: " + (config.debugEnabled ? "§aenabled" : "§cdisabled")),
-            ChatFormat.continuation("§7Auto blacklist: " + (config.markerSettings.enabled ? "§aenabled" : "§cdisabled")
-                + " §8| §7threshold: §e" + config.markerSettings.threshold + " §7accepted flags"),
-            ChatFormat.continuation("§7Blacklist: §e" + active.blacklistedMarkerCount() + " §7active §8/ §e" + active.markerHistoryCount()
-                + " §7stored UUIDs"),
-            ChatFormat.continuation("§7Notifications: §fChat " + (config.notifications.chatEnabled ? "§aon" : "§coff")
-                + " §8| §7Action Bar " + (config.notifications.overlayEnabled ? "§aon" : "§coff")
-                + " §8| §7Sound " + (config.notifications.soundEnabled ? "§aon" : "§coff"))
-        };
+        List<String> lines = new ArrayList<String>();
+        lines.add(ChatFormat.line("§fStatus §8| §7Build §f" + BuildInfo.displayVersion()));
+        lines.add(ChatFormat.continuation("§7Anti-cheat: §a" + enabledCount(config) + "§8/§a" + availableCount() + " §7detectors active"));
+        lines.add(ChatFormat.continuation("§7Nick detect: " + nickState));
+        lines.add(ChatFormat.continuation("§7Party detect: " + partyState));
+        if (developerSelfDetectionEnabled) {
+            lines.add(ChatFormat.continuation("§7Party experiment: §e" + partyDetectionMethod.commandName()));
+        }
+        lines.add(ChatFormat.continuation("§7Developer self-detect: " + (config.debugEnabled ? "§aenabled" : "§cdisabled")));
+        lines.add(ChatFormat.continuation("§7Auto blacklist: " + (config.markerSettings.enabled ? "§aenabled" : "§cdisabled")
+            + " §8| §7threshold: §e" + config.markerSettings.threshold + " §7accepted flags"));
+        lines.add(ChatFormat.continuation("§7Blacklist: §e" + active.blacklistedMarkerCount() + " §7active §8/ §e" + active.markerHistoryCount()
+            + " §7stored UUIDs"));
+        lines.add(ChatFormat.continuation("§7Notifications: §fChat " + (config.notifications.chatEnabled ? "§aon" : "§coff")
+            + " §8| §7Action Bar " + (config.notifications.overlayEnabled ? "§aon" : "§coff")
+            + " §8| §7Sound " + (config.notifications.soundEnabled ? "§aon" : "§coff")));
+        return lines.toArray(new String[lines.size()]);
     }
 
     private static String[] clearLocalBlacklist(ObservationCoordinator active) {
@@ -767,8 +804,7 @@ public final class HypixelLegitilsBootstrap {
         ObservationCoordinator active = coordinator;
         developmentFrameGlobalLag = true;
         developmentSelfPlayerId = null;
-        PARTY_JOIN_BURSTS.reset();
-        PENDING_PARTY_DETECTOR_NOTICES.clear();
+        resetPartyDetectors();
         if (active != null) {
             active.onWorldLoading();
             currentPresentation = null;

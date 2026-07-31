@@ -42,8 +42,9 @@ public class MixinEntityPlayer implements PlayerIdentityAccess {
     }
 
     private String hypixelLegitils$markerSuffix(java.util.UUID playerId) {
-        if (HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(playerId)) return " §c[NICK]";
-        if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) return " §e⚠";
-        return "";
+        String suffix = "";
+        if (HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
+        if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
+        return suffix;
     }
 }

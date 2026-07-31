@@ -3,6 +3,7 @@ package com.snkisk.hypixellegitils.command;
 import com.snkisk.hypixellegitils.config.DetectorId;
 import com.snkisk.hypixellegitils.config.NotificationChannel;
 import com.snkisk.hypixellegitils.alert.ChatFormat;
+import com.snkisk.hypixellegitils.party.PartyDetectionMethod;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -34,6 +35,8 @@ public class LocalCommandTest {
         assertTrue(lines[11].contains(".l notify"));
         assertTrue(lines[15].contains(".l blacklist add/remove"));
         assertTrue(lines[16].contains("through Mojang"));
+        assertTrue(!contains(lines, "partydetect method"));
+        assertTrue(contains(LocalCommand.helpLines(true), "partydetect method <chat|scoreboard>"));
     }
 
     @Test
@@ -76,6 +79,9 @@ public class LocalCommandTest {
         LocalCommand.Request partyOff = LocalCommand.requestForUserInput(".l partydetect off", true);
         assertEquals(LocalCommand.Kind.PARTY_DETECT_SET_ENABLED, partyOff.kind);
         assertTrue(!partyOff.enabled);
+        LocalCommand.Request partyMethod = LocalCommand.requestForUserInput(".l partydetect method scoreboard", true);
+        assertEquals(LocalCommand.Kind.PARTY_DETECT_SET_METHOD, partyMethod.kind);
+        assertEquals(PartyDetectionMethod.SCOREBOARD, partyMethod.partyDetectionMethod);
         LocalCommand.Request dev = LocalCommand.requestForUserInput(".l dev on", true);
         assertEquals(LocalCommand.Kind.DEV_SET_ENABLED, dev.kind);
         assertTrue(dev.enabled);
@@ -104,6 +110,13 @@ public class LocalCommandTest {
     @Test
     public void missingStatusUsesSafeFallback() {
         assertEquals(ChatFormat.line("§cStatus unavailable."), LocalCommand.responseFor(".legitils status", null));
+    }
+
+    private static boolean contains(String[] lines, String expected) {
+        for (String line : lines) {
+            if (line.contains(expected)) return true;
+        }
+        return false;
     }
 
     @Test

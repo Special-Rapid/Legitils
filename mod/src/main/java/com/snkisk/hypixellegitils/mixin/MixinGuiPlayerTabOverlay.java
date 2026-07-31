@@ -18,13 +18,12 @@ public class MixinGuiPlayerTabOverlay {
         HypixelLegitilsBootstrap.onMarkerRenderHookObserved("tab");
         if (info == null || info.getGameProfile() == null) return;
         java.util.UUID playerId = info.getGameProfile().getId();
-        if (HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId)) {
-            callbackInfo.setReturnValue(callbackInfo.getReturnValue() + " §c[NICK]");
-            HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, "[NICK]");
-        } else if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) {
-            callbackInfo.setReturnValue(callbackInfo.getReturnValue() + " §e⚠");
-            HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, "⚠");
-        }
+        String suffix = "";
+        if (HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId)) suffix += " §c[NICK]";
+        if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
+        if (suffix.isEmpty()) return;
+        callbackInfo.setReturnValue(callbackInfo.getReturnValue() + suffix);
+        HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, suffix);
     }
 
 }
