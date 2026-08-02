@@ -1,40 +1,67 @@
 # Legitils
 
-Legitils is a clean-room, observation-only Minecraft 1.8.9 client-side advisory MOD for Lunar Client. It presents local signals about suspicious patterns; it does not change gameplay, automate player actions, or make definitive cheating claims.
+**Lunar Client 1.8.9で、対戦中に気になる挙動を見逃さないためのローカル観測MOD。**
 
-> **Alpha / not release-ready.** The build and automated checks cover the loader and MOD artifacts, but compatibility with a real Lunar Client restart and normal gameplay has not yet been fully verified. Do not treat this repository as an endorsed anti-cheat, a cheat detector, or a production download.
+Legitilsは、Minecraftのプレイを変えずにクライアント側で状況を見守り、注意したい挙動を自分だけに知らせます。戦闘やベッド防衛に集中したまま、必要な情報だけを受け取れるのが強みです。
 
-## What it does
+> **Alpha版です。** ビルドと自動テストは通っていますが、実際のLunar Client再起動や通常プレイでの互換性・各シグナルの精度はまだ十分に検証できていません。正式なアンチチートや完成版の配布物としては扱わないでください。
 
-- starts a first-party Java 8 Agent loader before Lunar launches;
-- registers a Mixin-based client MOD;
-- observes local client state and presents advisory alerts locally;
-- keeps configuration and observations local to the device.
+## できること
 
-The project deliberately excludes packet manipulation, synthetic input, automated reports or actions, combat or movement bypasses, ESP/free-look features, remote telemetry, and arbitrary extension loading.
+### 気になる挙動をローカルで通知
 
-## Status
+8種類の観測シグナルを、必要なものだけオンにできます。
 
-The bootstrap, safe foundation, and several detector cores have automated coverage. Some detector behaviour is intentionally disabled by default or awaiting controlled normal-play traces.
+- AutoBlock / NoSlow / KillAura / LegitScaffold
+- BedNuke / Blink / Timer / NoBreakDelay
 
-## Build
+通知はチャット・アクションバー・サウンドから選べます。試合中に設定を変えたいときも、`.l anticheat on <detector>` のようなローカルコマンドですぐ反映されます。
 
-This legacy Minecraft 1.8.9 toolchain requires Java 8.
+### Bed WarsのParty参加・離脱を見やすく
+
+待機中のスコアボードにあるプレイヤー数の同時変化を見て、2人以上の参加・離脱を通知します。チャット文面に依存しないため、ゲーム画面を見ている最中でも変化を拾えます。
+
+### 自分用の記録と確認をひとつに
+
+- ニック検知のオン・オフ
+- 通知を受けたプレイヤーのローカル履歴
+- 自動・手動で管理できるローカルブラックリスト
+- `.l status` で現在の有効機能を確認
+
+観測記録と設定は端末内だけに保存され、第三者への自動通報も行いません。画面にいないプレイヤーを手動でブラックリストへ追加・削除するときだけ、名前を解決するためMojang Profile APIへ問い合わせます。
+
+## Legitilsが大切にしていること
+
+Legitilsは、勝手に操作したり、ゲームを有利に変えたりするMODではありません。入力の自動化、パケット操作、移動・戦闘のバイパス、ESP・Free Look、観測データの外部送信、任意コードの読み込みは実装しません。
+
+表示するのはあくまで「注意して見るためのシグナル」です。誰かを不正と断定するものではありません。
+
+## 対応環境と導入
+
+- **Lunar Client / Minecraft 1.8.9 専用**
+- **Java 8 が必要**
+- 初期状態では、すべての観測シグナルとアクションバー通知がオフ
+
+ソースからビルドするには以下を実行します。
 
 ```sh
 ./gradlew build
 ```
 
-The build verifies Java 8 bytecode, required manifests and Mixin resources, and that reference material is absent from generated artifacts. For the manual Lunar bootstrap procedure and rollback, see [the installation guide](dist/INSTALL.md).
+Lunar Clientへの設定、起動確認、元に戻す手順は[導入ガイド](dist/INSTALL.md)を参照してください。Lunarの対応プロファイル以外では、ローダーはMODを読み込まず安全に終了します。
 
-## Repository contents
+## 開発状況
 
-- `loader/` — standalone Java Agent loader
-- `mod/` — Mixin-based observation MOD and tests
-- `dist/` — installation template and bootstrap instructions
+Java 8でのビルド、MOD・ローダーのテスト、生成物の検証は自動化されています。実機のLunar Clientでの通常プレイ検証と、各シグナルの実戦精度の確認はこれからです。
 
-The local `sample/` directory is intentionally ignored. It is reference-only material and is neither source code nor a redistributable dependency of Legitils.
+## リポジトリ構成
+
+- `loader/` — Lunar 1.8.9向けのJava Agentローダー
+- `mod/` — 観測・通知・設定を担うMinecraft MOD
+- `dist/` — 導入テンプレートと起動手順
+
+ローカルの`sample/`は参照用であり、ソース・配布物・依存関係には含まれません。
 
 ## License
 
-This project is released under the [MIT License](LICENSE).
+[MIT License](LICENSE)
