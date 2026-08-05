@@ -28,12 +28,12 @@ public final class StatsBridgeClientTest {
         try {
             StatsBridgeClient client = new StatsBridgeClient(directory.resolve("stats-bridge.json"));
             assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, client.requestOnce(
-                "match_1", players(), System.currentTimeMillis()
+                "match_1", BedwarsMode.FOURS, players(), System.currentTimeMillis()
             ).status);
 
             writeDescriptor(directory.resolve("stats-bridge.json"), 12345, "aBcDeFgHiJkLmNoPqRsTuVwXyZ012345", System.currentTimeMillis() - 1L);
             assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, client.requestOnce(
-                "match_2", players(), System.currentTimeMillis()
+                "match_2", BedwarsMode.FOURS, players(), System.currentTimeMillis()
             ).status);
         } finally {
             deleteTree(directory);
@@ -53,6 +53,7 @@ public final class StatsBridgeClientTest {
                 String request = new String(readAll(exchange), StandardCharsets.UTF_8);
                 assertFalse(request.contains("api-key"));
                 assertTrue(request.contains("Player_1"));
+                assertTrue(request.contains("\"gameMode\":\"four_four\""));
                 byte[] body = readyResponse().getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, body.length);
@@ -74,14 +75,14 @@ public final class StatsBridgeClientTest {
                 System.currentTimeMillis() + 120000L
             );
             StatsBridgeClient client = new StatsBridgeClient(directory.resolve("stats-bridge.json"));
-            StatsBridgeLookupResult first = client.requestOnce("match_1", players(), System.currentTimeMillis());
+            StatsBridgeLookupResult first = client.requestOnce("match_1", BedwarsMode.FOURS, players(), System.currentTimeMillis());
             assertEquals(StatsBridgeLookupResult.Status.READY, first.status);
             assertEquals(1, first.players.size());
             assertEquals("Player_1", first.players.get(0).name);
             assertEquals(StatsBridgePlayerResult.NickStatus.KNOWN, first.players.get(0).nickStatus);
             assertEquals(1, first.players.get(0).communityTags.size());
             assertEquals(StatsBridgeLookupResult.Status.ALREADY_REQUESTED, client.requestOnce(
-                "match_1", players(), System.currentTimeMillis()
+                "match_1", BedwarsMode.FOURS, players(), System.currentTimeMillis()
             ).status);
             assertEquals(1, requests.get());
         } finally {
@@ -98,7 +99,7 @@ public final class StatsBridgeClientTest {
 
     private static void writeDescriptor(Path path, int port, String capability, long expiry) throws Exception {
         Map<String, Object> descriptor = new LinkedHashMap<String, Object>();
-        descriptor.put("schemaVersion", Integer.valueOf(1));
+        descriptor.put("schemaVersion", Integer.valueOf(StatsBridgeDescriptor.SCHEMA_VERSION));
         descriptor.put("port", Integer.valueOf(port));
         descriptor.put("capability", capability);
         descriptor.put("expiresAtEpochMillis", Long.valueOf(expiry));
@@ -106,7 +107,7 @@ public final class StatsBridgeClientTest {
     }
 
     private static String readyResponse() {
-        return "{\"schemaVersion\":1,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"stars\":100,\"finalKillDeathRatio\":5.0,\"modeWinStreak\":10,\"communityTags\":[{\"source\":\"urchin\",\"label\":\"tag\"}]}]}";
+        return "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"stars\":100,\"finalKillDeathRatio\":5.0,\"modeWinStreak\":10,\"communityTags\":[{\"source\":\"urchin\",\"label\":\"tag\"}]}]}";
     }
 
     private static byte[] readAll(HttpExchange exchange) throws java.io.IOException {

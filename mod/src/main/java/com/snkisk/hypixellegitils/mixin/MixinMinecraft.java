@@ -8,6 +8,7 @@ import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
+import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
@@ -186,6 +187,9 @@ public abstract class MixinMinecraft {
     private void hypixelLegitils$submitDueStatsRoster() {
         NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
         if (handler == null) return;
+        if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) return;
+        BedwarsMode gameMode = BedwarsPreGameState.mode(theWorld);
+        if (gameMode == BedwarsMode.UNKNOWN) return;
         String matchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
         if (matchId == null) return;
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
@@ -199,7 +203,11 @@ public abstract class MixinMinecraft {
             members.put(profile.getName().toLowerCase(java.util.Locale.ROOT), member);
         }
         if (!members.isEmpty()) {
-            HypixelLegitilsBootstrap.requestStatsRoster(matchId, new ArrayList<StatsBridgeRosterMember>(members.values()));
+            HypixelLegitilsBootstrap.requestStatsRoster(
+                matchId,
+                gameMode,
+                new ArrayList<StatsBridgeRosterMember>(members.values())
+            );
         }
     }
 

@@ -32,14 +32,19 @@ public final class StatsBridgeClient {
         this.descriptorPath = descriptorPath;
     }
 
-    public StatsBridgeLookupResult requestOnce(String matchId, List<StatsBridgeRosterMember> players, long nowMillis) {
-        if (!isValidRequest(matchId, players)) return StatsBridgeLookupResult.unavailable();
+    public StatsBridgeLookupResult requestOnce(
+        String matchId,
+        BedwarsMode gameMode,
+        List<StatsBridgeRosterMember> players,
+        long nowMillis
+    ) {
+        if (!isValidRequest(matchId, gameMode, players)) return StatsBridgeLookupResult.unavailable();
         Optional<StatsBridgeDescriptor> descriptor = StatsBridgeDescriptor.read(descriptorPath, nowMillis);
         if (!descriptor.isPresent()) return StatsBridgeLookupResult.unavailable();
         synchronized (requestedMatchIds) {
             if (!requestedMatchIds.add(matchId)) return StatsBridgeLookupResult.alreadyRequested();
         }
-        return request(descriptor.get(), matchId, players);
+        return request(descriptor.get(), matchId, gameMode, players);
     }
 
     public void resetForNewWorld() {
@@ -49,6 +54,7 @@ public final class StatsBridgeClient {
     private StatsBridgeLookupResult request(
         StatsBridgeDescriptor descriptor,
         String matchId,
+        BedwarsMode gameMode,
         List<StatsBridgeRosterMember> players
     ) {
         HttpURLConnection connection = null;
@@ -61,7 +67,7 @@ public final class StatsBridgeClient {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("X-Legitils-Capability", descriptor.capability);
-            byte[] body = requestBody(matchId, players).getBytes(StandardCharsets.UTF_8);
+            byte[] body = requestBody(matchId, gameMode, players).getBytes(StandardCharsets.UTF_8);
             connection.setFixedLengthStreamingMode(body.length);
             OutputStream output = connection.getOutputStream();
             try {
@@ -78,8 +84,9 @@ public final class StatsBridgeClient {
         }
     }
 
-    private static boolean isValidRequest(String matchId, List<StatsBridgeRosterMember> players) {
-        if (matchId == null || !MATCH_ID.matcher(matchId).matches() || players == null
+    private static boolean isValidRequest(String matchId, BedwarsMode gameMode, List<StatsBridgeRosterMember> players) {
+        if (matchId == null || !MATCH_ID.matcher(matchId).matches() || gameMode == null
+            || gameMode == BedwarsMode.UNKNOWN || gameMode.bridgeValue == null || players == null
             || players.isEmpty() || players.size() > MAXIMUM_PLAYERS) {
             return false;
         }
@@ -89,10 +96,11 @@ public final class StatsBridgeClient {
         return true;
     }
 
-    private static String requestBody(String matchId, List<StatsBridgeRosterMember> players) {
+    private static String requestBody(String matchId, BedwarsMode gameMode, List<StatsBridgeRosterMember> players) {
         Map<String, Object> request = new LinkedHashMap<String, Object>();
         request.put("schemaVersion", Integer.valueOf(StatsBridgeDescriptor.SCHEMA_VERSION));
         request.put("matchID", matchId);
+        request.put("gameMode", gameMode.bridgeValue);
         List<Object> members = new ArrayList<Object>();
         for (StatsBridgeRosterMember player : players) {
             Map<String, Object> member = new LinkedHashMap<String, Object>();

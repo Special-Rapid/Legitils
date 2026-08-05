@@ -12,12 +12,27 @@ struct StatsBridgeRosterMember: Codable, Equatable {
     }
 }
 
+/// The exact Bed Wars mode parsed from the visible client sidebar. These values deliberately
+/// correspond to Hypixel's public Bed Wars win-streak fields, not to a server-side team roster.
+enum StatsBridgeGameMode: String, Codable, Equatable {
+    case solo = "eight_one"
+    case doubles = "eight_two"
+    case threes = "four_three"
+    case fours = "four_four"
+    case fourVFour = "two_four"
+
+    var hypixelWinStreakKey: String {
+        rawValue + "_winstreak"
+    }
+}
+
 struct StatsBridgeRosterRequest: Codable, Equatable {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
     static let maximumMembers = 64
 
     let schemaVersion: Int
     let matchID: String
+    let gameMode: StatsBridgeGameMode
     let players: [StatsBridgeRosterMember]
 
     var isValid: Bool {

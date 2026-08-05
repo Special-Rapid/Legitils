@@ -24,6 +24,7 @@ import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import com.snkisk.hypixellegitils.stats.StatsBridgeClient;
+import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
@@ -311,16 +312,26 @@ public final class HypixelLegitilsBootstrap {
         return STARTED.get() ? STATS_MATCH_REQUEST_GATE.consumeDueMatchId(nowMillis) : null;
     }
 
+    /** Checks the roster-settle delay without consuming it, so an unparsed sidebar can retry. */
+    public static boolean isStatsRosterDue(long nowMillis) {
+        return STARTED.get() && STATS_MATCH_REQUEST_GATE.isDue(nowMillis);
+    }
+
     /** Runs outside the client thread; it never contacts remote providers or exposes their keys. */
-    public static void requestStatsRoster(final String matchId, final List<StatsBridgeRosterMember> players) {
+    public static void requestStatsRoster(
+        final String matchId,
+        final BedwarsMode gameMode,
+        final List<StatsBridgeRosterMember> players
+    ) {
         final StatsBridgeClient client = statsBridgeClient;
-        if (client == null || matchId == null || players == null || players.isEmpty()) return;
+        if (client == null || matchId == null || gameMode == null || gameMode == BedwarsMode.UNKNOWN
+            || players == null || players.isEmpty()) return;
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
         STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
             @Override
             public void run() {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
-                StatsBridgeLookupResult result = client.requestOnce(matchId, players, System.currentTimeMillis());
+                StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
                 publishStatsBridgeResult(sessionGeneration, result);
             }
         });

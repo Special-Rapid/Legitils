@@ -1,5 +1,6 @@
 package com.snkisk.hypixellegitils.party;
 
+import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -23,6 +24,23 @@ public final class BedwarsPreGameState {
 
     public static boolean isActive(WorldClient world) {
         return playerCount(world).preGame;
+    }
+
+    /** Parses only the visible sidebar's Bed Wars mode; UNKNOWN does not permit a Stats request. */
+    public static BedwarsMode mode(WorldClient world) {
+        if (world == null) return BedwarsMode.UNKNOWN;
+        Scoreboard scoreboard = world.getScoreboard();
+        if (scoreboard == null) return BedwarsMode.UNKNOWN;
+        ScoreObjective objective = scoreboard.getObjectiveInDisplaySlot(1);
+        if (objective == null) return BedwarsMode.UNKNOWN;
+        Collection<Score> scores = scoreboard.getSortedScores(objective);
+        List<String> lines = new ArrayList<String>(scores.size());
+        for (Score score : scores) {
+            if (score == null) continue;
+            String entry = score.getPlayerName();
+            lines.add(ScorePlayerTeam.formatPlayerName(scoreboard.getPlayersTeam(entry), entry));
+        }
+        return BedwarsMode.fromVisibleSidebar(objective.getDisplayName(), lines);
     }
 
     /** Returns the visible pre-game player counter without reading hidden server data. */

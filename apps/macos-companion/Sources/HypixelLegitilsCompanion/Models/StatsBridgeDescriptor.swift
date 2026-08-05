@@ -1,7 +1,7 @@
 import Foundation
 
 struct StatsBridgeDescriptor: Codable, Equatable {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
 
     let schemaVersion: Int
     let port: UInt16

@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 /** Strict, key-free local endpoint descriptor written by the macOS Companion. */
 public final class StatsBridgeDescriptor {
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     private static final long MAXIMUM_LIFETIME_MILLIS = 10L * 60L * 1000L;
     private static final int MAXIMUM_DESCRIPTOR_BYTES = 4096;
     private static final Pattern CAPABILITY = Pattern.compile("[A-Za-z0-9_-]{32,128}");

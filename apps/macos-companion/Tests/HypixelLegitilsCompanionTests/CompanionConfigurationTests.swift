@@ -13,13 +13,13 @@ final class CompanionConfigurationTests: XCTestCase {
 
     func testBridgeDescriptorRejectsExpiredOrWrongSchemaValues() {
         XCTAssertFalse(StatsBridgeDescriptor(
-            schemaVersion: 2,
+            schemaVersion: 1,
             port: 43123,
             capability: "capability",
             expiresAt: Date.now.addingTimeInterval(60)
         ).isUsable())
         XCTAssertFalse(StatsBridgeDescriptor(
-            schemaVersion: 1,
+            schemaVersion: 2,
             port: 43123,
             capability: "capability",
             expiresAt: Date.now.addingTimeInterval(-1)
@@ -37,22 +37,26 @@ final class CompanionConfigurationTests: XCTestCase {
         let valid = StatsBridgeRosterRequest(
             schemaVersion: StatsBridgeRosterRequest.schemaVersion,
             matchID: "bedwars-match_1",
+            gameMode: .fours,
             players: [StatsBridgeRosterMember(name: "Player_1", uuid: nil)]
         )
         XCTAssertTrue(valid.isValid)
         XCTAssertFalse(StatsBridgeRosterRequest(
+            schemaVersion: 1,
+            matchID: "bedwars-match_1",
+            gameMode: .fours,
+            players: valid.players
+        ).isValid)
+        XCTAssertFalse(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "not allowed!",
+            gameMode: .fours,
+            players: valid.players
+        ).isValid)
+        XCTAssertFalse(StatsBridgeRosterRequest(
             schemaVersion: 2,
             matchID: "bedwars-match_1",
-            players: valid.players
-        ).isValid)
-        XCTAssertFalse(StatsBridgeRosterRequest(
-            schemaVersion: 1,
-            matchID: "not allowed!",
-            players: valid.players
-        ).isValid)
-        XCTAssertFalse(StatsBridgeRosterRequest(
-            schemaVersion: 1,
-            matchID: "bedwars-match_1",
+            gameMode: .fours,
             players: Array(repeating: valid.players[0], count: StatsBridgeRosterRequest.maximumMembers + 1)
         ).isValid)
     }
@@ -85,9 +89,10 @@ final class CompanionConfigurationTests: XCTestCase {
         let hypixel = Data("""
         {"success":true,"player":{"achievements":{"bedwars_level":120},"stats":{"Bedwars":{"final_kills_bedwars":44,"final_deaths_bedwars":11}}}}
         """.utf8)
-        let stats = StatsProviderLookup.parseHypixelStats(hypixel)
+        let stats = StatsProviderLookup.parseHypixelStats(hypixel, gameMode: .fours)
         XCTAssertEqual(stats?.stars, 120)
         XCTAssertEqual(stats?.finalKillDeathRatio, 4)
+        XCTAssertNil(stats?.modeWinStreak)
 
         let urchin = Data("""
         {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"cheating","reason":"not returned"},{"tag_type":"  ","reason":"ignored"}]}}
@@ -123,8 +128,9 @@ final class CompanionConfigurationTests: XCTestCase {
             transport: transport
         )
         let roster = StatsBridgeRosterRequest(
-            schemaVersion: 1,
+            schemaVersion: 2,
             matchID: "match_cache_test",
+            gameMode: .fours,
             players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
         )
         let first = expectation(description: "first response")
@@ -136,6 +142,7 @@ final class CompanionConfigurationTests: XCTestCase {
         wait(for: [first], timeout: 2)
         XCTAssertEqual(firstResponse?.availability, .ready)
         XCTAssertEqual(firstResponse?.players.first?.stars, 100)
+        XCTAssertEqual(firstResponse?.players.first?.modeWinStreak, 9)
         XCTAssertEqual(firstResponse?.players.first?.communityTags, [
             StatsBridgeCommunityTag(source: "urchin", label: "watchlist")
         ])
@@ -206,7 +213,7 @@ private final class FakeStatsTransport: StatsHTTPTransport {
         switch request.url?.host {
         case "api.hypixel.net":
             body = Data("""
-            {"success":true,"player":{"achievements":{"bedwars_level":100},"stats":{"Bedwars":{"final_kills_bedwars":6,"final_deaths_bedwars":2}}}}
+            {"success":true,"player":{"achievements":{"bedwars_level":100},"stats":{"Bedwars":{"final_kills_bedwars":6,"final_deaths_bedwars":2,"four_four_winstreak":9}}}}
             """.utf8)
         case "api.urchin.gg":
             body = Data("""

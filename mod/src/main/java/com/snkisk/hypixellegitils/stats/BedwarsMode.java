@@ -4,19 +4,20 @@ import java.util.Locale;
 
 /** Maps only the visible Bed Wars sidebar mode to the documented stats key suffix. */
 public enum BedwarsMode {
-    SOLO("8v1", "eight_one_winstreak"),
-    DOUBLES("8v2", "eight_two_winstreak"),
-    THREES("4v3v3v3", "four_three_winstreak"),
-    FOURS("4v4v4v4", "four_four_winstreak"),
-    FOUR_V_FOUR("4v4", "two_four_winstreak"),
+    SOLO("8v1", "eight_one"),
+    DOUBLES("8v2", "eight_two"),
+    THREES("4v3v3v3", "four_three"),
+    FOURS("4v4v4v4", "four_four"),
+    FOUR_V_FOUR("4v4", "two_four"),
     UNKNOWN(null, null);
 
     public final String sidebarValue;
-    public final String statsKey;
+    /** Stable v2 Bridge value. The Companion appends its documented Hypixel field suffix. */
+    public final String bridgeValue;
 
-    BedwarsMode(String sidebarValue, String statsKey) {
+    BedwarsMode(String sidebarValue, String bridgeValue) {
         this.sidebarValue = sidebarValue;
-        this.statsKey = statsKey;
+        this.bridgeValue = bridgeValue;
     }
 
     public static BedwarsMode fromSidebarValue(String rawValue) {

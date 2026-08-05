@@ -75,9 +75,10 @@ final class StatsProviderLookup {
                     self.queue.async {
                         defer { group.leave() }
                         guard case let .success((data, response)) = result, response.statusCode == 200,
-                              let stats = Self.parseHypixelStats(data) else { return }
+                              let stats = Self.parseHypixelStats(data, gameMode: roster.gameMode) else { return }
                         records[player.name.lowercased()]?.stars = stats.stars
                         records[player.name.lowercased()]?.finalKillDeathRatio = stats.finalKillDeathRatio
+                        records[player.name.lowercased()]?.modeWinStreak = stats.modeWinStreak
                     }
                 }
             }
@@ -146,6 +147,7 @@ extension StatsProviderLookup {
     struct HypixelStats {
         let stars: Int?
         let finalKillDeathRatio: Double?
+        let modeWinStreak: Int?
     }
 
     final class MutablePlayer {
@@ -203,7 +205,7 @@ extension StatsProviderLookup {
         return request
     }
 
-    static func parseHypixelStats(_ data: Data) -> HypixelStats? {
+    static func parseHypixelStats(_ data: Data, gameMode: StatsBridgeGameMode) -> HypixelStats? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               root["success"] as? Bool == true,
               let player = root["player"] as? [String: Any] else { return nil }
@@ -212,13 +214,14 @@ extension StatsProviderLookup {
         let stars = integer(achievements?["bedwars_level"])
         let finalKills = number(bedwars?["final_kills_bedwars"])
         let finalDeaths = number(bedwars?["final_deaths_bedwars"])
+        let modeWinStreak = integer(bedwars?[gameMode.hypixelWinStreakKey])
         let ratio: Double?
         if let finalKills, let finalDeaths {
             ratio = finalKills / max(finalDeaths, 1)
         } else {
             ratio = nil
         }
-        return HypixelStats(stars: stars, finalKillDeathRatio: ratio)
+        return HypixelStats(stars: stars, finalKillDeathRatio: ratio, modeWinStreak: modeWinStreak)
     }
 
     static func parseUrchinTags(_ data: Data) -> [String: [String]] {

@@ -15,11 +15,16 @@ public final class StatsMatchRequestGate {
 
     /** Returns the ephemeral match ID once; null means there is no due request. */
     public synchronized String consumeDueMatchId(long nowMillis) {
-        if (pendingMatchId == null || nowMillis < dueAtMillis) return null;
+        if (!isDue(nowMillis)) return null;
         String matchId = pendingMatchId;
         pendingMatchId = null;
         dueAtMillis = -1L;
         return matchId;
+    }
+
+    /** Leaves the pending request intact until the visible sidebar exposes a known game mode. */
+    public synchronized boolean isDue(long nowMillis) {
+        return pendingMatchId != null && nowMillis >= dueAtMillis;
     }
 
     public synchronized void reset() {
