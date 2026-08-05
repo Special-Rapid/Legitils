@@ -38,6 +38,9 @@ public abstract class MixinNetHandlerPlayClient {
         boolean bedwarsPreGame = BedwarsPreGameState.isActive(minecraft == null ? null : minecraft.theWorld);
         HypixelLegitilsBootstrap.onBedDestructionChat(message, System.currentTimeMillis());
         HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
+        if (bedwarsPreGame && NickChatSignal.isGameStart(message)) {
+            HypixelLegitilsBootstrap.onBedwarsGameStart(System.currentTimeMillis());
+        }
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {
             hypixelLegitils$observePregameNickChat(minecraft, message);
         }

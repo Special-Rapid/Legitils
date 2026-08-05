@@ -23,6 +23,11 @@ import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
+import com.snkisk.hypixellegitils.stats.StatsBridgeClient;
+import com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult;
+import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
+import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
+import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.util.Collections;
@@ -57,6 +62,11 @@ public final class HypixelLegitilsBootstrap {
     private static final long EXTERNAL_CONFIG_POLL_INTERVAL_MILLIS = 500L;
     private static volatile long nextExternalConfigPollMillis;
     private static volatile String runtimeStatusUserHome;
+    private static volatile StatsBridgeClient statsBridgeClient;
+    private static volatile StatsBridgeLookupResult latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
+    private static final StatsMatchRequestGate STATS_MATCH_REQUEST_GATE = new StatsMatchRequestGate();
+    private static final StatsBridgeSession STATS_BRIDGE_SESSION = new StatsBridgeSession();
+    private static final Object STATS_BRIDGE_RESULT_LOCK = new Object();
     private static final MojangProfileResolver PROFILE_RESOLVER = new MojangProfileResolver();
     private static final Queue<PendingBlacklistOperation> PENDING_BLACKLIST_OPERATIONS
         = new ConcurrentLinkedQueue<PendingBlacklistOperation>();
@@ -82,6 +92,14 @@ public final class HypixelLegitilsBootstrap {
         @Override
         public Thread newThread(Runnable task) {
             Thread thread = new Thread(task, "HypixelLegitils-MojangProfileLookup");
+            thread.setDaemon(true);
+            return thread;
+        }
+    });
+    private static final ExecutorService STATS_BRIDGE_EXECUTOR = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable task) {
+            Thread thread = new Thread(task, "HypixelLegitils-StatsBridge");
             thread.setDaemon(true);
             return thread;
         }
@@ -112,6 +130,7 @@ public final class HypixelLegitilsBootstrap {
             );
             detectorSettings = new DetectorSettingsService(store, configPath, loaded.config);
             runtimeStatusUserHome = userHome;
+            statsBridgeClient = new StatsBridgeClient(ConfigPaths.statsBridgeDescriptorPath(userHome));
             nickDetectionEnabled = loaded.config.nickDetectionSettings.enabled;
             partyDetectionEnabled = loaded.config.partyDetectionSettings.enabled;
             developerSelfDetectionEnabled = loaded.config.debugEnabled;
@@ -279,6 +298,43 @@ public final class HypixelLegitilsBootstrap {
             PENDING_PREGAME_NICK_NOTICES.add(new PendingPregameNickNotice(entry.getKey(), entry.getValue(), nowMillis + 1000L));
         }
         PREGAME_NICK_CHATTERS.clear();
+    }
+
+    /** Called only after the visible Bed Wars sidebar identified a pre-game start message. */
+    public static void onBedwarsGameStart(long nowMillis) {
+        if (!STARTED.get()) return;
+        STATS_MATCH_REQUEST_GATE.onBedwarsGameStart(nowMillis);
+    }
+
+    /** Returns one opaque match ID after the short roster-settle delay. */
+    public static String consumeDueStatsMatchId(long nowMillis) {
+        return STARTED.get() ? STATS_MATCH_REQUEST_GATE.consumeDueMatchId(nowMillis) : null;
+    }
+
+    /** Runs outside the client thread; it never contacts remote providers or exposes their keys. */
+    public static void requestStatsRoster(final String matchId, final List<StatsBridgeRosterMember> players) {
+        final StatsBridgeClient client = statsBridgeClient;
+        if (client == null || matchId == null || players == null || players.isEmpty()) return;
+        final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
+        STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
+            @Override
+            public void run() {
+                if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+                StatsBridgeLookupResult result = client.requestOnce(matchId, players, System.currentTimeMillis());
+                publishStatsBridgeResult(sessionGeneration, result);
+            }
+        });
+    }
+
+    private static void publishStatsBridgeResult(long sessionGeneration, StatsBridgeLookupResult result) {
+        synchronized (STATS_BRIDGE_RESULT_LOCK) {
+            if (STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) latestStatsBridgeResult = result;
+        }
+    }
+
+    /** Retained only as normalized Bridge data for the forthcoming local display stage. */
+    public static StatsBridgeLookupResult latestStatsBridgeResult() {
+        return latestStatsBridgeResult;
     }
 
     /** A paused, skipped, or replaced client-world tick invalidates timing signals. */
@@ -826,6 +882,13 @@ public final class HypixelLegitilsBootstrap {
         developmentFrameGlobalLag = true;
         developmentSelfPlayerId = null;
         resetPartyDetectors();
+        synchronized (STATS_BRIDGE_RESULT_LOCK) {
+            STATS_BRIDGE_SESSION.reset();
+            latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
+        }
+        STATS_MATCH_REQUEST_GATE.reset();
+        StatsBridgeClient client = statsBridgeClient;
+        if (client != null) client.resetForNewWorld();
         if (active != null) {
             active.onWorldLoading();
             currentPresentation = null;

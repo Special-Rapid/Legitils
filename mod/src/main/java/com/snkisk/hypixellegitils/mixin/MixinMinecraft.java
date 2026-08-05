@@ -7,6 +7,8 @@ import com.snkisk.hypixellegitils.alert.LocalNotice;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
+import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
 import net.minecraft.client.network.NetHandlerPlayClient;
@@ -38,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Mixin;
@@ -109,6 +112,7 @@ public abstract class MixinMinecraft {
                     hypixelLegitils$frameGlobalLag
                 );
             }
+            hypixelLegitils$submitDueStatsRoster();
         } else {
             hypixelLegitils$observedWorld = null;
             hypixelLegitils$lastObservedWorldTick = -1L;
@@ -177,6 +181,26 @@ public abstract class MixinMinecraft {
             if (player != null && playerId.equals(hypixelLegitils$profileId(player))) return player;
         }
         return null;
+    }
+
+    private void hypixelLegitils$submitDueStatsRoster() {
+        NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
+        if (handler == null) return;
+        String matchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
+        if (matchId == null) return;
+        Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
+        for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
+            GameProfile profile = info == null ? null : info.getGameProfile();
+            if (profile == null || profile.getName() == null) continue;
+            UUID profileId = profile.getId();
+            String uuid = profileId == null || profileId.version() == 1 ? null : profileId.toString();
+            StatsBridgeRosterMember member = new StatsBridgeRosterMember(profile.getName(), uuid);
+            if (!member.isValid()) continue;
+            members.put(profile.getName().toLowerCase(java.util.Locale.ROOT), member);
+        }
+        if (!members.isEmpty()) {
+            HypixelLegitilsBootstrap.requestStatsRoster(matchId, new ArrayList<StatsBridgeRosterMember>(members.values()));
+        }
     }
 
     private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {
