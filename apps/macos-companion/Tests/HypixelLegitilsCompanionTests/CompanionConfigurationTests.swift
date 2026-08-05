@@ -206,6 +206,30 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(CompanionPaths.hypixelStatsCacheURL.lastPathComponent, "hypixel-stats-cache.json")
     }
 
+    func testLunarBakeCacheFindsAndMovesAllNestedBakeArchivesWithoutHashAssumptions() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("one/two/bake.zip")
+        let second = root.appendingPathComponent("different-hash/bake.zip")
+        try FileManager.default.createDirectory(at: first.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 12).write(to: first)
+        try Data(repeating: 2, count: 34).write(to: second)
+        try Data("not a bake archive".utf8).write(to: root.appendingPathComponent("ignore.zip"))
+
+        var moved: [URL] = []
+        let service = LunarBakeCacheService(cacheRoot: root) { url in
+            moved.append(url)
+            try FileManager.default.removeItem(at: url)
+        }
+        let found = try service.scan()
+        XCTAssertEqual(found.count, 2)
+        XCTAssertEqual(try service.moveToTrash(found), 2)
+        XCTAssertEqual(moved.count, 2)
+        XCTAssertTrue(moved.allSatisfy { $0.lastPathComponent == "bake.zip" })
+        XCTAssertTrue(try service.scan().isEmpty)
+    }
+
     func testHypixelStatsCachePersistsNormalizedValuesForTwentyFourHours() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("hypixel-stats-cache.json")
