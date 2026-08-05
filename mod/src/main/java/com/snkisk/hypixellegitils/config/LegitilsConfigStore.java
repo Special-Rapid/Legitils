@@ -119,6 +119,7 @@ public final class LegitilsConfigStore {
         if (schemaVersion != LegitilsConfig.LEGACY_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.MARKER_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION
+            && schemaVersion != LegitilsConfig.PARTY_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.SCHEMA_VERSION) {
             throw new IllegalArgumentException("unsupported schemaVersion");
         }
@@ -128,8 +129,10 @@ public final class LegitilsConfigStore {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers");
         } else if (schemaVersion == LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION) {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection");
-        } else {
+        } else if (schemaVersion == LegitilsConfig.PARTY_SCHEMA_VERSION) {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection", "partyDetection");
+        } else {
+            requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection", "partyDetection", "stats");
         }
         long revision = longValue(root.get("revision"), "revision");
         if (revision < 0L) throw new IllegalArgumentException("revision must be non-negative");
@@ -194,11 +197,21 @@ public final class LegitilsConfigStore {
         }
 
         PartyDetectionSettings partyDetection = PartyDetectionSettings.defaults();
-        if (schemaVersion >= LegitilsConfig.SCHEMA_VERSION) {
+        if (schemaVersion >= LegitilsConfig.PARTY_SCHEMA_VERSION) {
             if (!(root.get("partyDetection") instanceof Map)) throw new IllegalArgumentException("partyDetection must be an object");
             Map<?, ?> rawPartyDetection = (Map<?, ?>) root.get("partyDetection");
             requireOnlyKeys(rawPartyDetection, "enabled");
             partyDetection = new PartyDetectionSettings(booleanValue(rawPartyDetection.get("enabled"), "partyDetection.enabled"));
+        }
+        StatsSettings stats = StatsSettings.defaults();
+        if (schemaVersion >= LegitilsConfig.STATS_SCHEMA_VERSION) {
+            if (!(root.get("stats") instanceof Map)) throw new IllegalArgumentException("stats must be an object");
+            Map<?, ?> rawStats = (Map<?, ?>) root.get("stats");
+            requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat");
+            stats = new StatsSettings(booleanValue(rawStats.get("enabled"), "stats.enabled"),
+                booleanValue(rawStats.get("tab"), "stats.tab"), booleanValue(rawStats.get("stars"), "stats.stars"),
+                booleanValue(rawStats.get("fkdr"), "stats.fkdr"), booleanValue(rawStats.get("winStreak"), "stats.winStreak"),
+                booleanValue(rawStats.get("chat"), "stats.chat"));
         }
 
         return new LegitilsConfig(
@@ -212,7 +225,7 @@ public final class LegitilsConfigStore {
             booleanValue(root.get("debug"), "debug"),
             markers,
             nickDetection,
-            partyDetection
+            partyDetection, stats
         );
     }
 
@@ -247,10 +260,20 @@ public final class LegitilsConfigStore {
             nickDetection.put("enabled", Boolean.valueOf(config.nickDetectionSettings.enabled));
             root.put("nickDetection", nickDetection);
         }
-        if (config.schemaVersion >= LegitilsConfig.SCHEMA_VERSION) {
+        if (config.schemaVersion >= LegitilsConfig.PARTY_SCHEMA_VERSION) {
             Map<String, Object> partyDetection = new LinkedHashMap<String, Object>();
             partyDetection.put("enabled", Boolean.valueOf(config.partyDetectionSettings.enabled));
             root.put("partyDetection", partyDetection);
+        }
+        if (config.schemaVersion >= LegitilsConfig.STATS_SCHEMA_VERSION) {
+            Map<String, Object> stats = new LinkedHashMap<String, Object>();
+            stats.put("enabled", Boolean.valueOf(config.statsSettings.enabled));
+            stats.put("tab", Boolean.valueOf(config.statsSettings.tabEnabled));
+            stats.put("stars", Boolean.valueOf(config.statsSettings.starsEnabled));
+            stats.put("fkdr", Boolean.valueOf(config.statsSettings.fkdrEnabled));
+            stats.put("winStreak", Boolean.valueOf(config.statsSettings.winStreakEnabled));
+            stats.put("chat", Boolean.valueOf(config.statsSettings.chatEnabled));
+            root.put("stats", stats);
         }
         return SimpleJson.write(root);
     }

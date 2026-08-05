@@ -59,6 +59,17 @@ final class CompanionStore: ObservableObject {
         )
     }
 
+    func statsBinding(_ keyPath: WritableKeyPath<CompanionConfiguration.Stats, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { self.settingsDraft?.stats[keyPath: keyPath] ?? false },
+            set: { value in
+                guard var draft = self.settingsDraft else { return }
+                draft.stats[keyPath: keyPath] = value
+                self.settingsDraft = draft
+            }
+        )
+    }
+
     func saveSettings() {
         guard let loaded = configuration, let draft = settingsDraft else { return }
         do {

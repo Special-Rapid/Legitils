@@ -6,10 +6,12 @@ import java.util.Set;
 
 /** Immutable startup configuration shared later with the macOS Companion. */
 public final class LegitilsConfig {
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
+    public static final int STATS_SCHEMA_VERSION = 5;
     public static final int LEGACY_SCHEMA_VERSION = 1;
     public static final int MARKER_SCHEMA_VERSION = 2;
     public static final int NICK_DETECTION_SCHEMA_VERSION = 3;
+    public static final int PARTY_SCHEMA_VERSION = 4;
     public static final long DEFAULT_NORMAL_COOLDOWN_MILLIS = 1000L;
     public static final long DEFAULT_AIR_STALL_COOLDOWN_MILLIS = 30000L;
 
@@ -24,6 +26,7 @@ public final class LegitilsConfig {
     public final MarkerSettings markerSettings;
     public final NickDetectionSettings nickDetectionSettings;
     public final PartyDetectionSettings partyDetectionSettings;
+    public final StatsSettings statsSettings;
 
     public LegitilsConfig(
         int schemaVersion,
@@ -92,6 +95,17 @@ public final class LegitilsConfig {
         NickDetectionSettings nickDetectionSettings,
         PartyDetectionSettings partyDetectionSettings
     ) {
+        this(schemaVersion, revision, enabledDetectors, sensitivity, notifications, normalCooldownMillis,
+            airStallCooldownMillis, debugEnabled, markerSettings, nickDetectionSettings, partyDetectionSettings,
+            StatsSettings.defaults());
+    }
+
+    public LegitilsConfig(
+        int schemaVersion, long revision, Set<DetectorId> enabledDetectors, SensitivityPreset sensitivity,
+        NotificationSettings notifications, long normalCooldownMillis, long airStallCooldownMillis, boolean debugEnabled,
+        MarkerSettings markerSettings, NickDetectionSettings nickDetectionSettings,
+        PartyDetectionSettings partyDetectionSettings, StatsSettings statsSettings
+    ) {
         this.schemaVersion = schemaVersion;
         this.revision = revision;
         EnumSet<DetectorId> detectorCopy = enabledDetectors.isEmpty()
@@ -106,9 +120,11 @@ public final class LegitilsConfig {
         if (markerSettings == null) throw new IllegalArgumentException("Marker settings are required");
         if (nickDetectionSettings == null) throw new IllegalArgumentException("Nick detection settings are required");
         if (partyDetectionSettings == null) throw new IllegalArgumentException("Party detection settings are required");
+        if (statsSettings == null) throw new IllegalArgumentException("Stats settings are required");
         this.markerSettings = markerSettings;
         this.nickDetectionSettings = nickDetectionSettings;
         this.partyDetectionSettings = partyDetectionSettings;
+        this.statsSettings = statsSettings;
     }
 
     public static LegitilsConfig defaults() {

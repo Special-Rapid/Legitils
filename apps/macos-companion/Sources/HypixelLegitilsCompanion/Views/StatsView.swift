@@ -20,6 +20,13 @@ struct StatsView: View {
             }
             GroupBox("表示方針") {
                 VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Stats を有効化", isOn: store.statsBinding(\.enabled))
+                    Toggle("Tab に表示", isOn: store.statsBinding(\.tab))
+                    Toggle("Stars", isOn: store.statsBinding(\.stars))
+                    Toggle("FKDR", isOn: store.statsBinding(\.fkdr))
+                    Toggle("Win Streak", isOn: store.statsBinding(\.winStreak))
+                    Toggle("Strong / Elite とタグをchat表示", isOn: store.statsBinding(\.chat))
+                    Button("表示設定を保存") { store.saveSettings() }
                     Text("Strong: Stars ≥ 100 かつ FKDR ≥ 5、または mode WS ≥ 10")
                     Text("Elite: Stars ≥ 100、FKDR ≥ 1、または mode WS ≥ 3")
                     Text("Strong と Elite は試合開始時のChatに上限なしで表示し、コミュニティタグはTabとChatに表示します。")

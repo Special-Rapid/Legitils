@@ -21,6 +21,7 @@ public class MixinGuiPlayerTabOverlay {
         String suffix = "";
         if (HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId)) suffix += " §c[NICK]";
         if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
+        suffix += HypixelLegitilsBootstrap.statsTabSuffix(info.getGameProfile().getName(), playerId);
         if (suffix.isEmpty()) return;
         callbackInfo.setReturnValue(callbackInfo.getReturnValue() + suffix);
         HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, suffix);

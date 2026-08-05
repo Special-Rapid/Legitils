@@ -13,6 +13,7 @@ import com.snkisk.hypixellegitils.config.LegitilsConfigStore;
 import com.snkisk.hypixellegitils.config.MarkerHistoryEntry;
 import com.snkisk.hypixellegitils.config.MarkerHistoryStore;
 import com.snkisk.hypixellegitils.config.RuntimeStatus;
+import com.snkisk.hypixellegitils.config.StatsSettings;
 import com.snkisk.hypixellegitils.command.LocalCommand;
 import com.snkisk.hypixellegitils.profile.MojangProfileResolver;
 import com.snkisk.hypixellegitils.observation.ObservationCoordinator;
@@ -29,6 +30,8 @@ import com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
 import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
+import com.snkisk.hypixellegitils.stats.StatsPresentation;
+import com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.util.Collections;
@@ -57,6 +60,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile DetectorSettingsService detectorSettings;
     private static volatile boolean nickDetectionEnabled = true;
     private static volatile boolean partyDetectionEnabled = true;
+    private static volatile StatsSettings statsSettings = StatsSettings.defaults();
     private static volatile boolean developerSelfDetectionEnabled;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
@@ -76,6 +80,7 @@ public final class HypixelLegitilsBootstrap {
         = new ConcurrentLinkedQueue<PendingPregameNickNotice>();
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<String> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
@@ -134,6 +139,7 @@ public final class HypixelLegitilsBootstrap {
             statsBridgeClient = new StatsBridgeClient(ConfigPaths.statsBridgeDescriptorPath(userHome));
             nickDetectionEnabled = loaded.config.nickDetectionSettings.enabled;
             partyDetectionEnabled = loaded.config.partyDetectionSettings.enabled;
+            statsSettings = loaded.config.statsSettings;
             developerSelfDetectionEnabled = loaded.config.debugEnabled;
             try {
                 store.writeRuntimeStatusAtomically(
@@ -166,6 +172,7 @@ public final class HypixelLegitilsBootstrap {
         active.applyRuntimeExternalConfig(reload.config);
         nickDetectionEnabled = reload.config.nickDetectionSettings.enabled;
         partyDetectionEnabled = reload.config.partyDetectionSettings.enabled;
+        statsSettings = reload.config.statsSettings;
         developerSelfDetectionEnabled = reload.config.debugEnabled;
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
@@ -339,13 +346,36 @@ public final class HypixelLegitilsBootstrap {
 
     private static void publishStatsBridgeResult(long sessionGeneration, StatsBridgeLookupResult result) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
-            if (STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) latestStatsBridgeResult = result;
+            if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+            latestStatsBridgeResult = result;
+            if (statsSettings.enabled && statsSettings.chatEnabled) {
+                for (String line : StatsPresentation.chatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
+            }
         }
     }
 
     /** Retained only as normalized Bridge data for the forthcoming local display stage. */
     public static StatsBridgeLookupResult latestStatsBridgeResult() {
         return latestStatsBridgeResult;
+    }
+
+    /** Returns a local-only suffix for a known real profile; existing Tab markers stay ahead of it. */
+    public static String statsTabSuffix(String playerName, UUID playerId) {
+        StatsSettings settings = statsSettings;
+        if (!STARTED.get() || !settings.enabled || !settings.tabEnabled || playerName == null || playerId == null || playerId.version() == 1) return "";
+        StatsBridgeLookupResult result = latestStatsBridgeResult;
+        if (result.status != StatsBridgeLookupResult.Status.READY) return "";
+        for (StatsBridgePlayerResult player : result.players) {
+            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.tabSuffix(player, settings);
+        }
+        return "";
+    }
+
+    public static String[] drainPendingStatsNotices() {
+        List<String> notices = new ArrayList<String>();
+        String notice;
+        while ((notice = PENDING_STATS_NOTICES.poll()) != null) notices.add(notice);
+        return notices.toArray(new String[notices.size()]);
     }
 
     /** A paused, skipped, or replaced client-world tick invalidates timing signals. */
@@ -898,6 +928,7 @@ public final class HypixelLegitilsBootstrap {
             latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
         }
         STATS_MATCH_REQUEST_GATE.reset();
+        PENDING_STATS_NOTICES.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();
         if (active != null) {

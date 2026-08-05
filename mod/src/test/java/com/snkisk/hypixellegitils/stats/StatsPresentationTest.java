@@ -37,6 +37,19 @@ public final class StatsPresentationTest {
         )).get(0).chatSummary());
     }
 
+    @Test
+    public void chatLinesAreNeutralAndSourceLabelCommunityTags() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Strong", StatsBridgePlayerResult.NickStatus.KNOWN, 100, 5D, 0,
+            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
+        );
+        assertEquals(Arrays.asList(
+            "§fBed Wars stats: §a1 §fprofiles loaded.",
+            "§cStrong§7: §fStrong §8— §b✫100 §eFKDR 5.0 §aWS 0",
+            "§durchin tag§7: §fStrong §8— §dwatchlist"
+        ), StatsPresentation.chatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
+    }
+
     private static StatsBridgePlayerResult player(String name, Integer stars, Double fkdr, Integer streak) {
         return new StatsBridgePlayerResult(
             name, StatsBridgePlayerResult.NickStatus.KNOWN, stars, fkdr, streak,

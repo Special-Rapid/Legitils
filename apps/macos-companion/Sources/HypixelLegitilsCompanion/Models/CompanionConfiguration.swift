@@ -1,7 +1,7 @@
 import Foundation
 
 struct CompanionConfiguration: Codable, Equatable {
-    static let schemaVersion = 4
+    static let schemaVersion = 5
 
     var schemaVersion: Int
     var revision: Int64
@@ -13,6 +13,7 @@ struct CompanionConfiguration: Codable, Equatable {
     var markers: Markers
     var nickDetection: NickDetection
     var partyDetection: PartyDetection
+    var stats: Stats
 
     static let `default` = CompanionConfiguration(
         schemaVersion: schemaVersion,
@@ -24,7 +25,8 @@ struct CompanionConfiguration: Codable, Equatable {
         debug: false,
         markers: Markers(enabled: true, threshold: 2),
         nickDetection: NickDetection(enabled: true),
-        partyDetection: PartyDetection(enabled: true)
+        partyDetection: PartyDetection(enabled: true),
+        stats: Stats(enabled: true, tab: true, stars: true, fkdr: true, winStreak: true, chat: true)
     )
 
     enum DetectorID: String, Codable, CaseIterable, Identifiable {
@@ -81,5 +83,14 @@ struct CompanionConfiguration: Codable, Equatable {
 
     struct PartyDetection: Codable, Equatable {
         var enabled: Bool
+    }
+
+    struct Stats: Codable, Equatable {
+        var enabled: Bool
+        var tab: Bool
+        var stars: Bool
+        var fkdr: Bool
+        var winStreak: Bool
+        var chat: Bool
     }
 }
