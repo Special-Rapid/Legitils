@@ -59,9 +59,11 @@ final class StatsProviderLookup {
     }
 
     private func fetch(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
+        let manualLookup = roster.matchID.hasPrefix("manual_")
         let records = Dictionary(uniqueKeysWithValues: roster.players.map { player in
             (player.name.lowercased(), MutablePlayer(name: player.name, uuid: player.uuid))
         })
+        var diagnostics: [StatsBridgeCommunityTag] = []
         var knownByName = Dictionary(uniqueKeysWithValues: roster.players.compactMap { player -> (String, StatsBridgeRosterMember)? in
             guard let uuid = player.uuid else { return nil }
             return (player.name.lowercased(), StatsBridgeRosterMember(name: player.name, uuid: uuid.lowercased()))
@@ -73,7 +75,10 @@ final class StatsProviderLookup {
                 self.queue.async {
                     defer { resolveGroup.leave() }
                     guard case let .success((data, response)) = result, response.statusCode == 200,
-                          let uuid = Self.parseMojangProfileUUID(data) else { return }
+                          let uuid = Self.parseMojangProfileUUID(data) else {
+                        if manualLookup { diagnostics.append(Self.diagnostic("Mojang", result)) }
+                        return
+                    }
                     let resolved = StatsBridgeRosterMember(name: player.name, uuid: uuid)
                     guard resolved.isValid else { return }
                     knownByName[player.name.lowercased()] = resolved
@@ -86,6 +91,8 @@ final class StatsProviderLookup {
                 roster,
                 records: records,
                 known: Array(knownByName.values),
+                manualLookup: manualLookup,
+                diagnostics: diagnostics,
                 completion: completion
             )
         }
@@ -97,10 +104,13 @@ final class StatsProviderLookup {
         _ roster: StatsBridgeRosterRequest,
         records: [String: MutablePlayer],
         known: [StatsBridgeRosterMember],
+        manualLookup: Bool,
+        diagnostics initialDiagnostics: [StatsBridgeCommunityTag],
         completion: @escaping (StatsBridgeRosterResponse) -> Void
     ) {
+        var diagnostics = initialDiagnostics
         guard !known.isEmpty else {
-            finish(matchID: roster.matchID, records: records, completion: completion)
+            finish(matchID: roster.matchID, records: records, diagnostics: diagnostics, completion: completion)
             return
         }
 
@@ -109,7 +119,7 @@ final class StatsProviderLookup {
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount), !key.isEmpty {
             for player in known {
-                if let cached = hypixelCache.stats(for: player.uuid!) {
+                if !manualLookup, let cached = hypixelCache.stats(for: player.uuid!) {
                     records[player.name.lowercased()]?.apply(cached)
                     continue
                 }
@@ -118,12 +128,17 @@ final class StatsProviderLookup {
                     self.queue.async {
                         defer { group.leave() }
                         guard case let .success((data, response)) = result, response.statusCode == 200,
-                              let stats = Self.parseHypixelStats(data, gameMode: roster.gameMode) else { return }
+                              let stats = Self.parseHypixelStats(data, gameMode: roster.gameMode) else {
+                            if manualLookup { diagnostics.append(Self.diagnostic("Hypixel", result)) }
+                            return
+                        }
                         records[player.name.lowercased()]?.apply(stats)
                         self.hypixelCache.store(stats, for: player.uuid!)
                     }
                 }
             }
+        } else if manualLookup {
+            diagnostics.append(Self.diagnostic("Hypixel", nil))
         }
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.urchin.keychainAccount), !key.isEmpty {
@@ -131,7 +146,10 @@ final class StatsProviderLookup {
             transport.load(Self.urchinRequest(uuids: known.compactMap(\.uuid), apiKey: key)) { result in
                 self.queue.async {
                     defer { group.leave() }
-                    guard case let .success((data, response)) = result, response.statusCode == 200 else { return }
+                    guard case let .success((data, response)) = result, response.statusCode == 200 else {
+                        if manualLookup { diagnostics.append(Self.diagnostic("Urchin", result)) }
+                        return
+                    }
                     for (uuid, labels) in Self.parseUrchinTags(data) {
                         guard let member = known.first(where: { $0.uuid?.caseInsensitiveCompare(uuid) == .orderedSame }) else { continue }
                         records[member.name.lowercased()]?.communityTags.append(contentsOf: labels.map {
@@ -140,6 +158,8 @@ final class StatsProviderLookup {
                     }
                 }
             }
+        } else if manualLookup {
+            diagnostics.append(Self.diagnostic("Urchin", nil))
         }
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.seraph.keychainAccount), !key.isEmpty {
@@ -148,13 +168,18 @@ final class StatsProviderLookup {
                 transport.load(Self.seraphRequest(uuid: player.uuid!, apiKey: key)) { result in
                     self.queue.async {
                         defer { group.leave() }
-                        guard case let .success((data, response)) = result, response.statusCode == 200 else { return }
+                        guard case let .success((data, response)) = result, response.statusCode == 200 else {
+                            if manualLookup { diagnostics.append(Self.diagnostic("Seraph", result)) }
+                            return
+                        }
                         records[player.name.lowercased()]?.communityTags.append(contentsOf: Self.parseSeraphTags(data).map {
                             StatsBridgeCommunityTag(source: StatsProvider.seraph.rawValue, label: $0)
                         })
                     }
                 }
             }
+        } else if manualLookup {
+            diagnostics.append(Self.diagnostic("Seraph", nil))
         }
 
         DispatchQueue.global(qos: .utility).async {
@@ -162,7 +187,7 @@ final class StatsProviderLookup {
                 // Timed-out work may still finish later; this match has already received its single response.
             }
             self.queue.async {
-                self.finish(matchID: roster.matchID, records: records, completion: completion)
+                self.finish(matchID: roster.matchID, records: records, diagnostics: diagnostics, completion: completion)
             }
         }
     }
@@ -170,8 +195,12 @@ final class StatsProviderLookup {
     private func finish(
         matchID: String,
         records: [String: MutablePlayer],
+        diagnostics: [StatsBridgeCommunityTag] = [],
         completion: @escaping (StatsBridgeRosterResponse) -> Void
     ) {
+        if !diagnostics.isEmpty, records.count == 1, let record = records.values.first {
+            record.communityTags.append(contentsOf: diagnostics)
+        }
         let players = records.values
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             .map { $0.result }
@@ -298,6 +327,26 @@ extension StatsProviderLookup {
               let uuid = root["id"] as? String else { return nil }
         let identity = StatsBridgeRosterMember(name: "Player", uuid: uuid.lowercased())
         return identity.isValid ? uuid.lowercased() : nil
+    }
+
+    static func diagnostic(
+        _ provider: String,
+        _ result: Result<(Data, HTTPURLResponse), Error>?
+    ) -> StatsBridgeCommunityTag {
+        let detail: String
+        if case let .success((_, response))? = result {
+            switch response.statusCode {
+            case 401, 403: detail = "authorization failed"
+            case 404: detail = "profile not found"
+            case 429: detail = "rate limited"
+            default: detail = "unavailable"
+            }
+        } else if result == nil {
+            detail = "API key unavailable"
+        } else {
+            detail = "unavailable"
+        }
+        return StatsBridgeCommunityTag(source: "diagnostic", label: "\(provider): \(detail)")
     }
 
     static func parseUrchinTags(_ data: Data) -> [String: [String]] {

@@ -83,6 +83,9 @@ public final class HypixelLegitilsBootstrap {
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<StatsBridgeLookupResult> PENDING_MANUAL_STATS_RESULTS
+        = new ConcurrentLinkedQueue<StatsBridgeLookupResult>();
+    private static final AtomicLong MANUAL_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
@@ -416,6 +419,16 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
+    /** Emits completed explicit API-test results on the client thread. */
+    public static String[] drainPendingManualStatsResponses() {
+        List<String> responses = new ArrayList<String>();
+        StatsBridgeLookupResult result;
+        while ((result = PENDING_MANUAL_STATS_RESULTS.poll()) != null) {
+            for (String line : StatsPresentation.manualLookupLines(result)) responses.add(ChatFormat.line(line));
+        }
+        return responses.toArray(new String[responses.size()]);
+    }
+
     /** A paused, skipped, or replaced client-world tick invalidates timing signals. */
     public static void onObservationDiscontinuity() {
         ObservationCoordinator active = coordinator;
@@ -439,6 +452,10 @@ public final class HypixelLegitilsBootstrap {
         if (active == null || detectorSettings == null) return new String[] { ChatFormat.line("§cStatus unavailable.") };
         if (request.kind == LocalCommand.Kind.STATUS) return overallStatusLines(detectorSettings.savedConfig(), active);
         if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines();
+        if (request.kind == LocalCommand.Kind.STATS_LOOKUP) {
+            requestManualStatsLookup(request.playerName, visiblePlayers);
+            return new String[] { ChatFormat.line("§bStats lookup started for §f" + request.playerName + "§b.") };
+        }
         if (request.kind == LocalCommand.Kind.ANTICHEAT_LIST) return detectorListLines(active.statusText(), detectorSettings.savedConfig());
         if (request.kind == LocalCommand.Kind.ANTICHEAT_SET) return updateDetectorSetting(request);
         if (request.kind == LocalCommand.Kind.NICK_DETECT_SET_ENABLED) return updateNickDetectionSetting(request);
@@ -457,6 +474,31 @@ public final class HypixelLegitilsBootstrap {
             return updateManualBlacklist(request, active, visiblePlayers);
         }
         return LocalCommand.invalidLocalCommandLines();
+    }
+
+    /** Explicit user lookup; it works even when automatic Stats presentation is disabled. */
+    private static void requestManualStatsLookup(String playerName, Map<String, UUID> visiblePlayers) {
+        if (playerName == null) return;
+        StatsBridgeRosterMember requested = new StatsBridgeRosterMember(playerName, null);
+        if (!requested.isValid()) return;
+        UUID visibleId = visiblePlayers == null ? null : visiblePlayers.get(playerName.toLowerCase(Locale.ROOT));
+        if (visibleId != null && visibleId.version() != 1) requested = new StatsBridgeRosterMember(playerName, visibleId.toString());
+        final StatsBridgeClient client = statsBridgeClient;
+        if (client == null) {
+            PENDING_MANUAL_STATS_RESULTS.add(StatsBridgeLookupResult.unavailable());
+            return;
+        }
+        final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
+        final String requestId = "manual_" + sessionGeneration + "_" + MANUAL_STATS_LOOKUP_SEQUENCE.incrementAndGet();
+        final List<StatsBridgeRosterMember> players = Collections.singletonList(requested);
+        STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
+            @Override
+            public void run() {
+                if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+                StatsBridgeLookupResult result = client.requestOnce(requestId, BedwarsMode.FOURS, players, System.currentTimeMillis());
+                if (STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) PENDING_MANUAL_STATS_RESULTS.add(result);
+            }
+        });
     }
 
     /** Compatibility helper for callers that only need one local response line. */
@@ -967,6 +1009,7 @@ public final class HypixelLegitilsBootstrap {
         }
         STATS_MATCH_REQUEST_GATE.reset();
         PENDING_STATS_NOTICES.clear();
+        PENDING_MANUAL_STATS_RESULTS.clear();
         PREGAME_STATS_CHATTERS.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();

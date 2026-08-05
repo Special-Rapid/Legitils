@@ -16,6 +16,7 @@ public final class LocalCommand {
         ChatFormat.line("§fCommands"),
         ChatFormat.continuation("§7Alias: §b.l <command>"),
         ChatFormat.continuation("§a.l status §8— §fshow all feature status"),
+        ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph lookup"),
         ChatFormat.continuation("§e.l anticheat list §8— §fshow detector settings"),
         ChatFormat.continuation("§b.l anticheat on <detector|all> §8— §fenable now"),
         ChatFormat.continuation("§c.l anticheat off <detector|all> §8— §fdisable now"),
@@ -71,6 +72,12 @@ public final class LocalCommand {
         if (input == null || (!PREFIX.equals(input) && !input.startsWith(PREFIX + " "))) return null;
         if (STATUS.equals(input)) return new Request(Kind.STATUS, null, false, false);
         if (HELP.equals(input)) return new Request(Kind.HELP, null, false, false);
+        if (input.startsWith(PREFIX + " stats ")) {
+            String[] parts = input.split(" ");
+            if (parts.length == 3 && isValidPlayerName(parts[2])) {
+                return new Request(Kind.STATS_LOOKUP, null, false, false, -1, parts[2]);
+            }
+        }
         if (input.startsWith(ANTICHEAT + " ")) {
             String[] parts = input.split(" ");
             if (parts.length == 3 && "list".equals(parts[2])) return new Request(Kind.ANTICHEAT_LIST, null, false, false);
@@ -172,6 +179,7 @@ public final class LocalCommand {
     public enum Kind {
         STATUS,
         HELP,
+        STATS_LOOKUP,
         ANTICHEAT_LIST,
         ANTICHEAT_SET,
         NICK_DETECT_SET_ENABLED,

@@ -62,6 +62,18 @@ public final class StatsPresentationTest {
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }
 
+    @Test
+    public void manualLookupShowsStatsAndSafeProviderDiagnostics() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Player", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, 0,
+            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("diagnostic", "Hypixel: unauthorized"))
+        );
+        assertEquals(Arrays.asList(
+            "§bStats§7: §fPlayer §8— §b✫12 §eFKDR 0.4 §aWS 0",
+            "§cAPI§7: §fHypixel: unauthorized"
+        ), StatsPresentation.manualLookupLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
+    }
+
     private static StatsBridgePlayerResult player(String name, Integer stars, Double fkdr, Integer streak) {
         return new StatsBridgePlayerResult(
             name, StatsBridgePlayerResult.NickStatus.KNOWN, stars, fkdr, streak,

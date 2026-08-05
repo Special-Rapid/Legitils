@@ -311,6 +311,43 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.stars, 100)
     }
 
+    func testManualStatsLookupForcesAProviderRequestAndReturnsOnlySafeDiagnostics() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
+        cache.store(
+            StatsProviderLookup.HypixelStats(stars: 999, finalKillDeathRatio: 99, modeWinStreak: 99),
+            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        let transport = ManualFailureTransport()
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            transport: transport,
+            hypixelCache: cache
+        )
+        let response = expectation(description: "manual failure response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "manual_1_1",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: nil)]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(transport.requestCount, 2)
+        XCTAssertNil(result?.players.first?.stars)
+        XCTAssertEqual(result?.players.first?.communityTags, [
+            StatsBridgeCommunityTag(source: "diagnostic", label: "Hypixel: authorization failed"),
+            StatsBridgeCommunityTag(source: "diagnostic", label: "Seraph: API key unavailable"),
+            StatsBridgeCommunityTag(source: "diagnostic", label: "Urchin: API key unavailable")
+        ])
+    }
+
     func testConfigurationStoreReplacesAndReloadsAConfiguration() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("config.json")
@@ -397,6 +434,24 @@ private final class FakeStatsTransport: StatsHTTPTransport {
         completion(.success((body, HTTPURLResponse(
             url: request.url!,
             statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!)))
+    }
+}
+
+private final class ManualFailureTransport: StatsHTTPTransport {
+    private(set) var requestCount = 0
+
+    func load(_ request: URLRequest, completion: @escaping (Result<(Data, HTTPURLResponse), Error>) -> Void) {
+        requestCount += 1
+        let status = request.url?.host == "api.hypixel.net" ? 401 : 200
+        let body = request.url?.host == "api.mojang.com"
+            ? Data("{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"PlayerOne\"}".utf8)
+            : Data("{}".utf8)
+        completion(.success((body, HTTPURLResponse(
+            url: request.url!,
+            statusCode: status,
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )!)))

@@ -96,6 +96,32 @@ public final class StatsPresentation {
         return Collections.unmodifiableList(lines);
     }
 
+    /** Explicit command output: all returned values plus compact provider diagnostics, never raw payloads. */
+    public static List<String> manualLookupLines(StatsBridgeLookupResult result) {
+        if (result == null || result.status == StatsBridgeLookupResult.Status.UNAVAILABLE) {
+            return Collections.singletonList("§cStats Bridge unavailable. §7Start Companion and check API keys.");
+        }
+        if (result.status != StatsBridgeLookupResult.Status.READY || result.players.isEmpty()) {
+            return Collections.singletonList("§eStats lookup did not return a profile.");
+        }
+        List<String> lines = new ArrayList<String>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) {
+                lines.add("§eStats§7: §f" + player.name + " §8— §eprofile unavailable");
+            } else {
+                lines.add("§bStats§7: §f" + new Profile(player, Tier.NONE).chatSummary());
+            }
+            for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
+                if ("diagnostic".equals(tag.source)) {
+                    lines.add("§cAPI§7: §f" + tag.label);
+                } else {
+                    lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);
+                }
+            }
+        }
+        return Collections.unmodifiableList(lines);
+    }
+
     public static final class Profile {
         public final StatsBridgePlayerResult player;
         public final Tier tier;

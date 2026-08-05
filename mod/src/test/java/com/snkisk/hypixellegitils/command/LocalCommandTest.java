@@ -25,15 +25,16 @@ public class LocalCommandTest {
         assertTrue(lines.length >= 6);
         assertTrue(lines[0].contains(ChatFormat.PREFIX));
         assertTrue(lines[2].contains(".l status"));
-        assertTrue(lines[4].contains("anticheat on"));
-        assertTrue(lines[5].contains("anticheat off"));
+        assertTrue(lines[3].contains(".l stats <player>"));
+        assertTrue(lines[5].contains("anticheat on"));
+        assertTrue(lines[6].contains("anticheat off"));
         assertTrue(lines[1].contains(".l <command>"));
-        assertTrue(lines[8].contains(".l nickdetect on/off"));
-        assertTrue(lines[9].contains(".l partydetect on/off"));
-        assertTrue(lines[10].contains(".l dev on/off"));
-        assertTrue(lines[11].contains(".l notify"));
-        assertTrue(lines[15].contains(".l blacklist add/remove"));
-        assertTrue(lines[16].contains("through Mojang"));
+        assertTrue(lines[9].contains(".l nickdetect on/off"));
+        assertTrue(lines[10].contains(".l partydetect on/off"));
+        assertTrue(lines[11].contains(".l dev on/off"));
+        assertTrue(lines[12].contains(".l notify"));
+        assertTrue(lines[16].contains(".l blacklist add/remove"));
+        assertTrue(lines[17].contains("through Mojang"));
         assertTrue(!contains(lines, "partydetect method"));
         assertTrue(!contains(lines, ".l dev log"));
     }
@@ -66,6 +67,9 @@ public class LocalCommandTest {
         assertTrue(!all.enabled);
         assertEquals(DetectorId.NO_BREAK_DELAY, LocalCommand.requestForUserInput(".legitils anticheat on NoBreakDelay", true).detector);
         assertEquals(LocalCommand.Kind.MARKER_SET_ENABLED, LocalCommand.requestForUserInput(".legitils marker on", true).kind);
+        LocalCommand.Request stats = LocalCommand.requestForUserInput(".l stats Player_1", true);
+        assertEquals(LocalCommand.Kind.STATS_LOOKUP, stats.kind);
+        assertEquals("Player_1", stats.playerName);
         assertEquals(4, LocalCommand.requestForUserInput(".legitils marker threshold 4", true).threshold);
         assertEquals(LocalCommand.Kind.MARKER_SET_THRESHOLD, LocalCommand.requestForUserInput(".legitils marker threshold 1", true).kind);
         assertEquals(LocalCommand.Kind.MARKER_SET_ENABLED, LocalCommand.requestForUserInput(".l blacklist on", true).kind);
