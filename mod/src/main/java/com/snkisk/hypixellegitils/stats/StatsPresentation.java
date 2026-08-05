@@ -14,19 +14,15 @@ public final class StatsPresentation {
 
     public enum Tier {
         NONE,
-        ELITE,
-        STRONG
+        TARGET
     }
 
-    /** Strong takes precedence, so one profile can appear in the match chat exactly once. */
+    /** Identifies one locally presented target tier; it does not imply a violation or an alert. */
     public static Tier tierFor(StatsBridgePlayerResult player) {
         if (player == null) return Tier.NONE;
-        boolean strong = atLeast(player.stars, 100) && atLeast(player.finalKillDeathRatio, 5D)
-            || atLeast(player.modeWinStreak, 10);
-        if (strong) return Tier.STRONG;
-        boolean elite = atLeast(player.stars, 100) || atLeast(player.finalKillDeathRatio, 1D)
+        boolean target = atLeast(player.stars, 100) || atLeast(player.finalKillDeathRatio, 1D)
             || atLeast(player.modeWinStreak, 3);
-        return elite ? Tier.ELITE : Tier.NONE;
+        return target ? Tier.TARGET : Tier.NONE;
     }
 
     /** Appends only known, compact values after the existing Tab text and local markers. */
@@ -47,7 +43,7 @@ public final class StatsPresentation {
         return suffix.toString();
     }
 
-    /** Strong first, then FKDR, stars, and case-insensitive name; no alert semantics are attached. */
+    /** Orders local target profiles by FKDR, stars, and case-insensitive name; no alert semantics are attached. */
     public static List<Profile> rankedHighStats(List<StatsBridgePlayerResult> players) {
         if (players == null || players.isEmpty()) return Collections.emptyList();
         List<Profile> ranked = new ArrayList<Profile>();
@@ -58,8 +54,6 @@ public final class StatsPresentation {
         Collections.sort(ranked, new Comparator<Profile>() {
             @Override
             public int compare(Profile left, Profile right) {
-                int tier = right.tier.ordinal() - left.tier.ordinal();
-                if (tier != 0) return tier;
                 int fkdr = Double.compare(value(right.player.finalKillDeathRatio), value(left.player.finalKillDeathRatio));
                 if (fkdr != 0) return fkdr;
                 int stars = Integer.compare(value(right.player.stars), value(left.player.stars));
@@ -70,14 +64,13 @@ public final class StatsPresentation {
         return Collections.unmodifiableList(ranked);
     }
 
-    /** One neutral per-match header followed by every Strong/Elite profile and source-labelled tags. */
+    /** One neutral per-match header followed by every Target Player profile and source-labelled tags. */
     public static List<String> chatLines(StatsBridgeLookupResult result) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
         List<String> lines = new ArrayList<String>();
         lines.add("§fBed Wars stats: §a" + result.players.size() + " §fprofiles loaded.");
         for (Profile profile : rankedHighStats(result.players)) {
-            String tier = profile.tier == Tier.STRONG ? "§cStrong" : "§eElite";
-            lines.add(tier + "§7: §f" + profile.chatSummary());
+            lines.add("§eTarget Player§7: §f" + profile.chatSummary());
         }
         for (StatsBridgePlayerResult player : result.players) {
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
