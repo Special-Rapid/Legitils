@@ -8,16 +8,19 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var runtimeStatus: RuntimeStatus?
     @Published private(set) var statusMessage = "Legitils の状態を確認しています。"
     @Published private(set) var statsStatusMessage = "APIキーはこのMacのKeychainだけに保存します。"
+    @Published private(set) var statsBridgeStatus = "Stats Bridge: 停止中"
     @Published private(set) var hasHypixelKey = false
     @Published private(set) var hasUrchinKey = false
     @Published private(set) var hasSeraphKey = false
 
     private let configurationStore = ConfigurationStore()
     private let keychainStore = KeychainStore()
+    private let statsBridgeServer = StatsBridgeServer()
 
     func refresh() {
         runtimeStatus = configurationStore.loadRuntimeStatus()
         refreshProviderKeyStates()
+        syncStatsBridge()
         do {
             configuration = try configurationStore.load()
             settingsDraft = configuration
@@ -75,6 +78,7 @@ final class CompanionStore: ObservableObject {
         do {
             try keychainStore.save(secret: key, account: provider.keychainAccount)
             refreshProviderKeyStates()
+            syncStatsBridge()
             statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainに保存しました。"
         } catch {
             statsStatusMessage = error.localizedDescription
@@ -85,6 +89,7 @@ final class CompanionStore: ObservableObject {
         do {
             try keychainStore.remove(account: provider.keychainAccount)
             refreshProviderKeyStates()
+            syncStatsBridge()
             statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainから削除しました。"
         } catch {
             statsStatusMessage = error.localizedDescription
@@ -95,5 +100,24 @@ final class CompanionStore: ObservableObject {
         hasHypixelKey = keychainStore.hasSecret(account: StatsProvider.hypixel.keychainAccount)
         hasUrchinKey = keychainStore.hasSecret(account: StatsProvider.urchin.keychainAccount)
         hasSeraphKey = keychainStore.hasSecret(account: StatsProvider.seraph.keychainAccount)
+    }
+
+    private func syncStatsBridge() {
+        guard hasHypixelKey || hasUrchinKey || hasSeraphKey else {
+            statsBridgeServer.stop()
+            statsBridgeStatus = "Stats Bridge: 停止中（APIキー未登録）"
+            return
+        }
+        statsBridgeStatus = "Stats Bridge: ローカル接続を準備中"
+        statsBridgeServer.start { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.statsBridgeStatus = "Stats Bridge: ローカル接続待機中"
+                case .failure:
+                    self?.statsBridgeStatus = "Stats Bridge: 利用できません"
+                }
+            }
+        }
     }
 }

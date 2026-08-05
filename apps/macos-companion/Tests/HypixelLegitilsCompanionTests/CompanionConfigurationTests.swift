@@ -33,6 +33,54 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(Set(StatsProvider.allCases.map(\.keychainAccount)).count, StatsProvider.allCases.count)
     }
 
+    func testStatsBridgeRejectsInvalidOrOversizedRosterRequests() {
+        let valid = StatsBridgeRosterRequest(
+            schemaVersion: StatsBridgeRosterRequest.schemaVersion,
+            matchID: "bedwars-match_1",
+            players: [StatsBridgeRosterMember(name: "Player_1", uuid: nil)]
+        )
+        XCTAssertTrue(valid.isValid)
+        XCTAssertFalse(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "bedwars-match_1",
+            players: valid.players
+        ).isValid)
+        XCTAssertFalse(StatsBridgeRosterRequest(
+            schemaVersion: 1,
+            matchID: "not allowed!",
+            players: valid.players
+        ).isValid)
+        XCTAssertFalse(StatsBridgeRosterRequest(
+            schemaVersion: 1,
+            matchID: "bedwars-match_1",
+            players: Array(repeating: valid.players[0], count: StatsBridgeRosterRequest.maximumMembers + 1)
+        ).isValid)
+    }
+
+    func testStatsBridgeWritesOnlyEphemeralLocalDescriptor() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let descriptorURL = directory.appendingPathComponent("stats-bridge.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let server = StatsBridgeServer(descriptorURL: descriptorURL)
+        let started = expectation(description: "bridge started")
+        var result: Result<StatsBridgeDescriptor, Error>?
+
+        server.start {
+            result = $0
+            started.fulfill()
+        }
+        wait(for: [started], timeout: 2)
+
+        let descriptor = try result?.get()
+        XCTAssertNotNil(descriptor)
+        XCTAssertTrue(descriptor?.isUsable() == true)
+        XCTAssertFalse(descriptor?.capability.isEmpty == true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: descriptorURL.path))
+        let encoded = try String(contentsOf: descriptorURL, encoding: .utf8)
+        XCTAssertFalse(encoded.lowercased().contains("api-key"))
+        server.stop()
+    }
+
     func testCompanionUsesTheSameApplicationSupportDirectoryAsTheMod() {
         XCTAssertEqual(CompanionPaths.applicationSupportDirectory.lastPathComponent, "HypixelLegitils")
         XCTAssertEqual(CompanionPaths.configurationURL.lastPathComponent, "config.json")

@@ -28,7 +28,9 @@ struct StatsView: View {
             }
             Text(store.statsStatusMessage)
                 .foregroundStyle(.secondary)
-            Text("Stats Bridge は次の段階で接続します。MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。")
+            Text(store.statsBridgeStatus)
+                .foregroundStyle(.secondary)
+            Text("MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。Statsの外部取得は次の段階で接続します。")
                 .foregroundStyle(.secondary)
             Spacer()
         }
