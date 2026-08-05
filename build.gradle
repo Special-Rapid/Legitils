@@ -241,6 +241,8 @@ task verifyBootstrapArtifacts(dependsOn: [':loader:jar', ':mod:jar']) {
             assert buildMetadata.contains("revision=${buildRevision}"): 'Build metadata revision is missing'
             def mixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinMinecraft.class')
             assert mixinClass != null: 'Bootstrap Mixin is missing'
+            def minecraftMixinBytecode = new String(modZip.getInputStream(mixinClass).bytes, 'ISO-8859-1')
+            assert !minecraftMixinBytecode.contains('func_148256_e'): 'Bootstrap Mixin must not invoke the Forge-only Session#getProfile SRG name'
             def chatMixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinGuiChat.class')
             assert chatMixinClass != null: 'Local chat Mixin is missing'
             def guiMixinClass = modZip.getEntry('com/snkisk/hypixellegitils/mixin/MixinGuiIngame.class')

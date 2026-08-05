@@ -7,7 +7,6 @@ import com.snkisk.hypixellegitils.alert.LocalNotice;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
-import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
 import net.minecraft.client.network.NetHandlerPlayClient;
@@ -32,7 +31,6 @@ import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.scoreboard.ScorePlayerTeam;
-import net.minecraft.util.Session;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -51,7 +49,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MixinMinecraft {
     @Shadow private EntityPlayerSP thePlayer;
     @Shadow private WorldClient theWorld;
-    @Shadow private Session session;
     private long hypixelLegitils$lastChatSequence;
     private long hypixelLegitils$lastSoundSequence;
     private long hypixelLegitils$lastObservationAtMillis;
@@ -78,7 +75,9 @@ public abstract class MixinMinecraft {
         hypixelLegitils$lastObservationAtMillis = nowMillis;
         hypixelLegitils$frameNowMillis = nowMillis;
         hypixelLegitils$frameGlobalLag = globalLag;
-        hypixelLegitils$selfPlayerId = hypixelLegitils$sessionProfileId();
+        // Use the EntityPlayer mixin's runtime-safe profile access. Direct Session#getProfile
+        // calls are reobfuscated to Forge SRG names, which Lunar's Ichor runtime does not expose.
+        hypixelLegitils$selfPlayerId = hypixelLegitils$profileId(thePlayer);
         if (thePlayer != null && hypixelLegitils$selfPlayerId != null) {
             HypixelLegitilsBootstrap.onDeveloperSelfPlayerObserved(hypixelLegitils$selfPlayerId);
         }
@@ -264,11 +263,6 @@ public abstract class MixinMinecraft {
         hypixelLegitils$previousVisiblePositions.clear();
         hypixelLegitils$previousVisiblePositions.putAll(currentPositions);
         return samples;
-    }
-
-    private UUID hypixelLegitils$sessionProfileId() {
-        GameProfile profile = session == null ? null : session.getProfile();
-        return profile == null ? null : profile.getId();
     }
 
     private UUID hypixelLegitils$profileId(EntityPlayer player) {
