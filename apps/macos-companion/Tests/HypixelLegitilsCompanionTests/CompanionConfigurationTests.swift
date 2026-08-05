@@ -26,6 +26,13 @@ final class CompanionConfigurationTests: XCTestCase {
         ).isUsable())
     }
 
+    func testStatsProvidersUseStableDistinctKeychainAccounts() {
+        XCTAssertEqual(StatsProvider.hypixel.keychainAccount, "hypixel-api-key")
+        XCTAssertEqual(StatsProvider.urchin.keychainAccount, "urchin-api-key")
+        XCTAssertEqual(StatsProvider.seraph.keychainAccount, "seraph-api-key")
+        XCTAssertEqual(Set(StatsProvider.allCases.map(\.keychainAccount)).count, StatsProvider.allCases.count)
+    }
+
     func testCompanionUsesTheSameApplicationSupportDirectoryAsTheMod() {
         XCTAssertEqual(CompanionPaths.applicationSupportDirectory.lastPathComponent, "HypixelLegitils")
         XCTAssertEqual(CompanionPaths.configurationURL.lastPathComponent, "config.json")

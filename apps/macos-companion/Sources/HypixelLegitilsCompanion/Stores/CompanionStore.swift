@@ -7,6 +7,7 @@ final class CompanionStore: ObservableObject {
     @Published var settingsDraft: CompanionConfiguration?
     @Published private(set) var runtimeStatus: RuntimeStatus?
     @Published private(set) var statusMessage = "Legitils の状態を確認しています。"
+    @Published private(set) var statsStatusMessage = "APIキーはこのMacのKeychainだけに保存します。"
     @Published private(set) var hasHypixelKey = false
     @Published private(set) var hasUrchinKey = false
     @Published private(set) var hasSeraphKey = false
@@ -16,9 +17,7 @@ final class CompanionStore: ObservableObject {
 
     func refresh() {
         runtimeStatus = configurationStore.loadRuntimeStatus()
-        hasHypixelKey = keychainStore.hasSecret(account: "hypixel-api-key")
-        hasUrchinKey = keychainStore.hasSecret(account: "urchin-api-key")
-        hasSeraphKey = keychainStore.hasSecret(account: "seraph-api-key")
+        refreshProviderKeyStates()
         do {
             configuration = try configurationStore.load()
             settingsDraft = configuration
@@ -57,5 +56,44 @@ final class CompanionStore: ObservableObject {
         } catch {
             statusMessage = error.localizedDescription
         }
+    }
+
+    func hasKey(for provider: StatsProvider) -> Bool {
+        switch provider {
+        case .hypixel: hasHypixelKey
+        case .urchin: hasUrchinKey
+        case .seraph: hasSeraphKey
+        }
+    }
+
+    func saveProviderKey(_ rawKey: String, for provider: StatsProvider) {
+        let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            statsStatusMessage = "\(provider.displayName) のAPIキーを入力してください。"
+            return
+        }
+        do {
+            try keychainStore.save(secret: key, account: provider.keychainAccount)
+            refreshProviderKeyStates()
+            statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainに保存しました。"
+        } catch {
+            statsStatusMessage = error.localizedDescription
+        }
+    }
+
+    func removeProviderKey(for provider: StatsProvider) {
+        do {
+            try keychainStore.remove(account: provider.keychainAccount)
+            refreshProviderKeyStates()
+            statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainから削除しました。"
+        } catch {
+            statsStatusMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshProviderKeyStates() {
+        hasHypixelKey = keychainStore.hasSecret(account: StatsProvider.hypixel.keychainAccount)
+        hasUrchinKey = keychainStore.hasSecret(account: StatsProvider.urchin.keychainAccount)
+        hasSeraphKey = keychainStore.hasSecret(account: StatsProvider.seraph.keychainAccount)
     }
 }

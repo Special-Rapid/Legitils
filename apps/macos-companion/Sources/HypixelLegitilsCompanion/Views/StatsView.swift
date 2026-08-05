@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StatsView: View {
     @EnvironmentObject private var store: CompanionStore
+    @State private var draftKeys = Dictionary(uniqueKeysWithValues: StatsProvider.allCases.map { ($0, "") })
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -10,10 +11,10 @@ struct StatsView: View {
             Text("各キーはこのMacのKeychainだけに保存します。MOD・config.json・Minecraftチャットには保存しません。")
                 .foregroundStyle(.secondary)
             GroupBox("プロバイダー") {
-                Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 12) {
-                    GridRow { Text("Hypixel"); keyState(store.hasHypixelKey) }
-                    GridRow { Text("Urchin"); keyState(store.hasUrchinKey) }
-                    GridRow { Text("Seraph"); keyState(store.hasSeraphKey) }
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(StatsProvider.allCases) { provider in
+                        providerKeyRow(provider)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -25,9 +26,35 @@ struct StatsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("Stats Bridge とキー入力UIは未接続です。この画面はKeychainの登録状態だけを読み取ります。")
+            Text(store.statsStatusMessage)
+                .foregroundStyle(.secondary)
+            Text("Stats Bridge は次の段階で接続します。MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。")
                 .foregroundStyle(.secondary)
             Spacer()
+        }
+    }
+
+    private func providerKeyRow(_ provider: StatsProvider) -> some View {
+        HStack(spacing: 10) {
+            Text(provider.displayName)
+                .frame(width: 70, alignment: .leading)
+            keyState(store.hasKey(for: provider))
+                .frame(width: 74, alignment: .leading)
+            SecureField("APIキー", text: Binding(
+                get: { draftKeys[provider, default: ""] },
+                set: { draftKeys[provider] = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            Button("保存") {
+                store.saveProviderKey(draftKeys[provider, default: ""], for: provider)
+                draftKeys[provider] = ""
+            }
+            .disabled(draftKeys[provider, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if store.hasKey(for: provider) {
+                Button("削除", role: .destructive) {
+                    store.removeProviderKey(for: provider)
+                }
+            }
         }
     }
 
