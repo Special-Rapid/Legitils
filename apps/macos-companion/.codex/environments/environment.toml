@@ -1,0 +1,8 @@
+[tools]
+swift = "5.9"
+
+[build]
+command = "swift build"
+
+[test]
+command = "swift test"
