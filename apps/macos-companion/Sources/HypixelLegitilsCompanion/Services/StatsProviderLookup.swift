@@ -32,13 +32,19 @@ final class StatsProviderLookup {
 
     private let keychainStore: StatsProviderKeyReading
     private let transport: StatsHTTPTransport
+    private let hypixelCache: HypixelStatsCache
     private let queue = DispatchQueue(label: "com.snkisk.hypixellegitils.stats-provider")
     private var matchCache: [String: StatsBridgeRosterResponse] = [:]
     private var cacheOrder: [String] = []
 
-    init(keychainStore: StatsProviderKeyReading, transport: StatsHTTPTransport = URLSessionStatsHTTPTransport()) {
+    init(
+        keychainStore: StatsProviderKeyReading,
+        transport: StatsHTTPTransport = URLSessionStatsHTTPTransport(),
+        hypixelCache: HypixelStatsCache = HypixelStatsCache()
+    ) {
         self.keychainStore = keychainStore
         self.transport = transport
+        self.hypixelCache = hypixelCache
     }
 
     func lookup(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
@@ -70,15 +76,18 @@ final class StatsProviderLookup {
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount), !key.isEmpty {
             for player in known {
+                if let cached = hypixelCache.stats(for: player.uuid!) {
+                    records[player.name.lowercased()]?.apply(cached)
+                    continue
+                }
                 group.enter()
                 transport.load(Self.hypixelRequest(uuid: player.uuid!, apiKey: key)) { result in
                     self.queue.async {
                         defer { group.leave() }
                         guard case let .success((data, response)) = result, response.statusCode == 200,
                               let stats = Self.parseHypixelStats(data, gameMode: roster.gameMode) else { return }
-                        records[player.name.lowercased()]?.stars = stats.stars
-                        records[player.name.lowercased()]?.finalKillDeathRatio = stats.finalKillDeathRatio
-                        records[player.name.lowercased()]?.modeWinStreak = stats.modeWinStreak
+                        records[player.name.lowercased()]?.apply(stats)
+                        self.hypixelCache.store(stats, for: player.uuid!)
                     }
                 }
             }
@@ -100,13 +109,18 @@ final class StatsProviderLookup {
             }
         }
 
-        // Seraph's documented public Player endpoint takes UUIDs and does not require this
-        // Companion's stored key. Its current documented response has no community-tag field,
-        // so the response is deliberately not guessed or rendered as a tag.
-        for player in known {
-            group.enter()
-            transport.load(Self.seraphRequest(uuid: player.uuid!)) { result in
-                self.queue.async { group.leave() }
+        if let key = try? keychainStore.readSecret(account: StatsProvider.seraph.keychainAccount), !key.isEmpty {
+            for player in known {
+                group.enter()
+                transport.load(Self.seraphRequest(uuid: player.uuid!, apiKey: key)) { result in
+                    self.queue.async {
+                        defer { group.leave() }
+                        guard case let .success((data, response)) = result, response.statusCode == 200 else { return }
+                        records[player.name.lowercased()]?.communityTags.append(contentsOf: Self.parseSeraphTags(data).map {
+                            StatsBridgeCommunityTag(source: StatsProvider.seraph.rawValue, label: $0)
+                        })
+                    }
+                }
             }
         }
 
@@ -144,7 +158,7 @@ final class StatsProviderLookup {
 }
 
 extension StatsProviderLookup {
-    struct HypixelStats {
+    struct HypixelStats: Codable, Equatable {
         let stars: Int?
         let finalKillDeathRatio: Double?
         let modeWinStreak: Int?
@@ -163,9 +177,20 @@ extension StatsProviderLookup {
             self.uuid = uuid
         }
 
+        func apply(_ stats: HypixelStats) {
+            stars = stats.stars
+            finalKillDeathRatio = stats.finalKillDeathRatio
+            modeWinStreak = stats.modeWinStreak
+        }
+
         var result: StatsBridgePlayerResult {
             let distinctTags = Dictionary(grouping: communityTags, by: { "\($0.source)\u{0}\($0.label)" })
                 .values.compactMap(\.first)
+                .sorted {
+                    $0.source == $1.source
+                        ? $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending
+                        : $0.source.localizedCaseInsensitiveCompare($1.source) == .orderedAscending
+                }
                 .prefix(8)
             return StatsBridgePlayerResult(
                 name: name,
@@ -199,9 +224,10 @@ extension StatsProviderLookup {
         return request
     }
 
-    static func seraphRequest(uuid: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://stash.seraph.si/player/\(uuid)")!)
+    static func seraphRequest(uuid: String, apiKey: String) -> URLRequest {
+        var request = URLRequest(url: URL(string: "https://api.seraph.si/\(uuid)/blacklist")!)
         request.timeoutInterval = responseTimeout
+        request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         return request
     }
 
@@ -236,6 +262,32 @@ extension StatsProviderLookup {
             }
             if !labels.isEmpty { result[entry.key.lowercased()] = labels }
         }
+    }
+
+    /// Converts documented boolean/tag fields to compact advisory labels only. Reasons,
+    /// reporter attribution, timestamps, and statistics deliberately remain inside the Companion.
+    static func parseSeraphTags(_ data: Data) -> [String] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              root["success"] as? Bool == true,
+              let payload = root["data"] as? [String: Any] else { return [] }
+        var tags: [String] = []
+        if tagged(payload["blacklist"]) { tags.append("blacklist") }
+        if tagged(payload["safelist"]) { tags.append("safelist") }
+        if tagged(payload["member"]) { tags.append("member") }
+        if tagged(payload["annoylist"]) { tags.append("annoylist") }
+        if tagged(payload["bot"]) { tags.append("bot") }
+        if tagged(payload["name_change"]) { tags.append("name change") }
+        if let custom = payload["customTag"] as? String {
+            let normalized = custom
+                .replacingOccurrences(of: "§", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !normalized.isEmpty { tags.append(String(normalized.prefix(48))) }
+        }
+        return Array(NSOrderedSet(array: tags)) as? [String] ?? []
+    }
+
+    private static func tagged(_ value: Any?) -> Bool {
+        (value as? [String: Any])?["tagged"] as? Bool == true
     }
 
     static func number(_ value: Any?) -> Double? {

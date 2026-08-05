@@ -127,6 +127,13 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(StatsProviderLookup.parseUrchinTags(urchin), [
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": ["cheating"]
         ])
+
+        let seraph = Data("""
+        {"success":true,"data":{"blacklist":{"tagged":true,"reason":"not returned"},"safelist":{"tagged":false},"member":{"tagged":true},"annoylist":{"tagged":false},"bot":{"tagged":true},"name_change":{"tagged":true},"customTag":"§cwatchlist"}}
+        """.utf8)
+        XCTAssertEqual(StatsProviderLookup.parseSeraphTags(seraph), [
+            "blacklist", "member", "bot", "name change", "cwatchlist"
+        ])
     }
 
     func testProviderRequestsUseFixedHostsAndKeepSecretsOutOfPayloads() throws {
@@ -137,12 +144,16 @@ final class CompanionConfigurationTests: XCTestCase {
 
         let urchin = StatsProviderLookup.urchinRequest(uuids: ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], apiKey: "urchin-secret")
         XCTAssertEqual(urchin.url?.host, "api.urchin.gg")
+        XCTAssertEqual(urchin.httpMethod, "POST")
         XCTAssertEqual(urchin.value(forHTTPHeaderField: "X-API-Key"), "urchin-secret")
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: urchin.httpBody ?? Data()) as? [String: [String]], [
+            "uuids": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+        ])
         XCTAssertFalse(String(data: urchin.httpBody ?? Data(), encoding: .utf8)?.contains("urchin-secret") == true)
 
-        let seraph = StatsProviderLookup.seraphRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        XCTAssertEqual(seraph.url?.host, "stash.seraph.si")
-        XCTAssertNil(seraph.value(forHTTPHeaderField: "Authorization"))
+        let seraph = StatsProviderLookup.seraphRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", apiKey: "seraph-secret")
+        XCTAssertEqual(seraph.url?.absoluteString, "https://api.seraph.si/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/blacklist")
+        XCTAssertEqual(seraph.value(forHTTPHeaderField: "X-API-Key"), "seraph-secret")
     }
 
     func testProviderLookupCachesOneNormalizedResultPerMatch() throws {
@@ -150,9 +161,11 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([
                 StatsProvider.hypixel.keychainAccount: "hypixel-secret",
-                StatsProvider.urchin.keychainAccount: "urchin-secret"
+                StatsProvider.urchin.keychainAccount: "urchin-secret",
+                StatsProvider.seraph.keychainAccount: "seraph-secret"
             ]),
-            transport: transport
+            transport: transport,
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
         )
         let roster = StatsBridgeRosterRequest(
             schemaVersion: 2,
@@ -171,6 +184,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(firstResponse?.players.first?.stars, 100)
         XCTAssertEqual(firstResponse?.players.first?.modeWinStreak, 9)
         XCTAssertEqual(firstResponse?.players.first?.communityTags, [
+            StatsBridgeCommunityTag(source: "seraph", label: "blacklist"),
             StatsBridgeCommunityTag(source: "urchin", label: "watchlist")
         ])
         XCTAssertEqual(transport.requestCount, 3)
@@ -185,6 +199,58 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(CompanionPaths.applicationSupportDirectory.lastPathComponent, "HypixelLegitils")
         XCTAssertEqual(CompanionPaths.configurationURL.lastPathComponent, "config.json")
         XCTAssertEqual(CompanionPaths.runtimeStatusURL.lastPathComponent, "runtime-status.json")
+        XCTAssertEqual(CompanionPaths.hypixelStatsCacheURL.lastPathComponent, "hypixel-stats-cache.json")
+    }
+
+    func testHypixelStatsCachePersistsNormalizedValuesForTwentyFourHours() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("hypixel-stats-cache.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var current = Date(timeIntervalSince1970: 1_700_000_000)
+        let stats = StatsProviderLookup.HypixelStats(stars: 120, finalKillDeathRatio: 3.5, modeWinStreak: 7)
+
+        HypixelStatsCache(url: url, now: { current }).store(stats, for: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        XCTAssertEqual(
+            HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            stats
+        )
+
+        current = current.addingTimeInterval(HypixelStatsCache.lifetime + 1)
+        XCTAssertNil(HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+    }
+
+    func testProviderLookupUsesFreshPersistentHypixelCacheBeforeNetwork() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
+        cache.store(
+            StatsProviderLookup.HypixelStats(stars: 130, finalKillDeathRatio: 6.5, modeWinStreak: 11),
+            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        let transport = FakeStatsTransport()
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            transport: transport,
+            hypixelCache: cache
+        )
+        let response = expectation(description: "cached response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "persistent_cache_test",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(transport.requestCount, 0)
+        XCTAssertEqual(result?.players.first?.stars, 130)
+        XCTAssertEqual(result?.players.first?.finalKillDeathRatio, 6.5)
+        XCTAssertEqual(result?.players.first?.modeWinStreak, 11)
     }
 
     func testConfigurationStoreReplacesAndReloadsAConfiguration() throws {
@@ -260,6 +326,10 @@ private final class FakeStatsTransport: StatsHTTPTransport {
         case "api.urchin.gg":
             body = Data("""
             {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"watchlist"}]}}
+            """.utf8)
+        case "api.seraph.si":
+            body = Data("""
+            {"success":true,"data":{"blacklist":{"tagged":true}}}
             """.utf8)
         default:
             body = Data("{\"success\":true}".utf8)

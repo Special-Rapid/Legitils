@@ -19,4 +19,8 @@ enum CompanionPaths {
     static var statsBridgeDescriptorURL: URL {
         applicationSupportDirectory.appendingPathComponent("stats-bridge.json")
     }
+
+    static var hypixelStatsCacheURL: URL {
+        applicationSupportDirectory.appendingPathComponent("hypixel-stats-cache.json")
+    }
 }

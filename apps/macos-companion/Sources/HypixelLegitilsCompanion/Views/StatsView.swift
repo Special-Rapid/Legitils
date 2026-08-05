@@ -36,7 +36,7 @@ struct StatsView: View {
                 .foregroundStyle(.secondary)
             Text(store.statsBridgeStatus)
                 .foregroundStyle(.secondary)
-            Text("MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。Statsの外部取得は次の段階で接続します。")
+            Text("MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。Hypixelの正規化済みStatsだけを最大24時間ローカルに保持します。")
                 .foregroundStyle(.secondary)
             Spacer()
         }
