@@ -80,6 +80,22 @@ public final class StatsPresentation {
         return Collections.unmodifiableList(lines);
     }
 
+    /** A chatter explicitly made their visible name available, so show their returned values even below Target thresholds. */
+    public static List<String> pregameChatLines(StatsBridgeLookupResult result) {
+        if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
+        List<String> lines = new ArrayList<String>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) continue;
+            if (player.stars != null || player.finalKillDeathRatio != null || player.modeWinStreak != null) {
+                lines.add("§bPregame stats§7: §f" + new Profile(player, Tier.NONE).chatSummary());
+            }
+            for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
+                lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);
+            }
+        }
+        return Collections.unmodifiableList(lines);
+    }
+
     public static final class Profile {
         public final StatsBridgePlayerResult player;
         public final Tier tier;

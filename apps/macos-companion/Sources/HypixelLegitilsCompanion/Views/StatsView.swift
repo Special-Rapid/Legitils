@@ -28,7 +28,7 @@ struct StatsView: View {
                     Toggle("Target Player とタグをchat表示", isOn: store.statsBinding(\.chat))
                     Button("表示設定を保存") { store.saveSettings() }
                     Text("Target Player: Stars ≥ 100、FKDR ≥ 1、または mode WS ≥ 3")
-                    Text("Target Player は試合開始時のChatに上限なしで表示し、コミュニティタグはTabとChatに表示します。")
+                    Text("Target Player は試合開始時のChatに上限なしで表示します。pregameで発言した実在プロフィールは、Target条件にかかわらずStatsをChat表示します。コミュニティタグはTabとChatに表示します。")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

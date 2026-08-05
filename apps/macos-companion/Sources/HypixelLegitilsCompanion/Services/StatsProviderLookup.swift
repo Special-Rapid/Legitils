@@ -62,10 +62,43 @@ final class StatsProviderLookup {
         let records = Dictionary(uniqueKeysWithValues: roster.players.map { player in
             (player.name.lowercased(), MutablePlayer(name: player.name, uuid: player.uuid))
         })
-        let known = roster.players.compactMap { player -> StatsBridgeRosterMember? in
+        var knownByName = Dictionary(uniqueKeysWithValues: roster.players.compactMap { player -> (String, StatsBridgeRosterMember)? in
             guard let uuid = player.uuid else { return nil }
-            return StatsBridgeRosterMember(name: player.name, uuid: uuid.lowercased())
+            return (player.name.lowercased(), StatsBridgeRosterMember(name: player.name, uuid: uuid.lowercased()))
+        })
+        let resolveGroup = DispatchGroup()
+        for player in roster.players where player.uuid == nil {
+            resolveGroup.enter()
+            transport.load(Self.mojangProfileRequest(name: player.name)) { result in
+                self.queue.async {
+                    defer { resolveGroup.leave() }
+                    guard case let .success((data, response)) = result, response.statusCode == 200,
+                          let uuid = Self.parseMojangProfileUUID(data) else { return }
+                    let resolved = StatsBridgeRosterMember(name: player.name, uuid: uuid)
+                    guard resolved.isValid else { return }
+                    knownByName[player.name.lowercased()] = resolved
+                    records[player.name.lowercased()]?.resolve(uuid: uuid)
+                }
+            }
         }
+        resolveGroup.notify(queue: queue) {
+            self.fetchProviderData(
+                roster,
+                records: records,
+                known: Array(knownByName.values),
+                completion: completion
+            )
+        }
+    }
+
+    /// A visible pregame chatter can be queried only when their current chat name resolves to a real profile.
+    /// A failed lookup is deliberately treated as unavailable, not as a recovered Nick identity.
+    private func fetchProviderData(
+        _ roster: StatsBridgeRosterRequest,
+        records: [String: MutablePlayer],
+        known: [StatsBridgeRosterMember],
+        completion: @escaping (StatsBridgeRosterResponse) -> Void
+    ) {
         guard !known.isEmpty else {
             finish(matchID: roster.matchID, records: records, completion: completion)
             return
@@ -166,7 +199,7 @@ extension StatsProviderLookup {
 
     final class MutablePlayer {
         let name: String
-        let uuid: String?
+        private var resolvedUUID: String?
         var stars: Int?
         var finalKillDeathRatio: Double?
         var modeWinStreak: Int?
@@ -174,7 +207,11 @@ extension StatsProviderLookup {
 
         init(name: String, uuid: String?) {
             self.name = name
-            self.uuid = uuid
+            self.resolvedUUID = uuid
+        }
+
+        func resolve(uuid: String) {
+            resolvedUUID = uuid
         }
 
         func apply(_ stats: HypixelStats) {
@@ -194,9 +231,8 @@ extension StatsProviderLookup {
                 .prefix(8)
             return StatsBridgePlayerResult(
                 name: name,
-                // Absence of a UUID alone is not proof of a Nick. The MOD will later pass
-                // an explicit pregame Nick-status result through a separate, identity-safe flow.
-                nickStatus: uuid == nil ? .unavailable : .known,
+                // A failed name lookup is not proof of a Nick and never produces an identity mapping.
+                nickStatus: resolvedUUID == nil ? .unavailable : .known,
                 stars: stars,
                 finalKillDeathRatio: finalKillDeathRatio,
                 modeWinStreak: modeWinStreak,
@@ -211,6 +247,13 @@ extension StatsProviderLookup {
         var request = URLRequest(url: components.url!)
         request.timeoutInterval = responseTimeout
         request.setValue(apiKey, forHTTPHeaderField: "ApiKey")
+        return request
+    }
+
+    static func mojangProfileRequest(name: String) -> URLRequest {
+        let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        var request = URLRequest(url: URL(string: "https://api.mojang.com/users/profiles/minecraft/\(encodedName)")!)
+        request.timeoutInterval = responseTimeout
         return request
     }
 
@@ -248,6 +291,13 @@ extension StatsProviderLookup {
             ratio = nil
         }
         return HypixelStats(stars: stars, finalKillDeathRatio: ratio, modeWinStreak: modeWinStreak)
+    }
+
+    static func parseMojangProfileUUID(_ data: Data) -> String? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let uuid = root["id"] as? String else { return nil }
+        let identity = StatsBridgeRosterMember(name: "Player", uuid: uuid.lowercased())
+        return identity.isValid ? uuid.lowercased() : nil
     }
 
     static func parseUrchinTags(_ data: Data) -> [String: [String]] {

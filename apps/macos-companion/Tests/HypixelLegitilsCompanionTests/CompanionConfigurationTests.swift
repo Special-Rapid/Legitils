@@ -142,6 +142,10 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(hypixel.value(forHTTPHeaderField: "ApiKey"), "hypixel-secret")
         XCTAssertFalse(hypixel.url?.absoluteString.contains("hypixel-secret") == true)
 
+        let mojang = StatsProviderLookup.mojangProfileRequest(name: "Player_1")
+        XCTAssertEqual(mojang.url?.absoluteString, "https://api.mojang.com/users/profiles/minecraft/Player_1")
+        XCTAssertNil(mojang.value(forHTTPHeaderField: "ApiKey"))
+
         let urchin = StatsProviderLookup.urchinRequest(uuids: ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], apiKey: "urchin-secret")
         XCTAssertEqual(urchin.url?.host, "api.urchin.gg")
         XCTAssertEqual(urchin.httpMethod, "POST")
@@ -222,7 +226,11 @@ final class CompanionConfigurationTests: XCTestCase {
     func testProviderLookupUsesFreshPersistentHypixelCacheBeforeNetwork() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
+        let current = Date(timeIntervalSince1970: 1_700_000_000)
+        let cache = HypixelStatsCache(
+            url: directory.appendingPathComponent("hypixel-stats-cache.json"),
+            now: { current }
+        )
         cache.store(
             StatsProviderLookup.HypixelStats(stars: 130, finalKillDeathRatio: 6.5, modeWinStreak: 11),
             for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -251,6 +259,32 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.stars, 130)
         XCTAssertEqual(result?.players.first?.finalKillDeathRatio, 6.5)
         XCTAssertEqual(result?.players.first?.modeWinStreak, 11)
+    }
+
+    func testProviderLookupResolvesVisiblePregameChatterBeforeFetchingStats() {
+        let transport = FakeStatsTransport()
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            transport: transport,
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        )
+        let response = expectation(description: "pregame chatter response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "pregame_PlayerOne",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: nil)]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(transport.requestCount, 2)
+        XCTAssertEqual(result?.players.first?.nickStatus, .known)
+        XCTAssertEqual(result?.players.first?.stars, 100)
     }
 
     func testConfigurationStoreReplacesAndReloadsAConfiguration() throws {
@@ -319,6 +353,8 @@ private final class FakeStatsTransport: StatsHTTPTransport {
         requestCount += 1
         let body: Data
         switch request.url?.host {
+        case "api.mojang.com":
+            body = Data("{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"PlayerOne\"}".utf8)
         case "api.hypixel.net":
             body = Data("""
             {"success":true,"player":{"achievements":{"bedwars_level":100},"stats":{"Bedwars":{"final_kills_bedwars":6,"final_deaths_bedwars":2,"four_four_winstreak":9}}}}

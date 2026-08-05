@@ -4,6 +4,7 @@ import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
+import com.snkisk.hypixellegitils.nick.PregameChatSender;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.block.state.IBlockState;
@@ -43,6 +44,13 @@ public abstract class MixinNetHandlerPlayClient {
         }
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {
             hypixelLegitils$observePregameNickChat(minecraft, message);
+            String senderName = PregameChatSender.visibleName(message);
+            if (senderName != null) {
+                HypixelLegitilsBootstrap.onPregameStatsChat(
+                    senderName,
+                    BedwarsPreGameState.mode(minecraft == null ? null : minecraft.theWorld)
+                );
+            }
         }
     }
 

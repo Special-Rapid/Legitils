@@ -79,6 +79,8 @@ public final class HypixelLegitilsBootstrap {
     private static final Queue<PendingPregameNickNotice> PENDING_PREGAME_NICK_NOTICES
         = new ConcurrentLinkedQueue<PendingPregameNickNotice>();
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
+    private static final Set<String> PREGAME_STATS_CHATTERS
+        = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
@@ -344,6 +346,34 @@ public final class HypixelLegitilsBootstrap {
         });
     }
 
+    /**
+     * Looks up one visible pre-game chatter through the local Companion. The Companion first
+     * verifies that the presented name belongs to a public Mojang profile; a failed lookup is
+     * not treated as a Nick and no identity mapping is returned to this MOD.
+     */
+    public static void onPregameStatsChat(String serverPresentedName, BedwarsMode gameMode) {
+        StatsSettings settings = statsSettings;
+        if (!STARTED.get() || !settings.enabled || !settings.chatEnabled || gameMode == null
+            || gameMode == BedwarsMode.UNKNOWN || serverPresentedName == null) return;
+        StatsBridgeRosterMember chatter = new StatsBridgeRosterMember(serverPresentedName, null);
+        if (!chatter.isValid()) return;
+        final StatsBridgeClient client = statsBridgeClient;
+        if (client == null) return;
+        String key = serverPresentedName.toLowerCase(Locale.ROOT);
+        if (PREGAME_STATS_CHATTERS.size() >= 64 || !PREGAME_STATS_CHATTERS.add(key)) return;
+        final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
+        final String requestId = "pregame_" + sessionGeneration + "_" + key;
+        final List<StatsBridgeRosterMember> players = Collections.singletonList(chatter);
+        STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
+            @Override
+            public void run() {
+                if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+                StatsBridgeLookupResult result = client.requestOnce(requestId, gameMode, players, System.currentTimeMillis());
+                publishPregameStatsResult(sessionGeneration, result);
+            }
+        });
+    }
+
     private static void publishStatsBridgeResult(long sessionGeneration, StatsBridgeLookupResult result) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
@@ -351,6 +381,14 @@ public final class HypixelLegitilsBootstrap {
             if (statsSettings.enabled && statsSettings.chatEnabled) {
                 for (String line : StatsPresentation.chatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
             }
+        }
+    }
+
+    /** Pregame chatter results are chat-only, so they cannot replace the later complete match roster. */
+    private static void publishPregameStatsResult(long sessionGeneration, StatsBridgeLookupResult result) {
+        synchronized (STATS_BRIDGE_RESULT_LOCK) {
+            if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration) || !statsSettings.enabled || !statsSettings.chatEnabled) return;
+            for (String line : StatsPresentation.pregameChatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
         }
     }
 
@@ -929,6 +967,7 @@ public final class HypixelLegitilsBootstrap {
         }
         STATS_MATCH_REQUEST_GATE.reset();
         PENDING_STATS_NOTICES.clear();
+        PREGAME_STATS_CHATTERS.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();
         if (active != null) {
