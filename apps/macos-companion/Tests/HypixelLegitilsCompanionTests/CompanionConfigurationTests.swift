@@ -2,13 +2,40 @@ import XCTest
 @testable import HypixelLegitilsCompanion
 
 final class CompanionConfigurationTests: XCTestCase {
-    func testSchemaFourConfigurationRoundTrips() throws {
+    func testCurrentSchemaConfigurationRoundTrips() throws {
         var configuration = CompanionConfiguration.default
         configuration.revision = 7
         configuration.enabledDetectors = [.combatDesync, .airStall]
 
         let data = try JSONEncoder().encode(configuration)
         XCTAssertEqual(try JSONDecoder().decode(CompanionConfiguration.self, from: data), configuration)
+    }
+
+    func testSchemaFourConfigurationAddsDefaultStatsAndNormalizesToCurrentSchema() throws {
+        let configuration = try JSONDecoder().decode(CompanionConfiguration.self, from: schemaFourFixture)
+
+        XCTAssertEqual(configuration.schemaVersion, CompanionConfiguration.schemaVersion)
+        XCTAssertEqual(configuration.revision, 13)
+        XCTAssertEqual(configuration.enabledDetectors, [.noBreakDelay])
+        XCTAssertEqual(configuration.stats, CompanionConfiguration.defaultStats)
+    }
+
+    func testSchemaFourConfigurationWritesSchemaFiveAfterSaving() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("config.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try schemaFourFixture.write(to: url)
+
+        let store = ConfigurationStore()
+        let loaded = try store.load(at: url)
+        let saved = try store.replace(loaded, expectedRevision: 13, to: url)
+        let storedJSON = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+
+        XCTAssertEqual(saved.schemaVersion, CompanionConfiguration.schemaVersion)
+        XCTAssertEqual(saved.revision, 14)
+        XCTAssertNotNil(storedJSON?["stats"])
+        XCTAssertEqual(storedJSON?["schemaVersion"] as? Int, CompanionConfiguration.schemaVersion)
     }
 
     func testBridgeDescriptorRejectsExpiredOrWrongSchemaValues() {
@@ -191,6 +218,21 @@ final class CompanionConfigurationTests: XCTestCase {
         }
     }
 }
+
+private let schemaFourFixture = Data("""
+{
+  "schemaVersion": 4,
+  "revision": 13,
+  "enabledDetectors": ["NO_BREAK_DELAY"],
+  "sensitivity": "balanced",
+  "notifications": {"chat": true, "overlay": true, "sound": true},
+  "cooldowns": {"normalMillis": 1000, "airStallMillis": 30000},
+  "debug": false,
+  "markers": {"enabled": true, "threshold": 2},
+  "nickDetection": {"enabled": true},
+  "partyDetection": {"enabled": true}
+}
+""".utf8)
 
 private struct FakeStatsKeyStore: StatsProviderKeyReading {
     let values: [String: String]

@@ -15,6 +15,46 @@ struct CompanionConfiguration: Codable, Equatable {
     var partyDetection: PartyDetection
     var stats: Stats
 
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case revision
+        case enabledDetectors
+        case sensitivity
+        case notifications
+        case cooldowns
+        case debug
+        case markers
+        case nickDetection
+        case partyDetection
+        case stats
+    }
+
+    init(
+        schemaVersion: Int,
+        revision: Int64,
+        enabledDetectors: [DetectorID],
+        sensitivity: Sensitivity,
+        notifications: Notifications,
+        cooldowns: Cooldowns,
+        debug: Bool,
+        markers: Markers,
+        nickDetection: NickDetection,
+        partyDetection: PartyDetection,
+        stats: Stats
+    ) {
+        self.schemaVersion = schemaVersion
+        self.revision = revision
+        self.enabledDetectors = enabledDetectors
+        self.sensitivity = sensitivity
+        self.notifications = notifications
+        self.cooldowns = cooldowns
+        self.debug = debug
+        self.markers = markers
+        self.nickDetection = nickDetection
+        self.partyDetection = partyDetection
+        self.stats = stats
+    }
+
     static let `default` = CompanionConfiguration(
         schemaVersion: schemaVersion,
         revision: 0,
@@ -26,8 +66,39 @@ struct CompanionConfiguration: Codable, Equatable {
         markers: Markers(enabled: true, threshold: 2),
         nickDetection: NickDetection(enabled: true),
         partyDetection: PartyDetection(enabled: true),
-        stats: Stats(enabled: true, tab: true, stars: true, fkdr: true, winStreak: true, chat: true)
+        stats: defaultStats
     )
+
+    static let defaultStats = Stats(
+        enabled: true,
+        tab: true,
+        stars: true,
+        fkdr: true,
+        winStreak: true,
+        chat: true
+    )
+
+    /// Reads the pre-Stats schema 4 format without losing any existing detector settings.
+    /// A later save persists the normalized schema 5 configuration.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let storedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard storedSchemaVersion == 4 || storedSchemaVersion == Self.schemaVersion else {
+            throw ConfigurationStoreError.unsupportedSchema(storedSchemaVersion)
+        }
+
+        schemaVersion = Self.schemaVersion
+        revision = try container.decode(Int64.self, forKey: .revision)
+        enabledDetectors = try container.decode([DetectorID].self, forKey: .enabledDetectors)
+        sensitivity = try container.decode(Sensitivity.self, forKey: .sensitivity)
+        notifications = try container.decode(Notifications.self, forKey: .notifications)
+        cooldowns = try container.decode(Cooldowns.self, forKey: .cooldowns)
+        debug = try container.decode(Bool.self, forKey: .debug)
+        markers = try container.decode(Markers.self, forKey: .markers)
+        nickDetection = try container.decode(NickDetection.self, forKey: .nickDetection)
+        partyDetection = try container.decode(PartyDetection.self, forKey: .partyDetection)
+        stats = try container.decodeIfPresent(Stats.self, forKey: .stats) ?? Self.defaultStats
+    }
 
     enum DetectorID: String, Codable, CaseIterable, Identifiable {
         case autoBlock = "AUTO_BLOCK"
