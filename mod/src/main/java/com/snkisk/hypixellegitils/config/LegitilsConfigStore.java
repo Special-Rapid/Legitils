@@ -6,6 +6,10 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -14,7 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Strict reader and atomic writer for local configuration; runtime only reads it at startup. */
+/** Strict reader and atomic writer for the local configuration. */
 public final class LegitilsConfigStore {
     public ConfigLoadResult load(Path path) {
         if (!Files.isRegularFile(path)) {
@@ -32,16 +36,34 @@ public final class LegitilsConfigStore {
         Path parent = path.getParent();
         if (parent == null) throw new IOException("Configuration path requires a parent directory");
         Files.createDirectories(parent);
-        Path temporary = parent.resolve(path.getFileName().toString() + ".tmp-" + UUID.randomUUID().toString());
-        try {
-            Files.write(temporary, toJson(config).getBytes(StandardCharsets.UTF_8));
-            try {
-                Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException ignored) {
-                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            Files.deleteIfExists(temporary);
+        try (FileChannel lockChannel = FileChannel.open(lockPath(path), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = lockChannel.lock()) {
+            writeRawAtomically(path, toJson(config));
+        }
+    }
+
+    /** Compare-and-replace under the shared config lock used by the Companion. */
+    public void writeIfUnchangedAtomically(Path path, LegitilsConfig expected, LegitilsConfig replacement) throws IOException {
+        Path parent = path.getParent();
+        if (parent == null) throw new IOException("Configuration path requires a parent directory");
+        if (expected == null || replacement == null) throw new IllegalArgumentException("Expected and replacement configuration are required");
+        Files.createDirectories(parent);
+        try (FileChannel lockChannel = FileChannel.open(lockPath(path), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = lockChannel.lock()) {
+            ensureExpectedConfiguration(path, expected);
+            writeRawAtomically(path, toJson(replacement));
+        }
+    }
+
+    /** Verifies a no-op command still observes the current on-disk revision under the shared lock. */
+    public void ensureUnchanged(Path path, LegitilsConfig expected) throws IOException {
+        Path parent = path.getParent();
+        if (parent == null) throw new IOException("Configuration path requires a parent directory");
+        if (expected == null) throw new IllegalArgumentException("Expected configuration is required");
+        Files.createDirectories(parent);
+        try (FileChannel lockChannel = FileChannel.open(lockPath(path), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             FileLock ignored = lockChannel.lock()) {
+            ensureExpectedConfiguration(path, expected);
         }
     }
 
@@ -68,6 +90,24 @@ public final class LegitilsConfigStore {
             }
         } finally {
             Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static Path lockPath(Path configPath) {
+        String normalized = configPath.toAbsolutePath().normalize().toString();
+        return Paths.get("/tmp", "hypixellegitils-config-" + Integer.toHexString(normalized.hashCode()) + ".lock");
+    }
+
+    private boolean sameConfig(LegitilsConfig left, LegitilsConfig right) {
+        return toJson(left).equals(toJson(right));
+    }
+
+    private void ensureExpectedConfiguration(Path path, LegitilsConfig expected) throws ConfigChangedException {
+        ConfigLoadResult current = load(path);
+        if (current.usedDefaults) {
+            if (Files.isRegularFile(path) || expected.revision != 0L) throw new ConfigChangedException();
+        } else if (!sameConfig(current.config, expected)) {
+            throw new ConfigChangedException();
         }
     }
 
@@ -237,5 +277,11 @@ public final class LegitilsConfigStore {
     private static boolean booleanValue(Object value, String name) {
         if (!(value instanceof Boolean)) throw new IllegalArgumentException(name + " must be a boolean");
         return ((Boolean) value).booleanValue();
+    }
+
+    public static final class ConfigChangedException extends IOException {
+        ConfigChangedException() {
+            super("Configuration changed or is invalid on disk");
+        }
     }
 }

@@ -32,17 +32,34 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(CompanionPaths.runtimeStatusURL.lastPathComponent, "runtime-status.json")
     }
 
-    func testConfigurationStoreWritesAndReloadsAFirstConfiguration() throws {
+    func testConfigurationStoreReplacesAndReloadsAConfiguration() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("config.json")
         defer { try? FileManager.default.removeItem(at: directory) }
 
         var expected = CompanionConfiguration.default
-        expected.revision = 3
         expected.enabledDetectors = [.noBreakDelay]
         let store = ConfigurationStore()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(CompanionConfiguration.default).write(to: url)
 
-        try store.write(expected, to: url)
+        let saved = try store.replace(expected, expectedRevision: 0, to: url)
+        expected.revision = 1
+        XCTAssertEqual(saved, expected)
         XCTAssertEqual(try store.load(at: url), expected)
+    }
+
+    func testConfigurationStoreRejectsAStaleRevision() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("config.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var current = CompanionConfiguration.default
+        current.revision = 4
+        try JSONEncoder().encode(current).write(to: url)
+
+        XCTAssertThrowsError(try ConfigurationStore().replace(CompanionConfiguration.default, expectedRevision: 3, to: url)) { error in
+            XCTAssertEqual(error as? ConfigurationStoreError, .revisionConflict)
+        }
     }
 }

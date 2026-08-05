@@ -91,10 +91,16 @@ public final class DetectorSettingsService {
     }
 
     private Update persist(LegitilsConfig updated, boolean changed) throws IOException {
-        verifyUnchangedOnDisk();
-        if (!changed) return new Update(savedConfig, false);
-        if (savedConfig.revision == Long.MAX_VALUE) throw new IOException("Configuration revision cannot be increased");
-        store.writeAtomically(configPath, updated);
+        try {
+            if (!changed) {
+                store.ensureUnchanged(configPath, savedConfig);
+                return new Update(savedConfig, false);
+            }
+            if (savedConfig.revision == Long.MAX_VALUE) throw new IOException("Configuration revision cannot be increased");
+            store.writeIfUnchangedAtomically(configPath, savedConfig, updated);
+        } catch (LegitilsConfigStore.ConfigChangedException exception) {
+            throw new ConfigWriteRefusedException();
+        }
         savedConfig = updated;
         return new Update(updated, true);
     }
@@ -160,33 +166,6 @@ public final class DetectorSettingsService {
     private long nextRevision() throws IOException {
         if (savedConfig.revision == Long.MAX_VALUE) throw new IOException("Configuration revision cannot be increased");
         return savedConfig.revision + 1L;
-    }
-
-    private void verifyUnchangedOnDisk() throws ConfigWriteRefusedException {
-        if (!Files.isRegularFile(configPath)) {
-            if (savedConfig.revision == 0L) return;
-            throw new ConfigWriteRefusedException();
-        }
-        ConfigLoadResult latest = store.load(configPath);
-        if (latest.usedDefaults || !sameConfig(latest.config, savedConfig)) {
-            throw new ConfigWriteRefusedException();
-        }
-    }
-
-    private static boolean sameConfig(LegitilsConfig left, LegitilsConfig right) {
-        return left.schemaVersion == right.schemaVersion
-            && left.revision == right.revision
-            && left.enabledDetectors.equals(right.enabledDetectors)
-            && left.sensitivity == right.sensitivity
-            && left.notifications.chatEnabled == right.notifications.chatEnabled
-            && left.notifications.overlayEnabled == right.notifications.overlayEnabled
-            && left.notifications.soundEnabled == right.notifications.soundEnabled
-            && left.normalCooldownMillis == right.normalCooldownMillis
-            && left.airStallCooldownMillis == right.airStallCooldownMillis
-            && left.debugEnabled == right.debugEnabled
-            && left.markerSettings.sameAs(right.markerSettings)
-            && left.nickDetectionSettings.sameAs(right.nickDetectionSettings)
-            && left.partyDetectionSettings.sameAs(right.partyDetectionSettings);
     }
 
     private EnumSet<DetectorId> copyEnabledDetectors() {
