@@ -81,6 +81,72 @@ final class CompanionConfigurationTests: XCTestCase {
         server.stop()
     }
 
+    func testProviderNormalizersReturnOnlyDisplaySafeStatsAndTags() throws {
+        let hypixel = Data("""
+        {"success":true,"player":{"achievements":{"bedwars_level":120},"stats":{"Bedwars":{"final_kills_bedwars":44,"final_deaths_bedwars":11}}}}
+        """.utf8)
+        let stats = StatsProviderLookup.parseHypixelStats(hypixel)
+        XCTAssertEqual(stats?.stars, 120)
+        XCTAssertEqual(stats?.finalKillDeathRatio, 4)
+
+        let urchin = Data("""
+        {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"cheating","reason":"not returned"},{"tag_type":"  ","reason":"ignored"}]}}
+        """.utf8)
+        XCTAssertEqual(StatsProviderLookup.parseUrchinTags(urchin), [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": ["cheating"]
+        ])
+    }
+
+    func testProviderRequestsUseFixedHostsAndKeepSecretsOutOfPayloads() throws {
+        let hypixel = StatsProviderLookup.hypixelRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", apiKey: "hypixel-secret")
+        XCTAssertEqual(hypixel.url?.host, "api.hypixel.net")
+        XCTAssertEqual(hypixel.value(forHTTPHeaderField: "ApiKey"), "hypixel-secret")
+        XCTAssertFalse(hypixel.url?.absoluteString.contains("hypixel-secret") == true)
+
+        let urchin = StatsProviderLookup.urchinRequest(uuids: ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], apiKey: "urchin-secret")
+        XCTAssertEqual(urchin.url?.host, "api.urchin.gg")
+        XCTAssertEqual(urchin.value(forHTTPHeaderField: "X-API-Key"), "urchin-secret")
+        XCTAssertFalse(String(data: urchin.httpBody ?? Data(), encoding: .utf8)?.contains("urchin-secret") == true)
+
+        let seraph = StatsProviderLookup.seraphRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        XCTAssertEqual(seraph.url?.host, "stash.seraph.si")
+        XCTAssertNil(seraph.value(forHTTPHeaderField: "Authorization"))
+    }
+
+    func testProviderLookupCachesOneNormalizedResultPerMatch() throws {
+        let transport = FakeStatsTransport()
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([
+                StatsProvider.hypixel.keychainAccount: "hypixel-secret",
+                StatsProvider.urchin.keychainAccount: "urchin-secret"
+            ]),
+            transport: transport
+        )
+        let roster = StatsBridgeRosterRequest(
+            schemaVersion: 1,
+            matchID: "match_cache_test",
+            players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+        )
+        let first = expectation(description: "first response")
+        var firstResponse: StatsBridgeRosterResponse?
+        lookup.lookup(roster) {
+            firstResponse = $0
+            first.fulfill()
+        }
+        wait(for: [first], timeout: 2)
+        XCTAssertEqual(firstResponse?.availability, .ready)
+        XCTAssertEqual(firstResponse?.players.first?.stars, 100)
+        XCTAssertEqual(firstResponse?.players.first?.communityTags, [
+            StatsBridgeCommunityTag(source: "urchin", label: "watchlist")
+        ])
+        XCTAssertEqual(transport.requestCount, 3)
+
+        let second = expectation(description: "cached response")
+        lookup.lookup(roster) { _ in second.fulfill() }
+        wait(for: [second], timeout: 2)
+        XCTAssertEqual(transport.requestCount, 3)
+    }
+
     func testCompanionUsesTheSameApplicationSupportDirectoryAsTheMod() {
         XCTAssertEqual(CompanionPaths.applicationSupportDirectory.lastPathComponent, "HypixelLegitils")
         XCTAssertEqual(CompanionPaths.configurationURL.lastPathComponent, "config.json")
@@ -116,5 +182,44 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try ConfigurationStore().replace(CompanionConfiguration.default, expectedRevision: 3, to: url)) { error in
             XCTAssertEqual(error as? ConfigurationStoreError, .revisionConflict)
         }
+    }
+}
+
+private struct FakeStatsKeyStore: StatsProviderKeyReading {
+    let values: [String: String]
+
+    init(_ values: [String: String]) {
+        self.values = values
+    }
+
+    func readSecret(account: String) throws -> String? {
+        values[account]
+    }
+}
+
+private final class FakeStatsTransport: StatsHTTPTransport {
+    private(set) var requestCount = 0
+
+    func load(_ request: URLRequest, completion: @escaping (Result<(Data, HTTPURLResponse), Error>) -> Void) {
+        requestCount += 1
+        let body: Data
+        switch request.url?.host {
+        case "api.hypixel.net":
+            body = Data("""
+            {"success":true,"player":{"achievements":{"bedwars_level":100},"stats":{"Bedwars":{"final_kills_bedwars":6,"final_deaths_bedwars":2}}}}
+            """.utf8)
+        case "api.urchin.gg":
+            body = Data("""
+            {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"watchlist"}]}}
+            """.utf8)
+        default:
+            body = Data("{\"success\":true}".utf8)
+        }
+        completion(.success((body, HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!)))
     }
 }

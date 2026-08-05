@@ -12,6 +12,10 @@ enum KeychainStoreError: LocalizedError {
     }
 }
 
+protocol StatsProviderKeyReading {
+    func readSecret(account: String) throws -> String?
+}
+
 struct KeychainStore {
     private let service = "com.snkisk.hypixellegitils.companion"
 
@@ -41,6 +45,27 @@ struct KeychainStore {
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
+    /// This value is intentionally scoped to the Companion process. Callers must never
+    /// put it in configuration, bridge responses, logs, or observable UI state.
+    func readSecret(account: String) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let secret = String(data: data, encoding: .utf8) else {
+            throw KeychainStoreError.operationFailed(status)
+        }
+        return secret
+    }
+
     func remove(account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -53,3 +78,5 @@ struct KeychainStore {
         }
     }
 }
+
+extension KeychainStore: StatsProviderKeyReading {}

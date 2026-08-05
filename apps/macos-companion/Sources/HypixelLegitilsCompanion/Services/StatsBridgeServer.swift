@@ -21,7 +21,7 @@ enum StatsBridgeServerError: LocalizedError {
 
 /// Small loopback-only HTTP boundary. It accepts one normalized roster request shape and never exposes keys or provider payloads.
 final class StatsBridgeServer {
-    typealias RosterLookup = (StatsBridgeRosterRequest) -> StatsBridgeRosterResponse
+    typealias RosterLookup = (StatsBridgeRosterRequest, @escaping (StatsBridgeRosterResponse) -> Void) -> Void
 
     private static let descriptorLifetime: TimeInterval = 6 * 60
     private static let descriptorRefreshInterval: TimeInterval = 4 * 60
@@ -37,7 +37,7 @@ final class StatsBridgeServer {
 
     init(
         descriptorURL: URL = CompanionPaths.statsBridgeDescriptorURL,
-        lookup: @escaping RosterLookup = { _ in .unavailable() }
+        lookup: @escaping RosterLookup = { _, completion in completion(.unavailable()) }
     ) {
         self.descriptorURL = descriptorURL
         self.lookup = lookup
@@ -208,12 +208,15 @@ final class StatsBridgeServer {
             send(status: 400, body: Data(), on: connection)
             return
         }
-        let response = lookup(roster)
-        guard let body = try? JSONEncoder().encode(response) else {
-            send(status: 500, body: Data(), on: connection)
-            return
+        lookup(roster) { [weak self] response in
+            self?.queue.async {
+                guard let body = try? JSONEncoder().encode(response) else {
+                    self?.send(status: 500, body: Data(), on: connection)
+                    return
+                }
+                self?.send(status: 200, body: body, on: connection)
+            }
         }
-        send(status: 200, body: body, on: connection)
     }
 
     private func send(status: Int, body: Data, on connection: NWConnection) {

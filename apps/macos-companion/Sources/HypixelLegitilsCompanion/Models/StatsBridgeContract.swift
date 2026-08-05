@@ -26,6 +26,7 @@ struct StatsBridgeRosterRequest: Codable, Equatable {
             && !players.isEmpty
             && players.count <= Self.maximumMembers
             && players.allSatisfy(\.isValid)
+            && Set(players.map { $0.name.lowercased() }).count == players.count
     }
 }
 

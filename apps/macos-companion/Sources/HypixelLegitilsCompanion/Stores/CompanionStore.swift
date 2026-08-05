@@ -13,9 +13,19 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var hasUrchinKey = false
     @Published private(set) var hasSeraphKey = false
 
-    private let configurationStore = ConfigurationStore()
-    private let keychainStore = KeychainStore()
-    private let statsBridgeServer = StatsBridgeServer()
+    private let configurationStore: ConfigurationStore
+    private let keychainStore: KeychainStore
+    private let statsProviderLookup: StatsProviderLookup
+    private let statsBridgeServer: StatsBridgeServer
+
+    init() {
+        let keychainStore = KeychainStore()
+        self.configurationStore = ConfigurationStore()
+        self.keychainStore = keychainStore
+        let lookup = StatsProviderLookup(keychainStore: keychainStore)
+        self.statsProviderLookup = lookup
+        self.statsBridgeServer = StatsBridgeServer(lookup: lookup.lookup)
+    }
 
     func refresh() {
         runtimeStatus = configurationStore.loadRuntimeStatus()
