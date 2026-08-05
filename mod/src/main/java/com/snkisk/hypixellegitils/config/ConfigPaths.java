@@ -21,6 +21,10 @@ public final class ConfigPaths {
         return applicationSupportDirectory(userHome).resolve("runtime-status.json");
     }
 
+    public static Path statsBridgeDescriptorPath(String userHome) {
+        return applicationSupportDirectory(userHome).resolve("stats-bridge.json");
+    }
+
     public static Path markerHistoryPath(String userHome) {
         return applicationSupportDirectory(userHome).resolve("marker-history.json");
     }

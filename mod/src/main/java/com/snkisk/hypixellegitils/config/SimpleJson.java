@@ -6,11 +6,11 @@ import java.util.List;
 import java.util.Map;
 
 /** Small dependency-free JSON codec for the versioned local configuration files. */
-final class SimpleJson {
+public final class SimpleJson {
     private SimpleJson() {
     }
 
-    static Object parse(String source) {
+    public static Object parse(String source) {
         Parser parser = new Parser(source);
         Object value = parser.value();
         parser.whitespace();
@@ -20,7 +20,7 @@ final class SimpleJson {
         return value;
     }
 
-    static String write(Object value) {
+    public static String write(Object value) {
         StringBuilder output = new StringBuilder();
         append(output, value);
         return output.toString();
