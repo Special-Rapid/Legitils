@@ -54,6 +54,9 @@ public final class HypixelLegitilsBootstrap {
     private static volatile boolean developerSelfDetectionEnabled;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
+    private static final long EXTERNAL_CONFIG_POLL_INTERVAL_MILLIS = 500L;
+    private static volatile long nextExternalConfigPollMillis;
+    private static volatile String runtimeStatusUserHome;
     private static final MojangProfileResolver PROFILE_RESOLVER = new MojangProfileResolver();
     private static final Queue<PendingBlacklistOperation> PENDING_BLACKLIST_OPERATIONS
         = new ConcurrentLinkedQueue<PendingBlacklistOperation>();
@@ -108,6 +111,7 @@ public final class HypixelLegitilsBootstrap {
                 }
             );
             detectorSettings = new DetectorSettingsService(store, configPath, loaded.config);
+            runtimeStatusUserHome = userHome;
             nickDetectionEnabled = loaded.config.nickDetectionSettings.enabled;
             partyDetectionEnabled = loaded.config.partyDetectionSettings.enabled;
             developerSelfDetectionEnabled = loaded.config.debugEnabled;
@@ -126,9 +130,37 @@ public final class HypixelLegitilsBootstrap {
     public static AlertPresentation onClientTick(long nowMillis) {
         ObservationCoordinator active = coordinator;
         if (!STARTED.get() || active == null) return null;
+        reloadExternalConfigIfNeeded(nowMillis, active);
         AlertPresentation presentation = active.onClientTick(nowMillis);
         currentPresentation = presentation;
         return presentation;
+    }
+
+    private static void reloadExternalConfigIfNeeded(long nowMillis, ObservationCoordinator active) {
+        if (nowMillis < nextExternalConfigPollMillis) return;
+        nextExternalConfigPollMillis = nowMillis + EXTERNAL_CONFIG_POLL_INTERVAL_MILLIS;
+        DetectorSettingsService settings = detectorSettings;
+        if (settings == null) return;
+        DetectorSettingsService.ExternalReload reload = settings.reloadFromDiskIfNewer();
+        if (!reload.applied || reload.config == null) return;
+        active.applyRuntimeExternalConfig(reload.config);
+        nickDetectionEnabled = reload.config.nickDetectionSettings.enabled;
+        partyDetectionEnabled = reload.config.partyDetectionSettings.enabled;
+        developerSelfDetectionEnabled = reload.config.debugEnabled;
+        if (!nickDetectionEnabled) {
+            NICKED_SESSION_PLAYER_IDS.clear();
+            PREGAME_NICK_CHATTERS.clear();
+        }
+        if (!partyDetectionEnabled) resetPartyDetectors();
+        try {
+            String userHome = runtimeStatusUserHome == null ? System.getProperty("user.home", ".") : runtimeStatusUserHome;
+            new LegitilsConfigStore().writeRuntimeStatusAtomically(
+                ConfigPaths.runtimeStatusPath(userHome),
+                new RuntimeStatus(BuildInfo.displayVersion(), reload.config.revision, false)
+            );
+        } catch (Exception exception) {
+            System.err.println("[HypixelLegitils] Runtime status unavailable: " + exception.getClass().getSimpleName());
+        }
     }
 
     /** Receives only the actor name parsed from a server Bed-destruction announcement. */

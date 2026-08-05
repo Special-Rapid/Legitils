@@ -191,4 +191,36 @@ public class DetectorSettingsServiceTest {
             Files.deleteIfExists(directory);
         }
     }
+
+    @Test
+    public void acceptsOnlyNewerExternalConfigurationAndKeepsKnownGoodStateOnInvalidInput() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-external-config-reload-test");
+        Path path = directory.resolve("config.json");
+        try {
+            LegitilsConfigStore store = new LegitilsConfigStore();
+            LegitilsConfig startup = LegitilsConfig.defaults();
+            DetectorSettingsService service = new DetectorSettingsService(store, path, startup);
+            LegitilsConfig external = new LegitilsConfig(
+                LegitilsConfig.SCHEMA_VERSION, 1L, java.util.EnumSet.of(DetectorId.NO_BREAK_DELAY), startup.sensitivity,
+                startup.notifications, startup.normalCooldownMillis, startup.airStallCooldownMillis,
+                startup.debugEnabled, startup.markerSettings, startup.nickDetectionSettings, startup.partyDetectionSettings
+            );
+            store.writeAtomically(path, external);
+
+            DetectorSettingsService.ExternalReload applied = service.reloadFromDiskIfNewer();
+            assertTrue(applied.applied);
+            assertTrue(applied.config.isDetectorEnabled(DetectorId.NO_BREAK_DELAY));
+            assertEquals(1L, service.savedConfig().revision);
+            assertFalse(service.reloadFromDiskIfNewer().applied);
+
+            Files.write(path, "{invalid".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            DetectorSettingsService.ExternalReload invalid = service.reloadFromDiskIfNewer();
+            assertFalse(invalid.applied);
+            assertTrue(invalid.invalidOrMissing);
+            assertEquals(1L, service.savedConfig().revision);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
 }

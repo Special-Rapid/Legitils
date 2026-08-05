@@ -165,6 +165,36 @@ public final class ObservationCoordinator {
         ((LocalAlertSink) alertSink).setNotificationSettings(updated.notifications);
     }
 
+    /**
+     * Applies a complete, revisioned local configuration received from the
+     * Companion. The Companion writes one atomic replacement, so changes may
+     * span detector, notification, marker, and local display settings.
+     */
+    public synchronized void applyRuntimeExternalConfig(LegitilsConfig updated) {
+        if (updated == null) throw new IllegalArgumentException("Runtime configuration is required");
+        if (updated.revision <= config.revision) return;
+        boolean resetTiming = !config.enabledDetectors.equals(updated.enabledDetectors)
+            || config.sensitivity != updated.sensitivity
+            || config.normalCooldownMillis != updated.normalCooldownMillis
+            || config.airStallCooldownMillis != updated.airStallCooldownMillis;
+        boolean notificationChanged = !sameNotifications(config, updated);
+        config = updated;
+        if (notificationChanged) {
+            if (!(alertSink instanceof LocalAlertSink)) {
+                throw new IllegalStateException("Runtime notification update requires LocalAlertSink");
+            }
+            ((LocalAlertSink) alertSink).setNotificationSettings(updated.notifications);
+        }
+        if (resetTiming) {
+            detectionEngine.resetForObservationDiscontinuity();
+            bedNuke.reset();
+            bedNukeAttribution.reset();
+            noBreakDelay.reset();
+        }
+        if (config.markerSettings.enabled) promoteAutoBlacklists(System.currentTimeMillis());
+        if (!config.debugEnabled) developmentSelfPlayerId = null;
+    }
+
     private static boolean sameExceptNotifications(LegitilsConfig left, LegitilsConfig right) {
         return left.sensitivity == right.sensitivity
             && left.enabledDetectors.equals(right.enabledDetectors)

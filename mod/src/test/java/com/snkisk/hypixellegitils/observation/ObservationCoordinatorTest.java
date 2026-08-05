@@ -102,6 +102,33 @@ public class ObservationCoordinatorTest {
     }
 
     @Test
+    public void completeExternalConfigMayChangeMultipleGroupsAtOnce() {
+        LegitilsConfig initial = LegitilsConfig.defaults();
+        LocalAlertSink sink = new LocalAlertSink(initial.notifications);
+        ObservationCoordinator coordinator = new ObservationCoordinator(initial, sink);
+        LegitilsConfig external = new LegitilsConfig(
+            LegitilsConfig.SCHEMA_VERSION,
+            1L,
+            EnumSet.of(DetectorId.NO_BREAK_DELAY),
+            initial.sensitivity,
+            new com.snkisk.hypixellegitils.config.NotificationSettings(true, true, false),
+            initial.normalCooldownMillis,
+            initial.airStallCooldownMillis,
+            true,
+            new MarkerSettings(false, initial.markerSettings.threshold),
+            new com.snkisk.hypixellegitils.config.NickDetectionSettings(false),
+            new com.snkisk.hypixellegitils.config.PartyDetectionSettings(false)
+        );
+
+        coordinator.applyRuntimeExternalConfig(external);
+        assertTrue(coordinator.statusText().contains("1/8"));
+        UUID player = UUID.randomUUID();
+        coordinator.observePlayer(player, 0L);
+        coordinator.submit(new Evidence(DetectorId.NO_BREAK_DELAY, player, Confidence.HIGH, 0L, "test"), 0L, true);
+        assertTrue(sink.presentation(1L).actionBarText != null);
+    }
+
+    @Test
     public void developmentSettingKeepsLaterRuntimeSettingsApplicable() {
         LegitilsConfig config = noSlowEnabledConfig();
         ObservationCoordinator coordinator = new ObservationCoordinator(config, new LocalAlertSink(config.notifications));

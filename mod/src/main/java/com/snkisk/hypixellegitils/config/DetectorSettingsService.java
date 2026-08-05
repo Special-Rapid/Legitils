@@ -77,6 +77,19 @@ public final class DetectorSettingsService {
         return persist(changed ? updatedWithDebugEnabled(enabled) : savedConfig, changed);
     }
 
+    /**
+     * Accepts an atomically replaced configuration created by the local
+     * Companion only when it advances the persisted revision. Invalid files
+     * and stale revisions leave the known-good running configuration intact.
+     */
+    public synchronized ExternalReload reloadFromDiskIfNewer() {
+        ConfigLoadResult loaded = store.load(configPath);
+        if (loaded.usedDefaults) return ExternalReload.invalidOrMissing();
+        if (loaded.config.revision <= savedConfig.revision) return ExternalReload.unchanged();
+        savedConfig = loaded.config;
+        return ExternalReload.applied(loaded.config);
+    }
+
     private Update persist(LegitilsConfig updated, boolean changed) throws IOException {
         verifyUnchangedOnDisk();
         if (!changed) return new Update(savedConfig, false);
@@ -195,6 +208,30 @@ public final class DetectorSettingsService {
         Update(LegitilsConfig config, boolean changed) {
             this.config = config;
             this.changed = changed;
+        }
+    }
+
+    public static final class ExternalReload {
+        public final LegitilsConfig config;
+        public final boolean applied;
+        public final boolean invalidOrMissing;
+
+        private ExternalReload(LegitilsConfig config, boolean applied, boolean invalidOrMissing) {
+            this.config = config;
+            this.applied = applied;
+            this.invalidOrMissing = invalidOrMissing;
+        }
+
+        static ExternalReload applied(LegitilsConfig config) {
+            return new ExternalReload(config, true, false);
+        }
+
+        static ExternalReload unchanged() {
+            return new ExternalReload(null, false, false);
+        }
+
+        static ExternalReload invalidOrMissing() {
+            return new ExternalReload(null, false, true);
         }
     }
 }
