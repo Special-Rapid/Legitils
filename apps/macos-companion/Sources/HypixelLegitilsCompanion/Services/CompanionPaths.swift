@@ -23,4 +23,11 @@ enum CompanionPaths {
     static var hypixelStatsCacheURL: URL {
         applicationSupportDirectory.appendingPathComponent("hypixel-stats-cache.json")
     }
+
+    /// Deliberately avoids the space in "Application Support": Lunar's JVM-argument field receives a plain argument string.
+    static var loaderRuntimeDirectory: URL {
+        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        return library.appendingPathComponent(productDirectoryName, isDirectory: true)
+            .appendingPathComponent("runtime", isDirectory: true)
+    }
 }

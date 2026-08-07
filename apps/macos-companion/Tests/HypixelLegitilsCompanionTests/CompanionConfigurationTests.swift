@@ -204,6 +204,51 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(CompanionPaths.configurationURL.lastPathComponent, "config.json")
         XCTAssertEqual(CompanionPaths.runtimeStatusURL.lastPathComponent, "runtime-status.json")
         XCTAssertEqual(CompanionPaths.hypixelStatsCacheURL.lastPathComponent, "hypixel-stats-cache.json")
+        XCTAssertEqual(CompanionPaths.loaderRuntimeDirectory.lastPathComponent, "runtime")
+    }
+
+    func testRuntimeInstallerCopiesBundledArtifactsAndGeneratesARealArgument() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundledLoader = root.appendingPathComponent("bundled-loader.jar")
+        let bundledMod = root.appendingPathComponent("bundled-mod.jar")
+        let runtimeDirectory = root.appendingPathComponent("installed/runtime", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("loader".utf8).write(to: bundledLoader)
+        try Data("mod".utf8).write(to: bundledMod)
+
+        let installer = RuntimeInstaller(
+            bundledLoaderURL: bundledLoader,
+            bundledModURL: bundledMod,
+            runtimeDirectory: runtimeDirectory
+        )
+        let installed = try installer.prepare()
+
+        XCTAssertEqual(try Data(contentsOf: installed.loaderURL), Data("loader".utf8))
+        XCTAssertEqual(try Data(contentsOf: installed.modURL), Data("mod".utf8))
+        XCTAssertTrue(installed.loaderURL.path.hasPrefix(runtimeDirectory.path))
+        XCTAssertFalse(installed.jvmArgument.contains("/absolute/path"))
+        XCTAssertEqual(installed.jvmArgument, "-javaagent:\(installed.loaderURL.path)=\(installed.configurationURL.path)")
+
+        let configuration = try JSONSerialization.jsonObject(with: Data(contentsOf: installed.configurationURL)) as? [String: Any]
+        XCTAssertEqual(configuration?["modJar"] as? String, installed.modURL.path)
+        XCTAssertEqual(configuration?["mixinConfig"] as? String, "mixins.hypixellegitils.json")
+
+        try Data("updated loader".utf8).write(to: bundledLoader)
+        let updated = try installer.prepare()
+        XCTAssertEqual(updated, installed)
+        XCTAssertEqual(try Data(contentsOf: updated.loaderURL), Data("updated loader".utf8))
+    }
+
+    func testRuntimeInstallerFailsClearlyWhenTheBundledLoaderIsMissing() {
+        let installer = RuntimeInstaller(
+            bundledLoaderURL: nil,
+            bundledModURL: URL(fileURLWithPath: "/missing/mod.jar"),
+            runtimeDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        )
+        XCTAssertThrowsError(try installer.prepare()) { error in
+            XCTAssertEqual(error as? RuntimeInstallerError, .missingBundledLoader)
+        }
     }
 
     func testLunarBakeCacheFindsAndMovesAllNestedBakeArchivesWithoutHashAssumptions() throws {
