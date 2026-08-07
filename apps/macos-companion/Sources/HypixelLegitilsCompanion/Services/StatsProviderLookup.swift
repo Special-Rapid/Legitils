@@ -133,6 +133,7 @@ final class StatsProviderLookup {
                             return
                         }
                         records[player.name.lowercased()]?.apply(stats)
+                        if manualLookup { diagnostics.append(Self.providerStatus("Hypixel")) }
                         self.hypixelCache.store(stats, for: player.uuid!)
                     }
                 }
@@ -156,6 +157,7 @@ final class StatsProviderLookup {
                             StatsBridgeCommunityTag(source: StatsProvider.urchin.rawValue, label: $0)
                         })
                     }
+                    if manualLookup { diagnostics.append(Self.providerStatus("Urchin")) }
                 }
             }
         } else if manualLookup {
@@ -175,6 +177,7 @@ final class StatsProviderLookup {
                         records[player.name.lowercased()]?.communityTags.append(contentsOf: Self.parseSeraphTags(data).map {
                             StatsBridgeCommunityTag(source: StatsProvider.seraph.rawValue, label: $0)
                         })
+                        if manualLookup { diagnostics.append(Self.providerStatus("Seraph")) }
                     }
                 }
             }
@@ -347,6 +350,10 @@ extension StatsProviderLookup {
             detail = "unavailable"
         }
         return StatsBridgeCommunityTag(source: "diagnostic", label: "\(provider): \(detail)")
+    }
+
+    static func providerStatus(_ provider: String) -> StatsBridgeCommunityTag {
+        StatsBridgeCommunityTag(source: "provider", label: "\(provider): OK")
     }
 
     static func parseUrchinTags(_ data: Data) -> [String: [String]] {

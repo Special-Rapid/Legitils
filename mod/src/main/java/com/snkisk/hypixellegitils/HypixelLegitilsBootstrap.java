@@ -83,6 +83,7 @@ public final class HypixelLegitilsBootstrap {
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<StatsBridgeLookupResult> PENDING_MANUAL_STATS_RESULTS
         = new ConcurrentLinkedQueue<StatsBridgeLookupResult>();
     private static final AtomicLong MANUAL_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
@@ -179,6 +180,7 @@ public final class HypixelLegitilsBootstrap {
         partyDetectionEnabled = reload.config.partyDetectionSettings.enabled;
         statsSettings = reload.config.statsSettings;
         developerSelfDetectionEnabled = reload.config.debugEnabled;
+        enqueueCompanionSettingsApplied(reload.config.revision);
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
             PREGAME_NICK_CHATTERS.clear();
@@ -419,6 +421,18 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
+    /** Emits settings changes that arrived from the Companion rather than a local Minecraft command. */
+    public static String[] drainPendingConfigurationNotices() {
+        List<String> notices = new ArrayList<String>();
+        String notice;
+        while ((notice = PENDING_CONFIGURATION_NOTICES.poll()) != null) notices.add(notice);
+        return notices.toArray(new String[notices.size()]);
+    }
+
+    static void enqueueCompanionSettingsApplied(long revision) {
+        PENDING_CONFIGURATION_NOTICES.add(ChatFormat.line("§aCompanion settings applied. §7Revision §f" + revision));
+    }
+
     /** Emits completed explicit API-test results on the client thread. */
     public static String[] drainPendingManualStatsResponses() {
         List<String> responses = new ArrayList<String>();
@@ -452,6 +466,8 @@ public final class HypixelLegitilsBootstrap {
         if (active == null || detectorSettings == null) return new String[] { ChatFormat.line("§cStatus unavailable.") };
         if (request.kind == LocalCommand.Kind.STATUS) return overallStatusLines(detectorSettings.savedConfig(), active);
         if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines();
+        if (request.kind == LocalCommand.Kind.STATS_STATUS) return statsStatusLines(detectorSettings.savedConfig().statsSettings);
+        if (request.kind == LocalCommand.Kind.STATS_SET) return updateStatsSetting(request);
         if (request.kind == LocalCommand.Kind.STATS_LOOKUP) {
             requestManualStatsLookup(request.playerName, visiblePlayers);
             return new String[] { ChatFormat.line("§bStats lookup started for §f" + request.playerName + "§b.") };
@@ -499,6 +515,57 @@ public final class HypixelLegitilsBootstrap {
                 if (STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) PENDING_MANUAL_STATS_RESULTS.add(result);
             }
         });
+    }
+
+    private static String[] updateStatsSetting(LocalCommand.Request request) {
+        try {
+            StatsSettings current = detectorSettings.savedConfig().statsSettings;
+            StatsSettings replacement = statsSettingsWith(current, request.statsOption, request.enabled);
+            DetectorSettingsService.Update update = detectorSettings.setStatsSettings(replacement);
+            statsSettings = update.config.statsSettings;
+            return new String[] {
+                ChatFormat.line("§fStats " + request.statsOption.displayName() + " "
+                    + (request.enabled ? "§aenabled" : "§cdisabled")
+                    + (update.changed ? " §asaved and applied" : " §7already active")),
+                ChatFormat.continuation("§7Changes apply immediately.")
+            };
+        } catch (DetectorSettingsService.ConfigWriteRefusedException exception) {
+            return new String[] { ChatFormat.line("§cConfiguration changed or invalid. Stats unchanged.") };
+        } catch (Exception exception) {
+            return new String[] { ChatFormat.line("§cUnable to save Stats setting. Stats unchanged.") };
+        }
+    }
+
+    private static StatsSettings statsSettingsWith(StatsSettings current, LocalCommand.StatsOption option, boolean enabled) {
+        if (current == null || option == null) throw new IllegalArgumentException("Stats option is required");
+        boolean stats = current.enabled;
+        boolean tab = current.tabEnabled;
+        boolean chat = current.chatEnabled;
+        boolean stars = current.starsEnabled;
+        boolean fkdr = current.fkdrEnabled;
+        boolean winStreak = current.winStreakEnabled;
+        if (option == LocalCommand.StatsOption.ENABLED) stats = enabled;
+        else if (option == LocalCommand.StatsOption.TAB) tab = enabled;
+        else if (option == LocalCommand.StatsOption.CHAT) chat = enabled;
+        else if (option == LocalCommand.StatsOption.STARS) stars = enabled;
+        else if (option == LocalCommand.StatsOption.FKDR) fkdr = enabled;
+        else if (option == LocalCommand.StatsOption.WIN_STREAK) winStreak = enabled;
+        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat);
+    }
+
+    private static String[] statsStatusLines(StatsSettings settings) {
+        if (settings == null) return new String[] { ChatFormat.line("§cStats status unavailable.") };
+        return new String[] {
+            ChatFormat.line("§fStats: " + state(settings.enabled)),
+            ChatFormat.continuation("§7Tab: " + state(settings.tabEnabled) + " §8| §7Chat: " + state(settings.chatEnabled)),
+            ChatFormat.continuation("§7Stars: " + state(settings.starsEnabled) + " §8| §7FKDR: " + state(settings.fkdrEnabled)
+                + " §8| §7Win Streak: " + state(settings.winStreakEnabled)),
+            ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
+        };
+    }
+
+    private static String state(boolean enabled) {
+        return enabled ? "§aon" : "§coff";
     }
 
     /** Compatibility helper for callers that only need one local response line. */
@@ -720,6 +787,9 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Notifications: §fChat " + (config.notifications.chatEnabled ? "§aon" : "§coff")
             + " §8| §7Action Bar " + (config.notifications.overlayEnabled ? "§aon" : "§coff")
             + " §8| §7Sound " + (config.notifications.soundEnabled ? "§aon" : "§coff")));
+        lines.add(ChatFormat.continuation("§7Stats: " + state(config.statsSettings.enabled)
+            + " §8| §7Tab " + state(config.statsSettings.tabEnabled)
+            + " §8| §7Chat " + state(config.statsSettings.chatEnabled)));
         return lines.toArray(new String[lines.size()]);
     }
 
@@ -1009,6 +1079,7 @@ public final class HypixelLegitilsBootstrap {
         }
         STATS_MATCH_REQUEST_GATE.reset();
         PENDING_STATS_NOTICES.clear();
+        PENDING_CONFIGURATION_NOTICES.clear();
         PENDING_MANUAL_STATS_RESULTS.clear();
         PREGAME_STATS_CHATTERS.clear();
         StatsBridgeClient client = statsBridgeClient;

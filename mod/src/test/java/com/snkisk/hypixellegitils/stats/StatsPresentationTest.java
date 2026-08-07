@@ -63,14 +63,20 @@ public final class StatsPresentationTest {
     }
 
     @Test
-    public void manualLookupShowsStatsAndSafeProviderDiagnostics() {
+    public void manualLookupShowsStatsAndIndividualSafeProviderResults() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "Player", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, 0,
-            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("diagnostic", "Hypixel: unauthorized"))
+            Arrays.asList(
+                new StatsBridgePlayerResult.CommunityTag("provider", "Hypixel: OK"),
+                new StatsBridgePlayerResult.CommunityTag("provider", "Urchin: OK"),
+                new StatsBridgePlayerResult.CommunityTag("diagnostic", "Seraph: authorization failed")
+            )
         );
         assertEquals(Arrays.asList(
             "§bStats§7: §fPlayer §8— §b✫12 §eFKDR 0.4 §aWS 0",
-            "§cAPI§7: §fHypixel: unauthorized"
+            "§aAPI§7: §fHypixel: OK",
+            "§aAPI§7: §fUrchin: OK",
+            "§cAPI§7: §fSeraph: authorization failed"
         ), StatsPresentation.manualLookupLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }
 

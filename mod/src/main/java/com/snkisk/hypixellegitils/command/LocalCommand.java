@@ -16,7 +16,10 @@ public final class LocalCommand {
         ChatFormat.line("§fCommands"),
         ChatFormat.continuation("§7Alias: §b.l <command>"),
         ChatFormat.continuation("§a.l status §8— §fshow all feature status"),
-        ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph lookup"),
+        ChatFormat.continuation("§b.l stats status §8— §fshow local Stats settings"),
+        ChatFormat.continuation("§b.l stats on/off §8— §fenable or disable Stats"),
+        ChatFormat.continuation("§b.l stats <tab|chat|stars|fkdr|winstreak> on/off"),
+        ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph"),
         ChatFormat.continuation("§e.l anticheat list §8— §fshow detector settings"),
         ChatFormat.continuation("§b.l anticheat on <detector|all> §8— §fenable now"),
         ChatFormat.continuation("§c.l anticheat off <detector|all> §8— §fdisable now"),
@@ -74,6 +77,18 @@ public final class LocalCommand {
         if (HELP.equals(input)) return new Request(Kind.HELP, null, false, false);
         if (input.startsWith(PREFIX + " stats ")) {
             String[] parts = input.split(" ");
+            if (parts.length == 3 && "status".equals(parts[2])) {
+                return new Request(Kind.STATS_STATUS, null, false, false);
+            }
+            if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
+                return new Request(Kind.STATS_SET, null, false, "on".equals(parts[2]), -1, null, null, StatsOption.ENABLED);
+            }
+            if (parts.length == 4 && ("on".equals(parts[3]) || "off".equals(parts[3]))) {
+                StatsOption option = StatsOption.forCommand(parts[2]);
+                if (option != null && option != StatsOption.ENABLED) {
+                    return new Request(Kind.STATS_SET, null, false, "on".equals(parts[3]), -1, null, null, option);
+                }
+            }
             if (parts.length == 3 && isValidPlayerName(parts[2])) {
                 return new Request(Kind.STATS_LOOKUP, null, false, false, -1, parts[2]);
             }
@@ -179,6 +194,8 @@ public final class LocalCommand {
     public enum Kind {
         STATUS,
         HELP,
+        STATS_STATUS,
+        STATS_SET,
         STATS_LOOKUP,
         ANTICHEAT_LIST,
         ANTICHEAT_SET,
@@ -196,6 +213,34 @@ public final class LocalCommand {
         USAGE
     }
 
+    public enum StatsOption {
+        ENABLED("Stats"),
+        TAB("Tab"),
+        CHAT("Chat"),
+        STARS("Stars"),
+        FKDR("FKDR"),
+        WIN_STREAK("Win Streak");
+
+        private final String displayName;
+
+        StatsOption(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
+
+        static StatsOption forCommand(String value) {
+            if ("tab".equals(value)) return TAB;
+            if ("chat".equals(value)) return CHAT;
+            if ("stars".equals(value)) return STARS;
+            if ("fkdr".equals(value)) return FKDR;
+            if ("winstreak".equals(value) || "win-streak".equals(value) || "ws".equals(value)) return WIN_STREAK;
+            return null;
+        }
+    }
+
     public static final class Request {
         public final Kind kind;
         public final DetectorId detector;
@@ -204,6 +249,7 @@ public final class LocalCommand {
         public final int threshold;
         public final String playerName;
         public final NotificationChannel notificationChannel;
+        public final StatsOption statsOption;
 
         private Request(Kind kind, DetectorId detector, boolean all, boolean enabled) {
             this(kind, detector, all, enabled, -1);
@@ -226,6 +272,19 @@ public final class LocalCommand {
             String playerName,
             NotificationChannel notificationChannel
         ) {
+            this(kind, detector, all, enabled, threshold, playerName, notificationChannel, null);
+        }
+
+        private Request(
+            Kind kind,
+            DetectorId detector,
+            boolean all,
+            boolean enabled,
+            int threshold,
+            String playerName,
+            NotificationChannel notificationChannel,
+            StatsOption statsOption
+        ) {
             this.kind = kind;
             this.detector = detector;
             this.all = all;
@@ -233,6 +292,7 @@ public final class LocalCommand {
             this.threshold = threshold;
             this.playerName = playerName;
             this.notificationChannel = notificationChannel;
+            this.statsOption = statsOption;
         }
     }
 }

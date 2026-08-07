@@ -193,6 +193,32 @@ public class DetectorSettingsServiceTest {
     }
 
     @Test
+    public void statsPresentationSettingsPersistWithoutResettingOtherFields() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-stats-command-test");
+        Path path = directory.resolve("config.json");
+        try {
+            LegitilsConfig defaults = LegitilsConfig.defaults();
+            DetectorSettingsService service = new DetectorSettingsService(new LegitilsConfigStore(), path, defaults);
+            StatsSettings changed = new StatsSettings(true, false, true, false, true, false);
+            DetectorSettingsService.Update update = service.setStatsSettings(changed);
+            assertTrue(update.changed);
+            assertFalse(update.config.statsSettings.tabEnabled);
+            assertFalse(update.config.statsSettings.fkdrEnabled);
+            assertFalse(update.config.statsSettings.chatEnabled);
+            assertEquals(defaults.enabledDetectors, update.config.enabledDetectors);
+            assertFalse(service.setStatsSettings(changed).changed);
+            assertFalse(new LegitilsConfigStore().load(path).config.statsSettings.tabEnabled);
+
+            DetectorSettingsService.Update detectorUpdate = service.setEnabled(DetectorId.NO_SLOW, true);
+            assertFalse(detectorUpdate.config.statsSettings.tabEnabled);
+            assertFalse(detectorUpdate.config.statsSettings.chatEnabled);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
+
+    @Test
     public void acceptsOnlyNewerExternalConfigurationAndKeepsKnownGoodStateOnInvalidInput() throws Exception {
         Path directory = Files.createTempDirectory("legitils-external-config-reload-test");
         Path path = directory.resolve("config.json");

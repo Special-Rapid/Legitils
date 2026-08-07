@@ -114,6 +114,8 @@ public final class StatsPresentation {
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 if ("diagnostic".equals(tag.source)) {
                     lines.add("§cAPI§7: §f" + tag.label);
+                } else if ("provider".equals(tag.source)) {
+                    lines.add("§aAPI§7: §f" + tag.label);
                 } else {
                     lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);
                 }

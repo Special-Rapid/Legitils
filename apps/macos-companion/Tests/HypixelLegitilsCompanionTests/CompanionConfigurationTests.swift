@@ -393,6 +393,39 @@ final class CompanionConfigurationTests: XCTestCase {
         ])
     }
 
+    func testManualStatsLookupReportsEachSuccessfulProviderSeparately() {
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([
+                StatsProvider.hypixel.keychainAccount: "hypixel-secret",
+                StatsProvider.urchin.keychainAccount: "urchin-secret",
+                StatsProvider.seraph.keychainAccount: "seraph-secret"
+            ]),
+            transport: FakeStatsTransport(),
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        )
+        let response = expectation(description: "manual provider status response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "manual_1_2",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(result?.players.first?.communityTags, [
+            StatsBridgeCommunityTag(source: "provider", label: "Hypixel: OK"),
+            StatsBridgeCommunityTag(source: "provider", label: "Seraph: OK"),
+            StatsBridgeCommunityTag(source: "provider", label: "Urchin: OK"),
+            StatsBridgeCommunityTag(source: "seraph", label: "blacklist"),
+            StatsBridgeCommunityTag(source: "urchin", label: "watchlist")
+        ])
+    }
+
     func testConfigurationStoreReplacesAndReloadsAConfiguration() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("config.json")
