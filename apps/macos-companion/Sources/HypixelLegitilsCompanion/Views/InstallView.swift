@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct InstallView: View {
-    private let runtimeInstaller = RuntimeInstaller()
+    @EnvironmentObject private var store: CompanionStore
     private let bakeCache = LunarBakeCacheService()
-    @State private var runtime: InstalledRuntime?
-    @State private var runtimeStatus = "JVM引数を準備しています…"
     @State private var bakeArchives: [LunarBakeArchive] = []
     @State private var bakeStatus = "未走査"
     @State private var showsTrashConfirmation = false
@@ -17,20 +15,20 @@ struct InstallView: View {
                 .foregroundStyle(.secondary)
             GroupBox("JVM引数の形式") {
                 HStack {
-                    Text(runtime?.jvmArgument ?? "準備中")
+                    Text(store.installedRuntime?.jvmArgument ?? "準備中")
                         .font(.system(.body, design: .monospaced))
                         .textSelection(.enabled)
                     Spacer()
                     Button("コピー") {
-                        guard let argument = runtime?.jvmArgument else { return }
+                        guard let argument = store.installedRuntime?.jvmArgument else { return }
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(argument, forType: .string)
                     }
-                    .disabled(runtime == nil)
+                    .disabled(store.installedRuntime == nil)
                 }
                 .padding(.vertical, 4)
             }
-            Text(runtimeStatus)
+            Text(store.runtimeInstallStatus)
                 .foregroundStyle(.secondary)
             Divider()
             GroupBox("Lunar bake cache") {
@@ -52,7 +50,7 @@ struct InstallView: View {
             Spacer()
         }
         .task {
-            prepareRuntime()
+            store.prepareRuntime()
             scanBakeArchives()
         }
         .alert("見つかった bake.zip をゴミ箱へ移動しますか？", isPresented: $showsTrashConfirmation) {
@@ -70,16 +68,6 @@ struct InstallView: View {
         } catch {
             bakeArchives = []
             bakeStatus = "走査できませんでした: \(error.localizedDescription)"
-        }
-    }
-
-    private func prepareRuntime() {
-        do {
-            runtime = try runtimeInstaller.prepare()
-            runtimeStatus = "準備完了。コピーした1行をLunarのJVM引数へ貼り付けて、Minecraft 1.8.9を起動してください。"
-        } catch {
-            runtime = nil
-            runtimeStatus = "JVM引数を準備できませんでした: \(error.localizedDescription)"
         }
     }
 

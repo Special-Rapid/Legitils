@@ -14,6 +14,8 @@ struct OverviewView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Label(store.statusMessage, systemImage: store.configuration == nil ? "exclamationmark.triangle" : "checkmark.circle.fill")
                         .foregroundStyle(store.configuration == nil ? .orange : .green)
+                    Text(store.runtimeInstallStatus)
+                        .foregroundStyle(store.installedRuntime == nil ? .orange : .secondary)
                     if let runtime = store.runtimeStatus {
                         Text("MOD: \(runtime.modVersion)  /  設定 revision \(runtime.configRevision)")
                         if runtime.configUsedDefaults {

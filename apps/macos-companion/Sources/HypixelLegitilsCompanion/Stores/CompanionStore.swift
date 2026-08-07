@@ -6,6 +6,8 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var configuration: CompanionConfiguration?
     @Published var settingsDraft: CompanionConfiguration?
     @Published private(set) var runtimeStatus: RuntimeStatus?
+    @Published private(set) var installedRuntime: InstalledRuntime?
+    @Published private(set) var runtimeInstallStatus = "JVM runtime を準備していません。"
     @Published private(set) var statusMessage = "Legitils の状態を確認しています。"
     @Published private(set) var statsStatusMessage = "APIキーはこのMacのKeychainだけに保存します。"
     @Published private(set) var statsBridgeStatus = "Stats Bridge: 停止中"
@@ -17,6 +19,7 @@ final class CompanionStore: ObservableObject {
     private let keychainStore: KeychainStore
     private let statsProviderLookup: StatsProviderLookup
     private let statsBridgeServer: StatsBridgeServer
+    private let runtimeInstaller: RuntimeInstaller
 
     init() {
         let keychainStore = KeychainStore()
@@ -25,9 +28,11 @@ final class CompanionStore: ObservableObject {
         let lookup = StatsProviderLookup(keychainStore: keychainStore)
         self.statsProviderLookup = lookup
         self.statsBridgeServer = StatsBridgeServer(lookup: lookup.lookup)
+        self.runtimeInstaller = RuntimeInstaller()
     }
 
     func refresh() {
+        prepareRuntime()
         runtimeStatus = configurationStore.loadRuntimeStatus()
         refreshProviderKeyStates()
         syncStatsBridge()
@@ -41,6 +46,16 @@ final class CompanionStore: ObservableObject {
             configuration = nil
             settingsDraft = nil
             statusMessage = error.localizedDescription
+        }
+    }
+
+    func prepareRuntime() {
+        do {
+            installedRuntime = try runtimeInstaller.prepare()
+            runtimeInstallStatus = "最新のLoaderとMODをローカルruntimeへ配置しました。"
+        } catch {
+            installedRuntime = nil
+            runtimeInstallStatus = "JVM runtime を準備できませんでした: \(error.localizedDescription)"
         }
     }
 
