@@ -201,10 +201,6 @@ public abstract class MixinMinecraft {
         }
         if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) return;
         BedwarsMode gameMode = BedwarsPreGameState.mode(theWorld);
-        if (gameMode == BedwarsMode.UNKNOWN) {
-            HypixelLegitilsBootstrap.traceStats("roster due waiting for recognized Bed Wars mode");
-            return;
-        }
         String matchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
         if (matchId == null) return;
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();

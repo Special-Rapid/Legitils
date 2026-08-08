@@ -71,6 +71,17 @@ final class CompanionConfigurationTests: XCTestCase {
             players: [StatsBridgeRosterMember(name: "Player_1", uuid: nil)]
         )
         XCTAssertTrue(valid.isValid)
+        XCTAssertTrue(StatsBridgeRosterRequest(
+            schemaVersion: StatsBridgeRosterRequest.schemaVersion,
+            matchID: "bedwars-without-visible-mode",
+            gameMode: nil,
+            players: valid.players
+        ).isValid)
+        let modeOmittedOnWire = try! JSONDecoder().decode(StatsBridgeRosterRequest.self, from: Data("""
+        {"schemaVersion":2,"matchID":"bedwars-without-visible-mode","players":[{"name":"Player_1","uuid":null}]}
+        """.utf8))
+        XCTAssertNil(modeOmittedOnWire.gameMode)
+        XCTAssertTrue(modeOmittedOnWire.isValid)
         XCTAssertFalse(StatsBridgeRosterRequest(
             schemaVersion: 1,
             matchID: "bedwars-match_1",
@@ -123,6 +134,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(stats?.stars, 120)
         XCTAssertEqual(stats?.finalKillDeathRatio, 4)
         XCTAssertNil(stats?.modeWinStreak)
+        XCTAssertNil(StatsProviderLookup.parseHypixelStats(hypixel, gameMode: nil)?.modeWinStreak)
 
         let urchin = Data("""
         {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"cheating","reason":"not returned"},{"tag_type":"  ","reason":"ignored"}]}}
@@ -295,14 +307,16 @@ final class CompanionConfigurationTests: XCTestCase {
         var current = Date(timeIntervalSince1970: 1_700_000_000)
         let stats = StatsProviderLookup.HypixelStats(stars: 120, finalKillDeathRatio: 3.5, modeWinStreak: 7)
 
-        HypixelStatsCache(url: url, now: { current }).store(stats, for: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        HypixelStatsCache(url: url, now: { current }).store(stats, for: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", gameMode: .fours)
         XCTAssertEqual(
-            HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", gameMode: .fours),
             stats
         )
 
+        XCTAssertNil(HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", gameMode: nil))
+
         current = current.addingTimeInterval(HypixelStatsCache.lifetime + 1)
-        XCTAssertNil(HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+        XCTAssertNil(HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", gameMode: .fours))
     }
 
     func testProviderLookupUsesFreshPersistentHypixelCacheBeforeNetwork() {
@@ -315,7 +329,8 @@ final class CompanionConfigurationTests: XCTestCase {
         )
         cache.store(
             StatsProviderLookup.HypixelStats(stars: 130, finalKillDeathRatio: 6.5, modeWinStreak: 11),
-            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            gameMode: .fours
         )
         let transport = FakeStatsTransport()
         let lookup = StatsProviderLookup(
@@ -375,7 +390,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
         cache.store(
             StatsProviderLookup.HypixelStats(stars: 999, finalKillDeathRatio: 99, modeWinStreak: 99),
-            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            gameMode: .fours
         )
         let transport = ManualFailureTransport()
         let lookup = StatsProviderLookup(

@@ -85,8 +85,7 @@ public final class StatsBridgeClient {
     }
 
     private static boolean isValidRequest(String matchId, BedwarsMode gameMode, List<StatsBridgeRosterMember> players) {
-        if (matchId == null || !MATCH_ID.matcher(matchId).matches() || gameMode == null
-            || gameMode == BedwarsMode.UNKNOWN || gameMode.bridgeValue == null || players == null
+        if (matchId == null || !MATCH_ID.matcher(matchId).matches() || players == null
             || players.isEmpty() || players.size() > MAXIMUM_PLAYERS) {
             return false;
         }
@@ -100,7 +99,11 @@ public final class StatsBridgeClient {
         Map<String, Object> request = new LinkedHashMap<String, Object>();
         request.put("schemaVersion", Integer.valueOf(StatsBridgeDescriptor.SCHEMA_VERSION));
         request.put("matchID", matchId);
-        request.put("gameMode", gameMode.bridgeValue);
+        // Current Bed Wars sidebars can omit their mode. Keep the request useful
+        // for stars/FKDR and omit only the mode-specific win streak in that case.
+        if (gameMode != null && gameMode != BedwarsMode.UNKNOWN && gameMode.bridgeValue != null) {
+            request.put("gameMode", gameMode.bridgeValue);
+        }
         List<Object> members = new ArrayList<Object>();
         for (StatsBridgeRosterMember player : players) {
             Map<String, Object> member = new LinkedHashMap<String, Object>();

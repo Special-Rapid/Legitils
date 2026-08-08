@@ -32,7 +32,9 @@ struct StatsBridgeRosterRequest: Codable, Equatable {
 
     let schemaVersion: Int
     let matchID: String
-    let gameMode: StatsBridgeGameMode
+    /// Optional because current visible Bed Wars sidebars can omit mode. In that case the
+    /// Companion returns other public stats but leaves the mode-specific win streak absent.
+    let gameMode: StatsBridgeGameMode?
     let players: [StatsBridgeRosterMember]
 
     var isValid: Bool {

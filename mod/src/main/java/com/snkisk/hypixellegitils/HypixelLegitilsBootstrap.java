@@ -316,11 +316,11 @@ public final class HypixelLegitilsBootstrap {
         PREGAME_NICK_CHATTERS.clear();
     }
 
-    /** Called only after the visible Bed Wars sidebar identified a pre-game start message. */
+    /** Called only after a visible Bed Wars pre-game start message. */
     public static void onBedwarsGameStart(long nowMillis) {
         if (!STARTED.get()) return;
         STATS_MATCH_REQUEST_GATE.onBedwarsGameStart(nowMillis);
-        traceStats("roster scheduled from exact game-start chat");
+        traceStats("roster scheduled from start countdown");
     }
 
     /** Returns one opaque match ID after the short roster-settle delay. */
@@ -340,8 +340,7 @@ public final class HypixelLegitilsBootstrap {
         final List<StatsBridgeRosterMember> players
     ) {
         final StatsBridgeClient client = statsBridgeClient;
-        if (client == null || matchId == null || gameMode == null || gameMode == BedwarsMode.UNKNOWN
-            || players == null || players.isEmpty()) {
+        if (client == null || matchId == null || players == null || players.isEmpty()) {
             traceStats("roster request skipped client=" + (client != null) + " mode=" + gameMode
                 + " players=" + (players == null ? -1 : players.size()));
             return;
@@ -366,8 +365,7 @@ public final class HypixelLegitilsBootstrap {
      */
     public static void onPregameStatsChat(String serverPresentedName, BedwarsMode gameMode) {
         StatsSettings settings = statsSettings;
-        if (!STARTED.get() || !settings.enabled || !settings.chatEnabled || gameMode == null
-            || gameMode == BedwarsMode.UNKNOWN || serverPresentedName == null) {
+        if (!STARTED.get() || !settings.enabled || !settings.chatEnabled || serverPresentedName == null) {
             traceStats("pregame chat skipped started=" + STARTED.get() + " stats=" + settings.enabled
                 + " chat=" + settings.chatEnabled + " mode=" + gameMode);
             return;

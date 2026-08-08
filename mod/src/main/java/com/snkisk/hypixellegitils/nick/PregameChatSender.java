@@ -13,7 +13,9 @@ public final class PregameChatSender {
     /** Returns null for server/status lines; this never attempts to identify a Nick. */
     public static String visibleName(String message) {
         if (message == null) return null;
-        Matcher matcher = PLAYER_CHAT.matcher(message.trim());
+        // S02 chat components can retain colour/style pairs between the visible name,
+        // rank and colon. Match the player-facing text, never the formatting transport.
+        Matcher matcher = PLAYER_CHAT.matcher(message.replaceAll("\\u00a7.", "").trim());
         return matcher.matches() ? matcher.group(1) : null;
     }
 }

@@ -4,7 +4,7 @@ import Foundation
 /// API keys or raw provider responses, and is only consulted by the Companion process.
 final class HypixelStatsCache {
     static let lifetime: TimeInterval = 24 * 60 * 60
-    private static let schemaVersion = 1
+    private static let schemaVersion = 2
     private static let maximumEntries = 512
 
     private struct StoredCache: Codable {
@@ -27,8 +27,8 @@ final class HypixelStatsCache {
         load()
     }
 
-    func stats(for uuid: String) -> StatsProviderLookup.HypixelStats? {
-        let key = normalizedUUID(uuid)
+    func stats(for uuid: String, gameMode: StatsBridgeGameMode?) -> StatsProviderLookup.HypixelStats? {
+        let key = cacheKey(uuid: uuid, gameMode: gameMode)
         guard let entry = entries[key], !isExpired(entry) else {
             if entries.removeValue(forKey: key) != nil { persist() }
             return nil
@@ -36,8 +36,8 @@ final class HypixelStatsCache {
         return entry.stats
     }
 
-    func store(_ stats: StatsProviderLookup.HypixelStats, for uuid: String) {
-        entries[normalizedUUID(uuid)] = Entry(
+    func store(_ stats: StatsProviderLookup.HypixelStats, for uuid: String, gameMode: StatsBridgeGameMode?) {
+        entries[cacheKey(uuid: uuid, gameMode: gameMode)] = Entry(
             fetchedAtMillis: Int64((now().timeIntervalSince1970 * 1_000).rounded()),
             stats: stats
         )
@@ -51,7 +51,7 @@ final class HypixelStatsCache {
               stored.schemaVersion == Self.schemaVersion else {
             return
         }
-        entries = stored.entries.filter { normalizedUUID($0.key) == $0.key && !isExpired($0.value) }
+        entries = stored.entries.filter { validCacheKey($0.key) && !isExpired($0.value) }
         prune()
     }
 
@@ -88,5 +88,18 @@ final class HypixelStatsCache {
 
     private func normalizedUUID(_ value: String) -> String {
         value.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    private func cacheKey(uuid: String, gameMode: StatsBridgeGameMode?) -> String {
+        normalizedUUID(uuid) + ":" + (gameMode?.rawValue ?? "unknown")
+    }
+
+    private func validCacheKey(_ value: String) -> Bool {
+        let components = value.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        guard components.count == 2,
+              String(components[0]).range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil else {
+            return false
+        }
+        return components[1] == "unknown" || StatsBridgeGameMode(rawValue: String(components[1])) != nil
     }
 }

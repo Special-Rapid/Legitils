@@ -119,7 +119,7 @@ final class StatsProviderLookup {
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount), !key.isEmpty {
             for player in known {
-                if !manualLookup, let cached = hypixelCache.stats(for: player.uuid!) {
+                if !manualLookup, let cached = hypixelCache.stats(for: player.uuid!, gameMode: roster.gameMode) {
                     records[player.name.lowercased()]?.apply(cached)
                     continue
                 }
@@ -134,7 +134,7 @@ final class StatsProviderLookup {
                         }
                         records[player.name.lowercased()]?.apply(stats)
                         if manualLookup { diagnostics.append(Self.providerStatus("Hypixel")) }
-                        self.hypixelCache.store(stats, for: player.uuid!)
+                        self.hypixelCache.store(stats, for: player.uuid!, gameMode: roster.gameMode)
                     }
                 }
             }
@@ -308,7 +308,7 @@ extension StatsProviderLookup {
         return request
     }
 
-    static func parseHypixelStats(_ data: Data, gameMode: StatsBridgeGameMode) -> HypixelStats? {
+    static func parseHypixelStats(_ data: Data, gameMode: StatsBridgeGameMode?) -> HypixelStats? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               root["success"] as? Bool == true,
               let player = root["player"] as? [String: Any] else { return nil }
@@ -317,7 +317,7 @@ extension StatsProviderLookup {
         let stars = integer(achievements?["bedwars_level"])
         let finalKills = number(bedwars?["final_kills_bedwars"])
         let finalDeaths = number(bedwars?["final_deaths_bedwars"])
-        let modeWinStreak = integer(bedwars?[gameMode.hypixelWinStreakKey])
+        let modeWinStreak = gameMode.flatMap { integer(bedwars?[$0.hypixelWinStreakKey]) }
         let ratio: Double?
         if let finalKills, let finalDeaths {
             ratio = finalKills / max(finalDeaths, 1)

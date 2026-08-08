@@ -92,6 +92,46 @@ public final class StatsBridgeClientTest {
     }
 
     @Test
+    public void requestsStatsWithoutAModeWhenTheVisibleSidebarOmitsIt() throws Exception {
+        final AtomicInteger requests = new AtomicInteger(0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
+        server.createContext("/v1/roster", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws java.io.IOException {
+                requests.incrementAndGet();
+                String request = new String(readAll(exchange), StandardCharsets.UTF_8);
+                assertFalse(request.contains("gameMode"));
+                byte[] body = readyResponse().getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                OutputStream output = exchange.getResponseBody();
+                try {
+                    output.write(body);
+                } finally {
+                    output.close();
+                }
+            }
+        });
+        server.start();
+        Path directory = Files.createTempDirectory("legitils-stats-bridge");
+        try {
+            writeDescriptor(
+                directory.resolve("stats-bridge.json"),
+                server.getAddress().getPort(),
+                "capability0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                System.currentTimeMillis() + 120000L
+            );
+            StatsBridgeLookupResult result = new StatsBridgeClient(directory.resolve("stats-bridge.json")).requestOnce(
+                "match_without_mode", BedwarsMode.UNKNOWN, players(), System.currentTimeMillis()
+            );
+            assertEquals(StatsBridgeLookupResult.Status.READY, result.status);
+            assertEquals(1, requests.get());
+        } finally {
+            server.stop(0);
+            deleteTree(directory);
+        }
+    }
+
+    @Test
     public void acceptsCompanionResponseWhenOptionalStatsAreOmitted() throws Exception {
         StatsBridgeLookupResult result = request(companionStyleReadyResponse());
 
