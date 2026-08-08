@@ -22,6 +22,9 @@ import java.util.regex.Pattern;
 public final class StatsBridgeClient {
     private static final int MAXIMUM_PLAYERS = 64;
     private static final int MAXIMUM_RESPONSE_BYTES = 32 * 1024;
+    // The Companion can wait up to four seconds for its fixed provider calls. This client runs
+    // on the dedicated bridge executor, so allow one local response window plus small overhead.
+    private static final int READ_TIMEOUT_MILLIS = 6000;
     private static final Pattern MATCH_ID = Pattern.compile("[A-Za-z0-9_-]{1,80}");
     private static final Pattern TAG_SOURCE = Pattern.compile("[A-Za-z0-9_-]{1,24}");
     private static final int MAXIMUM_TAG_LABEL_LENGTH = 64;
@@ -63,7 +66,7 @@ public final class StatsBridgeClient {
             connection = (HttpURLConnection) endpoint.openConnection();
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(750);
-            connection.setReadTimeout(1000);
+            connection.setReadTimeout(READ_TIMEOUT_MILLIS);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setRequestProperty("X-Legitils-Capability", descriptor.capability);

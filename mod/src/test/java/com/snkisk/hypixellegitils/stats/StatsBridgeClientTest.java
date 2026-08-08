@@ -132,6 +132,48 @@ public final class StatsBridgeClientTest {
     }
 
     @Test
+    public void waitsForTheCompanionProviderWindowInsteadOfFailingAfterOneSecond() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
+        server.createContext("/v1/roster", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws java.io.IOException {
+                readAll(exchange);
+                try {
+                    Thread.sleep(1200L);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new java.io.IOException("Interrupted while simulating Companion provider work", exception);
+                }
+                byte[] body = readyResponse().getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                OutputStream output = exchange.getResponseBody();
+                try {
+                    output.write(body);
+                } finally {
+                    output.close();
+                }
+            }
+        });
+        server.start();
+        Path directory = Files.createTempDirectory("legitils-stats-bridge");
+        try {
+            writeDescriptor(
+                directory.resolve("stats-bridge.json"),
+                server.getAddress().getPort(),
+                "capability0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                System.currentTimeMillis() + 120000L
+            );
+            StatsBridgeLookupResult result = new StatsBridgeClient(directory.resolve("stats-bridge.json")).requestOnce(
+                "manual_wait_for_companion", BedwarsMode.FOURS, players(), System.currentTimeMillis()
+            );
+            assertEquals(StatsBridgeLookupResult.Status.READY, result.status);
+        } finally {
+            server.stop(0);
+            deleteTree(directory);
+        }
+    }
+
+    @Test
     public void acceptsCompanionResponseWhenOptionalStatsAreOmitted() throws Exception {
         StatsBridgeLookupResult result = request(companionStyleReadyResponse());
 
