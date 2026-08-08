@@ -8,6 +8,7 @@ BUILD_DIR="$ROOT/.build/release"
 APP_DIR="$ROOT/dist/$APP_NAME.app"
 LOADER_JAR="$PROJECT_ROOT/loader/build/libs/hypixel-legitils-loader-0.1.0-SNAPSHOT.jar"
 MOD_JAR="$PROJECT_ROOT/mod/build/libs/hypixel-legitils-0.1.0-SNAPSHOT.jar"
+CODE_SIGN_IDENTITY="${LEGITILS_CODESIGN_IDENTITY:-}"
 JAVA_8_HOME="${LEGITILS_JAVA_8_HOME:-}"
 if [[ -z "$JAVA_8_HOME" ]]; then
   for candidate in /Library/Java/JavaVirtualMachines/*8*.jdk/Contents/Home(N); do
@@ -53,6 +54,21 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
   <key>LSMinimumSystemVersion</key><string>13.0</string>
 </dict></plist>
 PLIST
+
+# A stable Apple signing identity preserves the Keychain access requirement across
+# rebuilds. An ad-hoc signature changes with every binary, which makes macOS ask
+# the user to authorize existing provider keys again after an update.
+if [[ -z "$CODE_SIGN_IDENTITY" ]]; then
+  CODE_SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '\"' 'NF >= 2 { print $2; exit }')"
+fi
+if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
+  codesign --force --sign "$CODE_SIGN_IDENTITY" --timestamp=none "$APP_DIR"
+  echo "Signed with: $CODE_SIGN_IDENTITY"
+else
+  codesign --force --sign - "$APP_DIR"
+  echo "Warning: no Apple code-signing identity found; ad-hoc signing may prompt for existing Keychain items after updates." >&2
+fi
+codesign --verify --deep --strict "$APP_DIR"
 
 echo "Built: $APP_DIR"
 if [[ "${1:-}" == "--launch" ]]; then
