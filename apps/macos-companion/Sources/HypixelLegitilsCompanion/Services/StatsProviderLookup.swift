@@ -151,38 +151,41 @@ final class StatsProviderLookup {
                         if manualLookup { diagnostics.append(Self.diagnostic("Urchin", result)) }
                         return
                     }
-                    for (uuid, labels) in Self.parseUrchinTags(data) {
+                    let tagsByUUID = Self.parseUrchinTags(data)
+                    for (uuid, labels) in tagsByUUID {
                         guard let member = known.first(where: { $0.uuid?.caseInsensitiveCompare(uuid) == .orderedSame }) else { continue }
                         records[member.name.lowercased()]?.communityTags.append(contentsOf: labels.map {
                             StatsBridgeCommunityTag(source: StatsProvider.urchin.rawValue, label: $0)
                         })
                     }
-                    if manualLookup { diagnostics.append(Self.providerStatus("Urchin")) }
+                    if manualLookup, let player = known.first {
+                        let labels = tagsByUUID[player.uuid!.lowercased()] ?? []
+                        diagnostics.append(Self.providerStatus("Urchin", detail: labels.isEmpty ? "no active tags" : labels.joined(separator: ", ")))
+                    }
                 }
             }
         } else if manualLookup {
             diagnostics.append(Self.diagnostic("Urchin", nil))
         }
 
-        if let key = try? keychainStore.readSecret(account: StatsProvider.seraph.keychainAccount), !key.isEmpty {
-            for player in known {
-                group.enter()
-                transport.load(Self.seraphRequest(uuid: player.uuid!, apiKey: key)) { result in
-                    self.queue.async {
-                        defer { group.leave() }
-                        guard case let .success((data, response)) = result, response.statusCode == 200 else {
-                            if manualLookup { diagnostics.append(Self.diagnostic("Seraph", result)) }
-                            return
-                        }
-                        records[player.name.lowercased()]?.communityTags.append(contentsOf: Self.parseSeraphTags(data).map {
-                            StatsBridgeCommunityTag(source: StatsProvider.seraph.rawValue, label: $0)
-                        })
-                        if manualLookup { diagnostics.append(Self.providerStatus("Seraph")) }
+        for player in known {
+            group.enter()
+            transport.load(Self.seraphRequest(uuid: player.uuid!)) { result in
+                self.queue.async {
+                    defer { group.leave() }
+                    guard case let .success((data, response)) = result, response.statusCode == 200 else {
+                        if manualLookup { diagnostics.append(Self.diagnostic("Seraph", result)) }
+                        return
+                    }
+                    let labels = Self.parseSeraphTags(data)
+                    records[player.name.lowercased()]?.communityTags.append(contentsOf: labels.map {
+                        StatsBridgeCommunityTag(source: StatsProvider.seraph.rawValue, label: $0)
+                    })
+                    if manualLookup {
+                        diagnostics.append(Self.providerStatus("Seraph", detail: labels.isEmpty ? "no blacklist" : labels.joined(separator: ", ")))
                     }
                 }
             }
-        } else if manualLookup {
-            diagnostics.append(Self.diagnostic("Seraph", nil))
         }
 
         DispatchQueue.global(qos: .utility).async {
@@ -299,10 +302,9 @@ extension StatsProviderLookup {
         return request
     }
 
-    static func seraphRequest(uuid: String, apiKey: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://api.seraph.si/\(uuid)/blacklist")!)
+    static func seraphRequest(uuid: String) -> URLRequest {
+        var request = URLRequest(url: URL(string: "https://developer-api.seraph.si/player/\(uuid)")!)
         request.timeoutInterval = responseTimeout
-        request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         return request
     }
 
@@ -352,48 +354,105 @@ extension StatsProviderLookup {
         return StatsBridgeCommunityTag(source: "diagnostic", label: "\(provider): \(detail)")
     }
 
-    static func providerStatus(_ provider: String) -> StatsBridgeCommunityTag {
-        StatsBridgeCommunityTag(source: "provider", label: "\(provider): OK")
+    static func providerStatus(_ provider: String, detail: String = "OK") -> StatsBridgeCommunityTag {
+        StatsBridgeCommunityTag(source: "provider", label: "\(provider): \(detail)")
     }
 
     static func parseUrchinTags(_ data: Data) -> [String: [String]] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let players = root["players"] as? [String: Any] else { return [:] }
-        return players.reduce(into: [:]) { result, entry in
-            guard let tags = entry.value as? [[String: Any]] else { return }
-            let labels = tags.compactMap { tag -> String? in
-                guard let type = tag["tag_type"] as? String else { return nil }
-                let normalized = type.trimmingCharacters(in: .whitespacesAndNewlines)
-                return normalized.isEmpty ? nil : String(normalized.prefix(48))
+              let players = root["players"] else { return [:] }
+
+        let entries = playersToEntries(players)
+        var tagsByUUID: [String: [String]] = [:]
+        for entry in entries {
+            guard let normalized = normalizedUUID(entry.uuid) else { continue }
+            let playerTags: [String]
+            if let tags = entry.payload as? [[String: Any]] {
+                playerTags = collectUrchinLabels(tags)
+            } else if let record = entry.payload as? [String: Any] {
+                playerTags = playersValueToTags(record)
+            } else {
+                continue
             }
-            if !labels.isEmpty { result[entry.key.lowercased()] = labels }
+            if !playerTags.isEmpty {
+                tagsByUUID[normalized] = playerTags
+            }
+        }
+        return tagsByUUID
+    }
+
+    private static func playersToEntries(_ players: Any) -> [(uuid: String, payload: Any)] {
+        if let map = players as? [String: Any] {
+            return map.map { (uuid: $0.key, payload: $0.value) }
+        }
+        guard let list = players as? [Any] else { return [] }
+        return list.compactMap { item in
+            guard let record = item as? [String: Any] else { return nil }
+            guard let uuid = (record["uuid"] as? String)
+                ?? (record["id"] as? String)
+                ?? (record["player_uuid"] as? String)
+                ?? (record["playerId"] as? String) else { return nil }
+            return (uuid: uuid, payload: record)
         }
     }
 
-    /// Converts documented boolean/tag fields to compact advisory labels only. Reasons,
-    /// reporter attribution, timestamps, and statistics deliberately remain inside the Companion.
+    private static func playersValueToTags(_ value: [String: Any]) -> [String] {
+        let tagValues = value["tags"] as? [[String: Any]]
+            ?? (value["data"] as? [[String: Any]])
+        if let tags = tagValues {
+            return collectUrchinLabels(tags)
+        }
+        if let type = value["tag_type"] as? String {
+            return collectUrchinLabels([value], fallback: ["tag_type": type])
+        }
+        if let tag = value["tag"] as? String {
+            return collectUrchinLabels([value], fallback: ["tag": tag])
+        }
+        return []
+    }
+
+    private static func collectUrchinLabels(_ tags: [[String: Any]], fallback: [String: String]? = nil) -> [String] {
+        var result: [String] = []
+        if let fallback {
+            result.append(contentsOf: collectUrchinLabels(fromValues: fallback))
+        }
+        result.append(contentsOf: collectUrchinLabels(fromValuesArray: tags))
+        return result.filter { !$0.isEmpty }
+            .map { String($0.prefix(48)) }
+    }
+
+    private static func collectUrchinLabels(fromValuesArray tags: [[String: Any]]) -> [String] {
+        tags.compactMap { tag in
+            let value = tag["tag_type"] as? String
+                ?? tag["tag"] as? String
+                ?? tag["type"] as? String
+            return normalizeUrchinLabel(value)
+        }
+    }
+
+    private static func collectUrchinLabels(fromValues values: [String: String]) -> [String] {
+        values.compactMap { _, value in normalizeUrchinLabel(value) }
+    }
+
+    private static func normalizeUrchinLabel(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private static func normalizedUUID(_ uuid: String) -> String? {
+        let normalized = uuid.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    /// Converts the public Developer API's nullable blacklist record to a compact advisory label.
+    /// Reasons, reporter attribution, timestamps, and all other raw fields are discarded.
     static func parseSeraphTags(_ data: Data) -> [String] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              root["success"] as? Bool == true,
-              let payload = root["data"] as? [String: Any] else { return [] }
-        var tags: [String] = []
-        if tagged(payload["blacklist"]) { tags.append("blacklist") }
-        if tagged(payload["safelist"]) { tags.append("safelist") }
-        if tagged(payload["member"]) { tags.append("member") }
-        if tagged(payload["annoylist"]) { tags.append("annoylist") }
-        if tagged(payload["bot"]) { tags.append("bot") }
-        if tagged(payload["name_change"]) { tags.append("name change") }
-        if let custom = payload["customTag"] as? String {
-            let normalized = custom
-                .replacingOccurrences(of: "§", with: "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !normalized.isEmpty { tags.append(String(normalized.prefix(48))) }
-        }
-        return Array(NSOrderedSet(array: tags)) as? [String] ?? []
-    }
-
-    private static func tagged(_ value: Any?) -> Bool {
-        (value as? [String: Any])?["tagged"] as? Bool == true
+              let player = root["player"] as? [String: Any],
+              let blacklist = player["blacklist"],
+              !(blacklist is NSNull) else { return [] }
+        return ["blacklist"]
     }
 
     static func number(_ value: Any?) -> Double? {

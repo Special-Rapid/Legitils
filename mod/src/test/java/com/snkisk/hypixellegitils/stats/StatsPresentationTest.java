@@ -68,14 +68,14 @@ public final class StatsPresentationTest {
             "Player", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, 0,
             Arrays.asList(
                 new StatsBridgePlayerResult.CommunityTag("provider", "Hypixel: OK"),
-                new StatsBridgePlayerResult.CommunityTag("provider", "Urchin: OK"),
+                new StatsBridgePlayerResult.CommunityTag("provider", "Urchin: no active tags"),
                 new StatsBridgePlayerResult.CommunityTag("diagnostic", "Seraph: authorization failed")
             )
         );
         assertEquals(Arrays.asList(
             "§bStats§7: §fPlayer §8— §b✫12 §eFKDR 0.4 §aWS 0",
             "§aAPI§7: §fHypixel: OK",
-            "§aAPI§7: §fUrchin: OK",
+            "§aAPI§7: §fUrchin: no active tags",
             "§cAPI§7: §fSeraph: authorization failed"
         ), StatsPresentation.manualLookupLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }

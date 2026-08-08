@@ -8,7 +8,7 @@ struct StatsView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Stats")
                 .font(.largeTitle.weight(.bold))
-            Text("各キーはこのMacのKeychainだけに保存します。MOD・config.json・Minecraftチャットには保存しません。")
+            Text("Hypixel・UrchinのキーはこのMacのKeychainだけに保存します。Seraphは公開APIのためキー不要です。")
                 .foregroundStyle(.secondary)
             GroupBox("プロバイダー") {
                 VStack(alignment: .leading, spacing: 14) {
@@ -42,7 +42,16 @@ struct StatsView: View {
         }
     }
 
+    @ViewBuilder
     private func providerKeyRow(_ provider: StatsProvider) -> some View {
+        if provider.requiresAPIKey {
+            keyProviderRow(provider)
+        } else {
+            publicProviderRow(provider)
+        }
+    }
+
+    private func keyProviderRow(_ provider: StatsProvider) -> some View {
         HStack(spacing: 10) {
             Text(provider.displayName)
                 .frame(width: 70, alignment: .leading)
@@ -60,6 +69,21 @@ struct StatsView: View {
             .disabled(draftKeys[provider, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if store.hasKey(for: provider) {
                 Button("削除", role: .destructive) {
+                    store.removeProviderKey(for: provider)
+                }
+            }
+        }
+    }
+
+    private func publicProviderRow(_ provider: StatsProvider) -> some View {
+        HStack(spacing: 10) {
+            Text(provider.displayName)
+                .frame(width: 70, alignment: .leading)
+            Label("公開API・キー不要", systemImage: "globe")
+                .foregroundStyle(.green)
+            Spacer()
+            if store.hasKey(for: provider) {
+                Button("保存済みキーを削除", role: .destructive) {
                     store.removeProviderKey(for: provider)
                 }
             }

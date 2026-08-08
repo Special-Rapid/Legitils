@@ -106,6 +106,10 @@ final class CompanionStore: ObservableObject {
     }
 
     func saveProviderKey(_ rawKey: String, for provider: StatsProvider) {
+        guard provider.requiresAPIKey else {
+            statsStatusMessage = "Seraph は公開APIのためAPIキー不要です。"
+            return
+        }
         let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             statsStatusMessage = "\(provider.displayName) のAPIキーを入力してください。"
@@ -139,11 +143,6 @@ final class CompanionStore: ObservableObject {
     }
 
     private func syncStatsBridge() {
-        guard hasHypixelKey || hasUrchinKey || hasSeraphKey else {
-            statsBridgeServer.stop()
-            statsBridgeStatus = "Stats Bridge: 停止中（APIキー未登録）"
-            return
-        }
         statsBridgeStatus = "Stats Bridge: ローカル接続を準備中"
         statsBridgeServer.start { [weak self] result in
             DispatchQueue.main.async {

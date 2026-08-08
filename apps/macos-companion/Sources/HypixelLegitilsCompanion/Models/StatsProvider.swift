@@ -14,4 +14,8 @@ enum StatsProvider: String, CaseIterable, Identifiable {
     var keychainAccount: String {
         "\(rawValue)-api-key"
     }
+
+    var requiresAPIKey: Bool {
+        self != .seraph
+    }
 }
