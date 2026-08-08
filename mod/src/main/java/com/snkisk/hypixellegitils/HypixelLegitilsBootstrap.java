@@ -333,6 +333,13 @@ public final class HypixelLegitilsBootstrap {
         traceStats("roster reset from pregame cancellation");
     }
 
+    /** Schedules the settled roster only when Lunar visibly transitions from Bed Wars pre-game to game. */
+    public static void onBedwarsPregameState(boolean active, long nowMillis) {
+        if (STATS_MATCH_REQUEST_GATE.onPregameState(active, nowMillis)) {
+            traceStats("pregame end scheduled post-start roster");
+        }
+    }
+
     /** Returns one opaque match ID after the short roster-settle delay. */
     public static String consumeDueStatsMatchId(long nowMillis) {
         return STARTED.get() ? STATS_MATCH_REQUEST_GATE.consumeDueMatchId(nowMillis) : null;

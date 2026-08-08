@@ -59,4 +59,15 @@ public final class StatsMatchRequestGateTest {
         assertFalse(gate.onWorldLoading(17001L));
         assertNull(gate.consumeDueMatchId(20000L));
     }
+
+    @Test
+    public void schedulesOnlyAfterAnObservedPregameExitWithoutReloadingTheWorld() {
+        StatsMatchRequestGate gate = new StatsMatchRequestGate();
+        gate.onBedwarsGameStart(1000L);
+        assertFalse(gate.onPregameState(false, 9000L));
+        assertFalse(gate.onPregameState(true, 9001L));
+        assertTrue(gate.onPregameState(false, 9002L));
+        assertNull(gate.consumeDueMatchId(10501L));
+        assertNotNull(gate.consumeDueMatchId(10502L));
+    }
 }

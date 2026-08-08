@@ -2,7 +2,7 @@ package com.snkisk.hypixellegitils.stats;
 
 import java.util.UUID;
 
-/** Carries one visible Bed Wars countdown across its game-world transition, then settles the roster once. */
+/** Carries one visible Bed Wars countdown across its post-start transition, then settles the roster once. */
 public final class StatsMatchRequestGate {
     private static final long POST_START_ROSTER_SETTLE_DELAY_MILLIS = 1500L;
     private static final long GAME_WORLD_TRANSITION_TIMEOUT_MILLIS = 15000L;
@@ -10,14 +10,26 @@ public final class StatsMatchRequestGate {
     private String pendingMatchId;
     private long gameStartCountdownAtMillis = -1L;
     private boolean postStartRequestScheduled;
+    private boolean pregameWasActive;
 
     public synchronized void onBedwarsGameStart(long nowMillis) {
         if (gameStartCountdownAtMillis >= 0L || postStartRequestScheduled) return;
         gameStartCountdownAtMillis = nowMillis;
     }
 
-    /** Arms one post-start roster request only when the expected game-world transition arrives. */
+    /** Arms one post-start roster request after either expected client-side start transition. */
     public synchronized boolean onWorldLoading(long nowMillis) {
+        return schedulePostStartRoster(nowMillis);
+    }
+
+    /** Some Lunar transitions keep the WorldClient; only an observed active-to-inactive edge starts the roster delay. */
+    public synchronized boolean onPregameState(boolean active, long nowMillis) {
+        boolean ended = pregameWasActive && !active;
+        pregameWasActive = active;
+        return ended && schedulePostStartRoster(nowMillis);
+    }
+
+    private boolean schedulePostStartRoster(long nowMillis) {
         if (gameStartCountdownAtMillis < 0L
             || nowMillis < gameStartCountdownAtMillis
             || nowMillis - gameStartCountdownAtMillis > GAME_WORLD_TRANSITION_TIMEOUT_MILLIS) {
@@ -50,5 +62,6 @@ public final class StatsMatchRequestGate {
         dueAtMillis = -1L;
         gameStartCountdownAtMillis = -1L;
         postStartRequestScheduled = false;
+        pregameWasActive = false;
     }
 }

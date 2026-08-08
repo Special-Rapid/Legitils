@@ -90,7 +90,9 @@ public abstract class MixinMinecraft {
 
     @Inject(method = "runTick", at = @At("RETURN"))
     private void hypixelLegitils$afterClientTick(CallbackInfo callbackInfo) {
+        boolean bedwarsPreGame = BedwarsPreGameState.isActive(theWorld);
         HypixelLegitilsBootstrap.onPartyDetectorTick(BedwarsPreGameState.playerCount(theWorld));
+        HypixelLegitilsBootstrap.onBedwarsPregameState(bedwarsPreGame, hypixelLegitils$frameNowMillis);
         if (theWorld != null && thePlayer != null) {
             boolean worldChanged = theWorld != hypixelLegitils$observedWorld;
             if (LocalNotice.shouldShowFor(hypixelLegitils$injectedNoticeShown, theWorld)) {
