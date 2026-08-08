@@ -14,7 +14,7 @@ public class FlagMessageTest {
     public void mockAutoBlockFormatUsesOnlyTheServerProvidedDisplayName() {
         FlagMessage message = FlagMessage.attributed(DetectorId.AUTO_BLOCK, "\u00a7eY Yellowteamplayer", "Yellowteamplayer");
         assertEquals(
-            PREFIX + "\u00a7eY Yellowteamplayer \u00a7cflagged \u00a76AutoBlock \u00a77| \u00a74[WDR]",
+            PREFIX + "\u00a7e\u00a7lY \u00a7eYellowteamplayer \u00a7cflagged \u00a76AutoBlock \u00a77| \u00a74[WDR]",
             message.completeChatText()
         );
         assertEquals("Yellowteamplayer", message.wdrTarget);
@@ -34,14 +34,17 @@ public class FlagMessageTest {
     @Test
     public void grayWhiteTeamPrefixIsNormalizedToWhiteForAFlag() {
         FlagMessage message = FlagMessage.attributed(DetectorId.NO_SLOW, "§7W Whiteteamplayer", "Whiteteamplayer");
-        assertTrue(message.completeChatText().contains("§fW Whiteteamplayer"));
+        assertTrue(message.completeChatText().contains("§f§lW §fWhiteteamplayer"));
         assertFalse(message.completeChatText().contains("§7W Whiteteamplayer"));
     }
 
     @Test
     public void teamFormattedNameKeepsTheVisibleTeamPrefixForNickNotices() {
-        assertEquals("§cR Flaming", FlagMessage.teamFormattedName("§cR Flaming", "Flaming"));
-        assertEquals("§fW White", FlagMessage.teamFormattedName("§7W White", "White"));
+        assertEquals("§c§lR §cFlaming", FlagMessage.teamFormattedName("§cR Flaming", "Flaming"));
+        assertEquals("§f§lW §fWhite", FlagMessage.teamFormattedName("§7W White", "White"));
+        assertEquals("§a§lG §aGreen", FlagMessage.teamFormattedName("§aG Green", "Green"));
+        assertEquals("§9§lB §9Blue", FlagMessage.teamFormattedName("§9B Blue", "Blue"));
+        assertEquals("§e§lY §eYellow", FlagMessage.teamFormattedName("§eY Yellow", "Yellow"));
         assertEquals("Flaming", FlagMessage.teamFormattedName(null, "Flaming"));
     }
 
@@ -68,7 +71,7 @@ public class FlagMessageTest {
     public void attributedBedNukeUsesTheConfirmedServerActor() {
         FlagMessage message = FlagMessage.attributed(DetectorId.BED_NUKE, "\u00a79B Blueteamplayer", "Blueteamplayer");
         assertEquals(
-            PREFIX + "\u00a79B Blueteamplayer \u00a7cflagged \u00a74BedNuke \u00a77| \u00a74[WDR]",
+            PREFIX + "\u00a79\u00a7lB \u00a79Blueteamplayer \u00a7cflagged \u00a74BedNuke \u00a77| \u00a74[WDR]",
             message.completeChatText()
         );
         assertEquals("Blueteamplayer", message.wdrTarget);

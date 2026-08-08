@@ -300,14 +300,14 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /**
-     * Announces a Nick immediately when they chat in pre-game, then preserves a
-     * separate delayed notice for the game-start team formatting.
+     * Announces a Nick immediately with the currently visible team formatting, then
+     * preserves a delayed notice because final Bed Wars team assignment can arrive at game start.
      */
-    public static void onPregameNickChat(UUID playerId, String serverPresentedName) {
+    public static void onPregameNickChat(UUID playerId, String serverPresentedName, String teamFormattedName) {
         if (!STARTED.get() || !nickDetectionEnabled || playerId == null || playerId.version() != 1
             || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
         if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
-        PENDING_NICK_NOTICES.add(pregameNickNotice(serverPresentedName, null));
+        PENDING_NICK_NOTICES.add(pregameNickNotice(serverPresentedName, teamFormattedName));
         PREGAME_NICK_CHATTERS.put(playerId, serverPresentedName);
     }
 

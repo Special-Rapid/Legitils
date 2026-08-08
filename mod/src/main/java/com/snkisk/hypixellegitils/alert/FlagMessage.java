@@ -67,11 +67,21 @@ public final class FlagMessage {
         return formattedDisplayName != null && !formattedDisplayName.trim().isEmpty();
     }
 
-    /** Hypixel's white-team initial may arrive gray; preserve all other team formatting. */
+    /** Normalizes the white-team colour and makes only Bed Wars' team initial bold. */
     private static String whiteTeamPrefix(String formattedDisplayName) {
-        return formattedDisplayName.startsWith("§7W ")
-            ? "§fW " + formattedDisplayName.substring(4)
-            : formattedDisplayName;
+        if (formattedDisplayName.startsWith("§7W ")) {
+            return "§f§lW §f" + formattedDisplayName.substring(4);
+        }
+        if (formattedDisplayName.length() >= 4 && formattedDisplayName.charAt(0) == '§'
+            && isBedWarsTeamInitial(formattedDisplayName.charAt(2)) && formattedDisplayName.charAt(3) == ' ') {
+            String teamColor = formattedDisplayName.substring(0, 2);
+            return teamColor + "§l" + formattedDisplayName.charAt(2) + " " + teamColor + formattedDisplayName.substring(4);
+        }
+        return formattedDisplayName;
+    }
+
+    private static boolean isBedWarsTeamInitial(char value) {
+        return value == 'R' || value == 'G' || value == 'B' || value == 'Y' || value == 'W';
     }
 
     private static String detectorText(DetectorId detector) {

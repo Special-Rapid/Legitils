@@ -170,7 +170,7 @@ public abstract class MixinMinecraft {
         if (player != null) {
             message = FlagMessage.attributed(
                 presentation.detector,
-                player.getDisplayName() == null ? null : player.getDisplayName().getFormattedText(),
+                hypixelLegitils$teamFormattedName(presentation.playerId, player.getName()),
                 player.getName(),
                 hypixelLegitils$selfPlayerId == null || !presentation.playerId.equals(hypixelLegitils$selfPlayerId)
             );
@@ -233,20 +233,22 @@ public abstract class MixinMinecraft {
     }
 
     private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {
+        NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
+        NetworkPlayerInfo info = handler == null || playerId == null ? null : handler.getPlayerInfo(playerId);
+        if (info != null) {
+            String scoreboardTeamName = ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName);
+            if (!fallbackName.equals(scoreboardTeamName)) {
+                return FlagMessage.teamFormattedName(scoreboardTeamName, fallbackName);
+            }
+            if (info.getDisplayName() != null) {
+                return FlagMessage.teamFormattedName(info.getDisplayName().getFormattedText(), fallbackName);
+            }
+        }
         EntityPlayer player = hypixelLegitils$visiblePlayer(playerId);
         if (player != null && player.getDisplayName() != null) {
             return FlagMessage.teamFormattedName(player.getDisplayName().getFormattedText(), fallbackName);
         }
-        NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
-        NetworkPlayerInfo info = handler == null || playerId == null ? null : handler.getPlayerInfo(playerId);
-        if (info == null) return fallbackName;
-        if (info.getDisplayName() != null) {
-            return FlagMessage.teamFormattedName(info.getDisplayName().getFormattedText(), fallbackName);
-        }
-        return FlagMessage.teamFormattedName(
-            ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName),
-            fallbackName
-        );
+        return fallbackName;
     }
 
     @Inject(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V", at = @At("HEAD"))
@@ -271,7 +273,7 @@ public abstract class MixinMinecraft {
             HypixelLegitilsBootstrap.onObservedPlayerIdentity(
                 playerId,
                 player.getName(),
-                player.getDisplayName() == null ? null : player.getDisplayName().getFormattedText(),
+                hypixelLegitils$teamFormattedName(playerId, player.getName()),
                 BedwarsPreGameState.isActive(theWorld)
             );
             hypixelLegitils$VisiblePosition previous = hypixelLegitils$previousVisiblePositions.get(playerId);
