@@ -22,4 +22,12 @@ public final class StatsMatchRequestGateTest {
         gate.reset();
         assertNull(gate.consumeDueMatchId(3000L));
     }
+
+    @Test
+    public void keepsTheFirstCountdownScheduleInsteadOfPostponingIt() {
+        StatsMatchRequestGate gate = new StatsMatchRequestGate();
+        gate.onBedwarsGameStart(1000L);
+        gate.onBedwarsGameStart(1500L);
+        assertNotNull(gate.consumeDueMatchId(2200L));
+    }
 }

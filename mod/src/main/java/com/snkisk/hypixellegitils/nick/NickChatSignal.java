@@ -1,14 +1,22 @@
 package com.snkisk.hypixellegitils.nick;
 
+import java.util.regex.Pattern;
+
 /** Strictly recognizes the visible sender prefix of a normal player-chat line. */
 public final class NickChatSignal {
     public static final String GAME_START = "The game starts in 1 second!";
+    private static final Pattern GAME_START_COUNTDOWN = Pattern.compile("The game starts in (?:[1-9]|10) seconds?!");
 
     private NickChatSignal() {
     }
 
     public static boolean isGameStart(String message) {
         return GAME_START.equals(message == null ? null : message.trim());
+    }
+
+    /** Accepts the visible Bed Wars countdown so Stats can start before the transition resets the client world. */
+    public static boolean isGameStartCountdown(String message) {
+        return message != null && GAME_START_COUNTDOWN.matcher(message.trim()).matches();
     }
 
     /**

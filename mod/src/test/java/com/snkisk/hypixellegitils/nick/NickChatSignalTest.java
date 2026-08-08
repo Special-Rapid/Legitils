@@ -19,4 +19,12 @@ public class NickChatSignalTest {
         assertTrue(NickChatSignal.isGameStart("The game starts in 1 second!"));
         assertFalse(NickChatSignal.isGameStart("The game starts in 2 seconds!"));
     }
+
+    @Test
+    public void recognizesTheBoundedBedwarsStartCountdownForStats() {
+        assertTrue(NickChatSignal.isGameStartCountdown("The game starts in 10 seconds!"));
+        assertTrue(NickChatSignal.isGameStartCountdown("The game starts in 5 seconds!"));
+        assertTrue(NickChatSignal.isGameStartCountdown("The game starts in 1 second!"));
+        assertFalse(NickChatSignal.isGameStartCountdown("The game starts in 11 seconds!"));
+    }
 }

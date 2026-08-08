@@ -41,7 +41,7 @@ public abstract class MixinNetHandlerPlayClient {
         BedwarsMode gameMode = BedwarsPreGameState.mode(minecraft == null ? null : minecraft.theWorld);
         HypixelLegitilsBootstrap.onBedDestructionChat(message, System.currentTimeMillis());
         HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
-        if (bedwarsPreGame && NickChatSignal.isGameStart(message)) {
+        if (bedwarsPreGame && NickChatSignal.isGameStartCountdown(message)) {
             HypixelLegitilsBootstrap.onBedwarsGameStart(System.currentTimeMillis());
         }
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {
@@ -57,7 +57,7 @@ public abstract class MixinNetHandlerPlayClient {
             }
         } else {
             HypixelLegitilsBootstrap.traceStats("server chat skipped pregame=" + bedwarsPreGame
-                + " gameStart=" + NickChatSignal.isGameStart(message) + " mode=" + gameMode);
+                + " gameStartCountdown=" + NickChatSignal.isGameStartCountdown(message) + " mode=" + gameMode);
         }
     }
 

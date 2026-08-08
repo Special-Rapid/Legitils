@@ -9,6 +9,7 @@ public final class StatsMatchRequestGate {
     private String pendingMatchId;
 
     public synchronized void onBedwarsGameStart(long nowMillis) {
+        if (pendingMatchId != null) return;
         dueAtMillis = nowMillis + ROSTER_SETTLE_DELAY_MILLIS;
         pendingMatchId = UUID.randomUUID().toString().replace("-", "");
     }
