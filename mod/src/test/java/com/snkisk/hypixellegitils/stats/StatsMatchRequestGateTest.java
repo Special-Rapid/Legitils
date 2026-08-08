@@ -30,4 +30,16 @@ public final class StatsMatchRequestGateTest {
         gate.onBedwarsGameStart(1500L);
         assertNotNull(gate.consumeDueMatchId(2200L));
     }
+
+    @Test
+    public void doesNotScheduleAgainAfterTheFirstRequestUntilWorldReset() {
+        StatsMatchRequestGate gate = new StatsMatchRequestGate();
+        gate.onBedwarsGameStart(1000L);
+        assertNotNull(gate.consumeDueMatchId(2200L));
+        gate.onBedwarsGameStart(3000L);
+        assertNull(gate.consumeDueMatchId(5000L));
+        gate.reset();
+        gate.onBedwarsGameStart(6000L);
+        assertNotNull(gate.consumeDueMatchId(7200L));
+    }
 }

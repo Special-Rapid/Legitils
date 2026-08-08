@@ -208,6 +208,9 @@ public abstract class MixinMinecraft {
             GameProfile profile = info == null ? null : info.getGameProfile();
             if (profile == null || profile.getName() == null) continue;
             UUID profileId = profile.getId();
+            // Lunar can hide the pre-game roster but leaves the local profile in Tab.
+            // The local player is never a useful automatic Stats target.
+            if (profileId != null && profileId.equals(hypixelLegitils$selfPlayerId)) continue;
             String uuid = profileId == null || profileId.version() == 1 ? null : profileId.toString();
             StatsBridgeRosterMember member = new StatsBridgeRosterMember(profile.getName(), uuid);
             if (!member.isValid()) continue;

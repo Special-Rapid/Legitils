@@ -7,9 +7,11 @@ public final class StatsMatchRequestGate {
     private static final long ROSTER_SETTLE_DELAY_MILLIS = 1200L;
     private long dueAtMillis = -1L;
     private String pendingMatchId;
+    private boolean requestScheduledForWorld;
 
     public synchronized void onBedwarsGameStart(long nowMillis) {
-        if (pendingMatchId != null) return;
+        if (requestScheduledForWorld) return;
+        requestScheduledForWorld = true;
         dueAtMillis = nowMillis + ROSTER_SETTLE_DELAY_MILLIS;
         pendingMatchId = UUID.randomUUID().toString().replace("-", "");
     }
@@ -23,7 +25,7 @@ public final class StatsMatchRequestGate {
         return matchId;
     }
 
-    /** Leaves the pending request intact until the visible sidebar exposes a known game mode. */
+    /** Returns whether the one pre-game roster request is ready to collect visible members. */
     public synchronized boolean isDue(long nowMillis) {
         return pendingMatchId != null && nowMillis >= dueAtMillis;
     }
@@ -31,5 +33,6 @@ public final class StatsMatchRequestGate {
     public synchronized void reset() {
         pendingMatchId = null;
         dueAtMillis = -1L;
+        requestScheduledForWorld = false;
     }
 }

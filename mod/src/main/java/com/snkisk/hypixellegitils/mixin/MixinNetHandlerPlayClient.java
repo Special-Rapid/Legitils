@@ -41,6 +41,9 @@ public abstract class MixinNetHandlerPlayClient {
         BedwarsMode gameMode = BedwarsPreGameState.mode(minecraft == null ? null : minecraft.theWorld);
         HypixelLegitilsBootstrap.onBedDestructionChat(message, System.currentTimeMillis());
         HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
+        if (bedwarsPreGame && NickChatSignal.isGameStartCancelled(message)) {
+            HypixelLegitilsBootstrap.onBedwarsGameStartCancelled();
+        }
         if (bedwarsPreGame && NickChatSignal.isGameStartCountdown(message)) {
             HypixelLegitilsBootstrap.onBedwarsGameStart(System.currentTimeMillis());
         }

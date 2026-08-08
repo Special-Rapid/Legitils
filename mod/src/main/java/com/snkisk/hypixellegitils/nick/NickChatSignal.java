@@ -5,6 +5,7 @@ import java.util.regex.Pattern;
 /** Strictly recognizes the visible sender prefix of a normal player-chat line. */
 public final class NickChatSignal {
     public static final String GAME_START = "The game starts in 1 second!";
+    public static final String GAME_START_CANCELLED = "We don't have enough players! Start cancelled.";
     private static final Pattern GAME_START_COUNTDOWN = Pattern.compile("The game starts in (?:[1-9]|10) seconds?!");
 
     private NickChatSignal() {
@@ -17,6 +18,11 @@ public final class NickChatSignal {
     /** Accepts the visible Bed Wars countdown so Stats can start before the transition resets the client world. */
     public static boolean isGameStartCountdown(String message) {
         return message != null && GAME_START_COUNTDOWN.matcher(message.trim()).matches();
+    }
+
+    /** Re-arms one automatic roster request only after Hypixel visibly cancels this pre-game start. */
+    public static boolean isGameStartCancelled(String message) {
+        return GAME_START_CANCELLED.equals(message == null ? null : message.trim());
     }
 
     /**

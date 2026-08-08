@@ -82,6 +82,10 @@ public final class HypixelLegitilsBootstrap {
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Set<String> PREGAME_STATS_CHATTERS
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private static final int MAXIMUM_PREGAME_STATS_LOOKUP_ATTEMPTS = 2;
+    private static final Map<String, AtomicInteger> PREGAME_STATS_LOOKUP_ATTEMPTS
+        = new ConcurrentHashMap<String, AtomicInteger>();
+    private static final AtomicLong PREGAME_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
@@ -323,6 +327,12 @@ public final class HypixelLegitilsBootstrap {
         traceStats("roster scheduled from start countdown");
     }
 
+    /** A visibly cancelled start is not a completed match; the next countdown may schedule once. */
+    public static void onBedwarsGameStartCancelled() {
+        STATS_MATCH_REQUEST_GATE.reset();
+        traceStats("roster reset from pregame cancellation");
+    }
+
     /** Returns one opaque match ID after the short roster-settle delay. */
     public static String consumeDueStatsMatchId(long nowMillis) {
         return STARTED.get() ? STATS_MATCH_REQUEST_GATE.consumeDueMatchId(nowMillis) : null;
@@ -385,9 +395,20 @@ public final class HypixelLegitilsBootstrap {
             traceStats("pregame chat skipped duplicate or limit");
             return;
         }
+        AtomicInteger attempts = PREGAME_STATS_LOOKUP_ATTEMPTS.get(key);
+        if (attempts == null) {
+            AtomicInteger created = new AtomicInteger(0);
+            AtomicInteger existing = PREGAME_STATS_LOOKUP_ATTEMPTS.putIfAbsent(key, created);
+            attempts = existing == null ? created : existing;
+        }
+        if (attempts.incrementAndGet() > MAXIMUM_PREGAME_STATS_LOOKUP_ATTEMPTS) {
+            PREGAME_STATS_CHATTERS.remove(key);
+            traceStats("pregame chat skipped retry limit");
+            return;
+        }
         traceStats("pregame chat request queued mode=" + gameMode);
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
-        final String requestId = "pregame_" + sessionGeneration + "_" + key;
+        final String requestId = "pregame_" + sessionGeneration + "_" + PREGAME_STATS_LOOKUP_SEQUENCE.incrementAndGet();
         final List<StatsBridgeRosterMember> players = Collections.singletonList(chatter);
         STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
             @Override
@@ -395,6 +416,7 @@ public final class HypixelLegitilsBootstrap {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(requestId, gameMode, players, System.currentTimeMillis());
                 traceStats("pregame chat bridge result=" + result.status + " players=" + result.players.size());
+                if (result.status == StatsBridgeLookupResult.Status.UNAVAILABLE) PREGAME_STATS_CHATTERS.remove(key);
                 publishPregameStatsResult(sessionGeneration, result);
             }
         });
@@ -1119,6 +1141,7 @@ public final class HypixelLegitilsBootstrap {
         PENDING_CONFIGURATION_NOTICES.clear();
         PENDING_MANUAL_STATS_RESULTS.clear();
         PREGAME_STATS_CHATTERS.clear();
+        PREGAME_STATS_LOOKUP_ATTEMPTS.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();
         if (active != null) {
