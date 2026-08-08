@@ -19,10 +19,20 @@ public final class StatsPresentationTest {
     @Test
     public void tabSuffixOmitsUnknownAndNickResults() {
         assertEquals("", StatsPresentation.tabSuffix(player("NoData", null, null, null)));
-        assertEquals(" §8| §b✫120 §8| §e4.2 FKDR §8| §aWS 7", StatsPresentation.tabSuffix(player("Known", 120, 4.24D, 7)));
+        assertEquals(" §8| §f[120✫] §8| §e4.2 FKDR §8| §aWS 7", StatsPresentation.tabSuffix(player("Known", 120, 4.24D, 7)));
         assertEquals("", StatsPresentation.tabSuffix(new StatsBridgePlayerResult(
             "Nick", StatsBridgePlayerResult.NickStatus.NICKED, 120, 4.2D, 7, Collections.<StatsBridgePlayerResult.CommunityTag>emptyList()
         )));
+    }
+
+    @Test
+    public void starsUseTheProvidedPrestigeTemplatesAndFkdrUsesThresholdColors() {
+        assertEquals(" §8| §7[99✫] §8| §70.9 FKDR", StatsPresentation.tabSuffix(player("Gray", 99, 0.9D, null)));
+        assertEquals(" §8| §f[100✫] §8| §71.0 FKDR", StatsPresentation.tabSuffix(player("One", 100, 1D, null)));
+        assertEquals(" §8| §6[200✫] §8| §f1.9 FKDR", StatsPresentation.tabSuffix(player("White", 200, 1.9D, null)));
+        assertEquals(" §8| §c[§61§e0§a3§b4§d✪§5] §8| §a2.0 FKDR", StatsPresentation.tabSuffix(player("Rainbow", 1034, 2D, null)));
+        assertEquals(" §8| §8[§72§f04§75⚝§8] §8| §e4.0 FKDR", StatsPresentation.tabSuffix(player("Mirror", 2045, 4D, null)));
+        assertEquals(" §8| §9[§b1§f2345§c✭§4] §8| §c15.0 FKDR", StatsPresentation.tabSuffix(player("Prestigious", 12345, 15D, null)));
     }
 
     @Test
@@ -32,7 +42,7 @@ public final class StatsPresentationTest {
             player("HigherFKDR", 100, 2D, 0),
             player("HighStats", 100, 5D, 0)
         ))));
-        assertEquals("HighStats §8— §b✫100 §eFKDR 5.0 §aWS 0", StatsPresentation.rankedHighStats(Arrays.asList(
+        assertEquals("HighStats §8— §f[100✫] §eFKDR 5.0 §aWS 0", StatsPresentation.rankedHighStats(Arrays.asList(
             player("HighStats", 100, 5D, 0)
         )).get(0).chatSummary());
     }
@@ -44,7 +54,7 @@ public final class StatsPresentationTest {
             Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
         );
         assertEquals(Arrays.asList(
-            "§cR HighStats §8— §b✫100 §eFKDR 5.0 §aWS 0",
+            "§cR HighStats §8— §f[100✫] §eFKDR 5.0 §aWS 0",
             "§durchin tag§7: §fHighStats §8— §dwatchlist"
         ), StatsPresentation.chatLines(
             StatsBridgeLookupResult.ready(Arrays.asList(player)),
@@ -59,7 +69,7 @@ public final class StatsPresentationTest {
             Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
         );
         assertEquals(Arrays.asList(
-            "§bPregame stats§7: §fQuiet §8— §b✫12 §eFKDR 0.4 §aWS 0",
+            "§bPregame stats§7: §fQuiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
             "§durchin tag§7: §fQuiet §8— §dwatchlist"
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }
@@ -75,7 +85,7 @@ public final class StatsPresentationTest {
             )
         );
         assertEquals(Arrays.asList(
-            "§bStats§7: §fPlayer §8— §b✫12 §eFKDR 0.4 §aWS 0",
+            "§bStats§7: §fPlayer §8— §7[12✫] §7FKDR 0.4 §aWS 0",
             "§aAPI§7: §fHypixel: OK",
             "§aAPI§7: §fUrchin: no active tags",
             "§cAPI§7: §fSeraph: authorization failed"
