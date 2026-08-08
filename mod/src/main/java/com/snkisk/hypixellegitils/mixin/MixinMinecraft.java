@@ -128,7 +128,7 @@ public abstract class MixinMinecraft {
             for (String notice : HypixelLegitilsBootstrap.drainPendingNickNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
-            for (HypixelLegitilsBootstrap.PendingPregameNickNotice notice : HypixelLegitilsBootstrap.drainPendingPregameNickNotices(hypixelLegitils$frameNowMillis)) {
+            for (HypixelLegitilsBootstrap.PendingTeamNickNotice notice : HypixelLegitilsBootstrap.drainPendingTeamNickNotices(hypixelLegitils$frameNowMillis)) {
                 if (notice == null) continue;
                 thePlayer.addChatMessage(new ChatComponentText(HypixelLegitilsBootstrap.pregameNickNotice(
                     notice.serverPresentedName,
@@ -235,6 +235,15 @@ public abstract class MixinMinecraft {
     private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {
         NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
         NetworkPlayerInfo info = handler == null || playerId == null ? null : handler.getPlayerInfo(playerId);
+        if (info == null && handler != null && playerId != null) {
+            for (NetworkPlayerInfo candidate : handler.getPlayerInfoMap()) {
+                GameProfile profile = candidate == null ? null : candidate.getGameProfile();
+                if (profile != null && playerId.equals(profile.getId())) {
+                    info = candidate;
+                    break;
+                }
+            }
+        }
         if (info != null) {
             String scoreboardTeamName = ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName);
             if (!fallbackName.equals(scoreboardTeamName)) {

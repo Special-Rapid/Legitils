@@ -46,6 +46,9 @@ public class FlagMessageTest {
         assertEquals("§9§lB §9Blue", FlagMessage.teamFormattedName("§9B Blue", "Blue"));
         assertEquals("§e§lY §eYellow", FlagMessage.teamFormattedName("§eY Yellow", "Yellow"));
         assertEquals("Flaming", FlagMessage.teamFormattedName(null, "Flaming"));
+        assertTrue(FlagMessage.hasBedWarsTeamPrefix("§c§lR §cFlaming"));
+        assertTrue(FlagMessage.hasBedWarsTeamPrefix("§7W White"));
+        assertFalse(FlagMessage.hasBedWarsTeamPrefix("§fFlaming"));
     }
 
     @Test

@@ -77,8 +77,8 @@ public final class HypixelLegitilsBootstrap {
     private static final Queue<PendingBlacklistOperation> PENDING_BLACKLIST_OPERATIONS
         = new ConcurrentLinkedQueue<PendingBlacklistOperation>();
     private static final Queue<String> PENDING_NICK_NOTICES = new ConcurrentLinkedQueue<String>();
-    private static final Queue<PendingPregameNickNotice> PENDING_PREGAME_NICK_NOTICES
-        = new ConcurrentLinkedQueue<PendingPregameNickNotice>();
+    private static final Queue<PendingTeamNickNotice> PENDING_TEAM_NICK_NOTICES
+        = new ConcurrentLinkedQueue<PendingTeamNickNotice>();
     private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
     private static final Set<String> PREGAME_STATS_CHATTERS
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
@@ -290,9 +290,13 @@ public final class HypixelLegitilsBootstrap {
         if (bedwarsPreGame) return;
         if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
         if (serverPresentedName != null && !serverPresentedName.trim().isEmpty()) {
-            PENDING_NICK_NOTICES.add(ChatFormat.line(
-                FlagMessage.teamFormattedName(formattedDisplayName, serverPresentedName) + "§5 is nicked."
-            ));
+            if (!FlagMessage.hasBedWarsTeamPrefix(formattedDisplayName)) {
+                PENDING_TEAM_NICK_NOTICES.add(new PendingTeamNickNotice(playerId, serverPresentedName, System.currentTimeMillis() + 1500L));
+            } else {
+                PENDING_NICK_NOTICES.add(ChatFormat.line(
+                    FlagMessage.teamFormattedName(formattedDisplayName, serverPresentedName) + "§5 is nicked."
+                ));
+            }
         }
         if (NICK_OBSERVATION_LOGGED.compareAndSet(false, true)) {
             System.out.println("[HypixelLegitils] Nick session marker observed for " + serverPresentedName + ".");
@@ -311,7 +315,7 @@ public final class HypixelLegitilsBootstrap {
     public static void onPregameGameStartChat(String rawMessage, long nowMillis) {
         if (!NickChatSignal.isGameStart(rawMessage)) return;
         for (Map.Entry<UUID, String> entry : PREGAME_NICK_CHATTERS.entrySet()) {
-            PENDING_PREGAME_NICK_NOTICES.add(new PendingPregameNickNotice(entry.getKey(), entry.getValue(), nowMillis + 1000L));
+            PENDING_TEAM_NICK_NOTICES.add(new PendingTeamNickNotice(entry.getKey(), entry.getValue(), nowMillis + 1000L));
         }
         PREGAME_NICK_CHATTERS.clear();
     }
@@ -697,15 +701,15 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
-    public static PendingPregameNickNotice[] drainPendingPregameNickNotices(long nowMillis) {
-        List<PendingPregameNickNotice> notices = new ArrayList<PendingPregameNickNotice>();
+    public static PendingTeamNickNotice[] drainPendingTeamNickNotices(long nowMillis) {
+        List<PendingTeamNickNotice> notices = new ArrayList<PendingTeamNickNotice>();
         while (true) {
-            PendingPregameNickNotice notice = PENDING_PREGAME_NICK_NOTICES.peek();
+            PendingTeamNickNotice notice = PENDING_TEAM_NICK_NOTICES.peek();
             if (notice == null || nowMillis < notice.displayAfterMillis) break;
-            notice = PENDING_PREGAME_NICK_NOTICES.poll();
+            notice = PENDING_TEAM_NICK_NOTICES.poll();
             if (notice != null) notices.add(notice);
         }
-        return notices.toArray(new PendingPregameNickNotice[notices.size()]);
+        return notices.toArray(new PendingTeamNickNotice[notices.size()]);
     }
 
     public static String pregameNickNotice(String serverPresentedName, String formattedDisplayName) {
@@ -986,13 +990,13 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    /** Small client-thread payload; the pre-game alias is never persisted beyond the current world. */
-    public static final class PendingPregameNickNotice {
+    /** Small client-thread payload; the Nick alias is never persisted beyond the current world. */
+    public static final class PendingTeamNickNotice {
         public final UUID playerId;
         public final String serverPresentedName;
         private final long displayAfterMillis;
 
-        private PendingPregameNickNotice(UUID playerId, String serverPresentedName, long displayAfterMillis) {
+        private PendingTeamNickNotice(UUID playerId, String serverPresentedName, long displayAfterMillis) {
             this.playerId = playerId;
             this.serverPresentedName = serverPresentedName;
             this.displayAfterMillis = displayAfterMillis;
@@ -1174,7 +1178,7 @@ public final class HypixelLegitilsBootstrap {
             NICKED_SESSION_PLAYER_IDS.clear();
             PENDING_NICK_NOTICES.clear();
             PREGAME_NICK_CHATTERS.clear();
-            if (!postStartRosterScheduled) PENDING_PREGAME_NICK_NOTICES.clear();
+            if (!postStartRosterScheduled) PENDING_TEAM_NICK_NOTICES.clear();
             NICK_OBSERVATION_LOGGED.set(false);
             MARKER_RENDER_LOGGED.set(false);
             TAB_RENDER_HOOK_LOGGED.set(false);

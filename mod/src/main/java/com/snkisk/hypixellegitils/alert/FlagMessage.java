@@ -63,6 +63,17 @@ public final class FlagMessage {
         return isUsableDisplayName(formattedDisplayName) ? whiteTeamPrefix(formattedDisplayName) : fallbackName;
     }
 
+    /** Identifies the normalized Bed Wars team prefix used for a local player identity. */
+    public static boolean hasBedWarsTeamPrefix(String formattedDisplayName) {
+        if (formattedDisplayName == null) return false;
+        if (formattedDisplayName.startsWith("§7W ")) return true;
+        if (formattedDisplayName.length() >= 4 && formattedDisplayName.charAt(0) == '§'
+            && isBedWarsTeamInitial(formattedDisplayName.charAt(2)) && formattedDisplayName.charAt(3) == ' ') return true;
+        return formattedDisplayName.length() >= 6 && formattedDisplayName.charAt(0) == '§'
+            && formattedDisplayName.charAt(2) == '§' && formattedDisplayName.charAt(3) == 'l'
+            && isBedWarsTeamInitial(formattedDisplayName.charAt(4)) && formattedDisplayName.charAt(5) == ' ';
+    }
+
     private static boolean isUsableDisplayName(String formattedDisplayName) {
         return formattedDisplayName != null && !formattedDisplayName.trim().isEmpty();
     }
