@@ -2,25 +2,22 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.mojang.authlib.GameProfile;
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
-import net.minecraft.client.renderer.entity.Render;
 import net.minecraft.client.renderer.entity.RendererLivingEntity;
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/** Changes only the final string supplied to vanilla's head-name renderer. */
+/** Changes the player-name local that Lunar's head-name renderer reads. */
 @Mixin(RendererLivingEntity.class)
 public abstract class MixinRendererLivingEntity {
-    @ModifyArg(
+    @ModifyVariable(
+        // Lunar retains this MCP method name but replaces the inherited
+        // renderOffsetLivingLabel invocation with its own renderer.
         method = "renderName(Lnet/minecraft/entity/EntityLivingBase;DDD)V",
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/entity/Render;renderOffsetLivingLabel(Lnet/minecraft/entity/Entity;DDDLjava/lang/String;FD)V"
-        ),
-        index = 4
+        at = @At("STORE"),
+        ordinal = 0
     )
     private String hypixelLegitils$appendLocalNametagSuffix(String original, EntityLivingBase entity) {
         if (!(entity instanceof EntityPlayer)) return original;
