@@ -139,7 +139,7 @@ final class CompanionConfigurationTests: XCTestCase {
     func testProviderRequestsUseFixedHostsAndKeepSecretsOutOfPayloads() throws {
         let hypixel = StatsProviderLookup.hypixelRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", apiKey: "hypixel-secret")
         XCTAssertEqual(hypixel.url?.host, "api.hypixel.net")
-        XCTAssertEqual(hypixel.value(forHTTPHeaderField: "ApiKey"), "hypixel-secret")
+        XCTAssertEqual(hypixel.value(forHTTPHeaderField: "API-Key"), "hypixel-secret")
         XCTAssertFalse(hypixel.url?.absoluteString.contains("hypixel-secret") == true)
 
         let mojang = StatsProviderLookup.mojangProfileRequest(name: "Player_1")

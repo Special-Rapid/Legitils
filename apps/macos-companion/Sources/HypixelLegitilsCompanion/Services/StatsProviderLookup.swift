@@ -278,7 +278,7 @@ extension StatsProviderLookup {
         components.queryItems = [URLQueryItem(name: "uuid", value: uuid)]
         var request = URLRequest(url: components.url!)
         request.timeoutInterval = responseTimeout
-        request.setValue(apiKey, forHTTPHeaderField: "ApiKey")
+        request.setValue(apiKey, forHTTPHeaderField: "API-Key")
         return request
     }
 
