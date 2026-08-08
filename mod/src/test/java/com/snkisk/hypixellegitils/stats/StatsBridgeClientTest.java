@@ -91,6 +91,28 @@ public final class StatsBridgeClientTest {
         }
     }
 
+    @Test
+    public void acceptsCompanionResponseWhenOptionalStatsAreOmitted() throws Exception {
+        StatsBridgeLookupResult result = request(companionStyleReadyResponse());
+
+        assertEquals(StatsBridgeLookupResult.Status.READY, result.status);
+        assertEquals(1, result.players.size());
+        assertEquals("Player_1", result.players.get(0).name);
+        assertEquals(StatsBridgePlayerResult.NickStatus.KNOWN, result.players.get(0).nickStatus);
+        assertEquals(null, result.players.get(0).stars);
+        assertEquals(null, result.players.get(0).finalKillDeathRatio);
+        assertEquals(null, result.players.get(0).modeWinStreak);
+    }
+
+    @Test
+    public void rejectsUnexpectedPlayerResponseField() throws Exception {
+        StatsBridgeLookupResult result = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[],\"unexpected\":true}]}"
+        );
+
+        assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, result.status);
+    }
+
     private static List<StatsBridgeRosterMember> players() {
         List<StatsBridgeRosterMember> players = new ArrayList<StatsBridgeRosterMember>();
         players.add(new StatsBridgeRosterMember("Player_1", null));
@@ -108,6 +130,45 @@ public final class StatsBridgeClientTest {
 
     private static String readyResponse() {
         return "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"stars\":100,\"finalKillDeathRatio\":5.0,\"modeWinStreak\":10,\"communityTags\":[{\"source\":\"urchin\",\"label\":\"tag\"}]}]}";
+    }
+
+    private static String companionStyleReadyResponse() {
+        return "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[]}]}";
+    }
+
+    private static StatsBridgeLookupResult request(final String response) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
+        server.createContext("/v1/roster", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws java.io.IOException {
+                readAll(exchange);
+                byte[] body = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+                OutputStream output = exchange.getResponseBody();
+                try {
+                    output.write(body);
+                } finally {
+                    output.close();
+                }
+            }
+        });
+        server.start();
+        Path directory = Files.createTempDirectory("legitils-stats-bridge");
+        try {
+            writeDescriptor(
+                directory.resolve("stats-bridge.json"),
+                server.getAddress().getPort(),
+                "capability0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                System.currentTimeMillis() + 120000L
+            );
+            return new StatsBridgeClient(directory.resolve("stats-bridge.json")).requestOnce(
+                "match_1", BedwarsMode.FOURS, players(), System.currentTimeMillis()
+            );
+        } finally {
+            server.stop(0);
+            deleteTree(directory);
+        }
     }
 
     private static byte[] readAll(HttpExchange exchange) throws java.io.IOException {

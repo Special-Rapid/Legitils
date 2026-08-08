@@ -155,9 +155,18 @@ public final class StatsBridgeClient {
     private static StatsBridgePlayerResult parsePlayer(Object rawPlayer) {
         if (!(rawPlayer instanceof Map)) return null;
         Map<?, ?> player = (Map<?, ?>) rawPlayer;
-        if (player.size() != 6 || !(player.get("name") instanceof String) || !(player.get("nickStatus") instanceof String)
+        if (player.size() < 3 || player.size() > 6 || !(player.get("name") instanceof String) || !(player.get("nickStatus") instanceof String)
             || !(player.get("communityTags") instanceof List)) {
             return null;
+        }
+        for (Object rawKey : player.keySet()) {
+            if (!(rawKey instanceof String)) return null;
+            String key = (String) rawKey;
+            if (!"name".equals(key) && !"nickStatus".equals(key) && !"stars".equals(key)
+                && !"finalKillDeathRatio".equals(key) && !"modeWinStreak".equals(key)
+                && !"communityTags".equals(key)) {
+                return null;
+            }
         }
         StatsBridgeRosterMember identity = new StatsBridgeRosterMember((String) player.get("name"), null);
         if (!identity.isValid()) return null;
