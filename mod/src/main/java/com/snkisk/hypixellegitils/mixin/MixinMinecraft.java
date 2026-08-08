@@ -195,10 +195,16 @@ public abstract class MixinMinecraft {
 
     private void hypixelLegitils$submitDueStatsRoster() {
         NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
-        if (handler == null) return;
+        if (handler == null) {
+            HypixelLegitilsBootstrap.traceStats("roster due skipped no net handler");
+            return;
+        }
         if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) return;
         BedwarsMode gameMode = BedwarsPreGameState.mode(theWorld);
-        if (gameMode == BedwarsMode.UNKNOWN) return;
+        if (gameMode == BedwarsMode.UNKNOWN) {
+            HypixelLegitilsBootstrap.traceStats("roster due waiting for recognized Bed Wars mode");
+            return;
+        }
         String matchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
         if (matchId == null) return;
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
@@ -212,12 +218,13 @@ public abstract class MixinMinecraft {
             members.put(profile.getName().toLowerCase(java.util.Locale.ROOT), member);
         }
         if (!members.isEmpty()) {
+            HypixelLegitilsBootstrap.traceStats("roster due collected players=" + members.size());
             HypixelLegitilsBootstrap.requestStatsRoster(
                 matchId,
                 gameMode,
                 new ArrayList<StatsBridgeRosterMember>(members.values())
             );
-        }
+        } else HypixelLegitilsBootstrap.traceStats("roster due had no valid visible players");
     }
 
     private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {

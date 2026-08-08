@@ -20,6 +20,7 @@ public final class LocalCommand {
         ChatFormat.continuation("§b.l stats on/off §8— §fenable or disable Stats"),
         ChatFormat.continuation("§b.l stats <tab|chat|stars|fkdr|winstreak> on/off"),
         ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph"),
+        ChatFormat.continuation("§d.l log on/off §8— §ftemporary local Stats trace"),
         ChatFormat.continuation("§e.l anticheat list §8— §fshow detector settings"),
         ChatFormat.continuation("§b.l anticheat on <detector|all> §8— §fenable now"),
         ChatFormat.continuation("§c.l anticheat off <detector|all> §8— §fdisable now"),
@@ -91,6 +92,12 @@ public final class LocalCommand {
             }
             if (parts.length == 3 && isValidPlayerName(parts[2])) {
                 return new Request(Kind.STATS_LOOKUP, null, false, false, -1, parts[2]);
+            }
+        }
+        if (input.startsWith(PREFIX + " log ")) {
+            String[] parts = input.split(" ");
+            if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
+                return new Request(Kind.STATS_TRACE_SET_ENABLED, null, false, "on".equals(parts[2]));
             }
         }
         if (input.startsWith(ANTICHEAT + " ")) {
@@ -197,6 +204,7 @@ public final class LocalCommand {
         STATS_STATUS,
         STATS_SET,
         STATS_LOOKUP,
+        STATS_TRACE_SET_ENABLED,
         ANTICHEAT_LIST,
         ANTICHEAT_SET,
         NICK_DETECT_SET_ENABLED,

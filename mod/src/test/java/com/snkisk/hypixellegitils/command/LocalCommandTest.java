@@ -73,6 +73,9 @@ public class LocalCommandTest {
         LocalCommand.Request stats = LocalCommand.requestForUserInput(".l stats Player_1", true);
         assertEquals(LocalCommand.Kind.STATS_LOOKUP, stats.kind);
         assertEquals("Player_1", stats.playerName);
+        LocalCommand.Request trace = LocalCommand.requestForUserInput(".l log on", true);
+        assertEquals(LocalCommand.Kind.STATS_TRACE_SET_ENABLED, trace.kind);
+        assertTrue(trace.enabled);
         assertEquals(LocalCommand.Kind.STATS_STATUS, LocalCommand.requestForUserInput(".l stats status", true).kind);
         LocalCommand.Request statsOff = LocalCommand.requestForUserInput(".l stats off", true);
         assertEquals(LocalCommand.Kind.STATS_SET, statsOff.kind);

@@ -69,6 +69,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile String runtimeStatusUserHome;
     private static volatile StatsBridgeClient statsBridgeClient;
     private static volatile StatsBridgeLookupResult latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
+    private static volatile boolean statsTraceEnabled;
     private static final StatsMatchRequestGate STATS_MATCH_REQUEST_GATE = new StatsMatchRequestGate();
     private static final StatsBridgeSession STATS_BRIDGE_SESSION = new StatsBridgeSession();
     private static final Object STATS_BRIDGE_RESULT_LOCK = new Object();
@@ -319,6 +320,7 @@ public final class HypixelLegitilsBootstrap {
     public static void onBedwarsGameStart(long nowMillis) {
         if (!STARTED.get()) return;
         STATS_MATCH_REQUEST_GATE.onBedwarsGameStart(nowMillis);
+        traceStats("roster scheduled from exact game-start chat");
     }
 
     /** Returns one opaque match ID after the short roster-settle delay. */
@@ -339,13 +341,19 @@ public final class HypixelLegitilsBootstrap {
     ) {
         final StatsBridgeClient client = statsBridgeClient;
         if (client == null || matchId == null || gameMode == null || gameMode == BedwarsMode.UNKNOWN
-            || players == null || players.isEmpty()) return;
+            || players == null || players.isEmpty()) {
+            traceStats("roster request skipped client=" + (client != null) + " mode=" + gameMode
+                + " players=" + (players == null ? -1 : players.size()));
+            return;
+        }
+        traceStats("roster request queued mode=" + gameMode + " players=" + players.size());
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
         STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
             @Override
             public void run() {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
+                traceStats("roster bridge result=" + result.status + " players=" + result.players.size());
                 publishStatsBridgeResult(sessionGeneration, result);
             }
         });
@@ -359,13 +367,27 @@ public final class HypixelLegitilsBootstrap {
     public static void onPregameStatsChat(String serverPresentedName, BedwarsMode gameMode) {
         StatsSettings settings = statsSettings;
         if (!STARTED.get() || !settings.enabled || !settings.chatEnabled || gameMode == null
-            || gameMode == BedwarsMode.UNKNOWN || serverPresentedName == null) return;
+            || gameMode == BedwarsMode.UNKNOWN || serverPresentedName == null) {
+            traceStats("pregame chat skipped started=" + STARTED.get() + " stats=" + settings.enabled
+                + " chat=" + settings.chatEnabled + " mode=" + gameMode);
+            return;
+        }
         StatsBridgeRosterMember chatter = new StatsBridgeRosterMember(serverPresentedName, null);
-        if (!chatter.isValid()) return;
+        if (!chatter.isValid()) {
+            traceStats("pregame chat skipped invalid visible sender");
+            return;
+        }
         final StatsBridgeClient client = statsBridgeClient;
-        if (client == null) return;
+        if (client == null) {
+            traceStats("pregame chat skipped bridge client unavailable");
+            return;
+        }
         String key = serverPresentedName.toLowerCase(Locale.ROOT);
-        if (PREGAME_STATS_CHATTERS.size() >= 64 || !PREGAME_STATS_CHATTERS.add(key)) return;
+        if (PREGAME_STATS_CHATTERS.size() >= 64 || !PREGAME_STATS_CHATTERS.add(key)) {
+            traceStats("pregame chat skipped duplicate or limit");
+            return;
+        }
+        traceStats("pregame chat request queued mode=" + gameMode);
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
         final String requestId = "pregame_" + sessionGeneration + "_" + key;
         final List<StatsBridgeRosterMember> players = Collections.singletonList(chatter);
@@ -374,6 +396,7 @@ public final class HypixelLegitilsBootstrap {
             public void run() {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(requestId, gameMode, players, System.currentTimeMillis());
+                traceStats("pregame chat bridge result=" + result.status + " players=" + result.players.size());
                 publishPregameStatsResult(sessionGeneration, result);
             }
         });
@@ -383,6 +406,7 @@ public final class HypixelLegitilsBootstrap {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
             latestStatsBridgeResult = result;
+            traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
                 for (String line : StatsPresentation.chatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
             }
@@ -393,6 +417,7 @@ public final class HypixelLegitilsBootstrap {
     private static void publishPregameStatsResult(long sessionGeneration, StatsBridgeLookupResult result) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration) || !statsSettings.enabled || !statsSettings.chatEnabled) return;
+            traceStats("pregame chat result published");
             for (String line : StatsPresentation.pregameChatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
         }
     }
@@ -400,6 +425,11 @@ public final class HypixelLegitilsBootstrap {
     /** Retained only as normalized Bridge data for the forthcoming local display stage. */
     public static StatsBridgeLookupResult latestStatsBridgeResult() {
         return latestStatsBridgeResult;
+    }
+
+    /** Opt-in local trace for automatic Stats stages; it never includes player names, keys, or API payloads. */
+    public static void traceStats(String stage) {
+        if (statsTraceEnabled && stage != null) System.out.println("[HypixelLegitils][StatsTrace] " + stage);
     }
 
     /** Returns a local-only suffix for a known real profile; existing Tab markers stay ahead of it. */
@@ -468,6 +498,7 @@ public final class HypixelLegitilsBootstrap {
         if (request.kind == LocalCommand.Kind.HELP) return LocalCommand.helpLines();
         if (request.kind == LocalCommand.Kind.STATS_STATUS) return statsStatusLines(detectorSettings.savedConfig().statsSettings);
         if (request.kind == LocalCommand.Kind.STATS_SET) return updateStatsSetting(request);
+        if (request.kind == LocalCommand.Kind.STATS_TRACE_SET_ENABLED) return updateStatsTrace(request.enabled);
         if (request.kind == LocalCommand.Kind.STATS_LOOKUP) {
             requestManualStatsLookup(request.playerName, visiblePlayers);
             return new String[] { ChatFormat.line("§bStats lookup started for §f" + request.playerName + "§b.") };
@@ -534,6 +565,13 @@ public final class HypixelLegitilsBootstrap {
         } catch (Exception exception) {
             return new String[] { ChatFormat.line("§cUnable to save Stats setting. Stats unchanged.") };
         }
+    }
+
+    private static String[] updateStatsTrace(boolean enabled) {
+        statsTraceEnabled = enabled;
+        return new String[] { ChatFormat.line(enabled
+            ? "§dStats trace enabled. §7Check latest.log and run §b.l log off §7when finished."
+            : "§dStats trace disabled.") };
     }
 
     private static StatsSettings statsSettingsWith(StatsSettings current, LocalCommand.StatsOption option, boolean enabled) {
@@ -1077,6 +1115,7 @@ public final class HypixelLegitilsBootstrap {
             STATS_BRIDGE_SESSION.reset();
             latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
         }
+        traceStats("world reset clears pending automatic roster and latest result");
         STATS_MATCH_REQUEST_GATE.reset();
         PENDING_STATS_NOTICES.clear();
         PENDING_CONFIGURATION_NOTICES.clear();

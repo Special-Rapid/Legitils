@@ -6,6 +6,7 @@ import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.nick.PregameChatSender;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
+import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
@@ -37,6 +38,7 @@ public abstract class MixinNetHandlerPlayClient {
         IChatComponent component = packet == null ? null : packet.getChatComponent();
         String message = component == null ? null : component.getUnformattedText();
         boolean bedwarsPreGame = BedwarsPreGameState.isActive(minecraft == null ? null : minecraft.theWorld);
+        BedwarsMode gameMode = BedwarsPreGameState.mode(minecraft == null ? null : minecraft.theWorld);
         HypixelLegitilsBootstrap.onBedDestructionChat(message, System.currentTimeMillis());
         HypixelLegitilsBootstrap.onPregameGameStartChat(message, System.currentTimeMillis());
         if (bedwarsPreGame && NickChatSignal.isGameStart(message)) {
@@ -45,12 +47,17 @@ public abstract class MixinNetHandlerPlayClient {
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {
             hypixelLegitils$observePregameNickChat(minecraft, message);
             String senderName = PregameChatSender.visibleName(message);
+            HypixelLegitilsBootstrap.traceStats("server chat pregame=" + bedwarsPreGame + " type=" + packet.getType()
+                + " mode=" + gameMode + " visibleSender=" + (senderName != null));
             if (senderName != null) {
                 HypixelLegitilsBootstrap.onPregameStatsChat(
                     senderName,
-                    BedwarsPreGameState.mode(minecraft == null ? null : minecraft.theWorld)
+                    gameMode
                 );
             }
+        } else {
+            HypixelLegitilsBootstrap.traceStats("server chat skipped pregame=" + bedwarsPreGame
+                + " gameStart=" + NickChatSignal.isGameStart(message) + " mode=" + gameMode);
         }
     }
 
