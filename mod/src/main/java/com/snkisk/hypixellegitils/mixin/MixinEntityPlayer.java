@@ -31,7 +31,7 @@ public class MixinEntityPlayer implements PlayerIdentityAccess {
         Minecraft minecraft = Minecraft.getMinecraft();
         if (minecraft == null || minecraft.thePlayer == null || minecraft.theWorld == null) return;
         java.util.UUID playerId = hypixelLegitils$getProfileId();
-        String suffix = hypixelLegitils$markerSuffix(playerId);
+        String suffix = hypixelLegitils$markerSuffix(playerId, gameProfile == null ? null : gameProfile.getName());
         if (suffix.isEmpty()) return;
         IChatComponent original = callbackInfo.getReturnValue();
         ChatComponentText marked = new ChatComponentText("");
@@ -41,10 +41,11 @@ public class MixinEntityPlayer implements PlayerIdentityAccess {
         HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, suffix);
     }
 
-    private String hypixelLegitils$markerSuffix(java.util.UUID playerId) {
+    private String hypixelLegitils$markerSuffix(java.util.UUID playerId, String playerName) {
         String suffix = "";
         if (HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
         if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
+        suffix += HypixelLegitilsBootstrap.statsNametagSuffix(playerName, playerId);
         return suffix;
     }
 }

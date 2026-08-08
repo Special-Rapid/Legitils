@@ -6,8 +6,9 @@ import java.util.Set;
 
 /** Immutable startup configuration shared later with the macOS Companion. */
 public final class LegitilsConfig {
-    public static final int SCHEMA_VERSION = 5;
+    public static final int SCHEMA_VERSION = 6;
     public static final int STATS_SCHEMA_VERSION = 5;
+    public static final int STATS_NAMETAG_SCHEMA_VERSION = 6;
     public static final int LEGACY_SCHEMA_VERSION = 1;
     public static final int MARKER_SCHEMA_VERSION = 2;
     public static final int NICK_DETECTION_SCHEMA_VERSION = 3;

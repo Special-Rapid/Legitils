@@ -120,6 +120,7 @@ public final class LegitilsConfigStore {
             && schemaVersion != LegitilsConfig.MARKER_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.PARTY_SCHEMA_VERSION
+            && schemaVersion != LegitilsConfig.STATS_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.SCHEMA_VERSION) {
             throw new IllegalArgumentException("unsupported schemaVersion");
         }
@@ -131,6 +132,8 @@ public final class LegitilsConfigStore {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection");
         } else if (schemaVersion == LegitilsConfig.PARTY_SCHEMA_VERSION) {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection", "partyDetection");
+        } else if (schemaVersion == LegitilsConfig.STATS_SCHEMA_VERSION) {
+            requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection", "partyDetection", "stats");
         } else {
             requireOnlyKeys(root, "schemaVersion", "revision", "enabledDetectors", "sensitivity", "notifications", "cooldowns", "debug", "markers", "nickDetection", "partyDetection", "stats");
         }
@@ -207,11 +210,17 @@ public final class LegitilsConfigStore {
         if (schemaVersion >= LegitilsConfig.STATS_SCHEMA_VERSION) {
             if (!(root.get("stats") instanceof Map)) throw new IllegalArgumentException("stats must be an object");
             Map<?, ?> rawStats = (Map<?, ?>) root.get("stats");
-            requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat");
+            if (schemaVersion == LegitilsConfig.STATS_SCHEMA_VERSION) {
+                requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat");
+            } else {
+                requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat", "nametag", "nametagFkdrThreshold");
+            }
             stats = new StatsSettings(booleanValue(rawStats.get("enabled"), "stats.enabled"),
                 booleanValue(rawStats.get("tab"), "stats.tab"), booleanValue(rawStats.get("stars"), "stats.stars"),
                 booleanValue(rawStats.get("fkdr"), "stats.fkdr"), booleanValue(rawStats.get("winStreak"), "stats.winStreak"),
-                booleanValue(rawStats.get("chat"), "stats.chat"));
+                booleanValue(rawStats.get("chat"), "stats.chat"),
+                schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION && booleanValue(rawStats.get("nametag"), "stats.nametag"),
+                schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION ? doubleValue(rawStats.get("nametagFkdrThreshold"), "stats.nametagFkdrThreshold") : 1D);
         }
 
         return new LegitilsConfig(
@@ -273,6 +282,10 @@ public final class LegitilsConfigStore {
             stats.put("fkdr", Boolean.valueOf(config.statsSettings.fkdrEnabled));
             stats.put("winStreak", Boolean.valueOf(config.statsSettings.winStreakEnabled));
             stats.put("chat", Boolean.valueOf(config.statsSettings.chatEnabled));
+            if (config.schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION) {
+                stats.put("nametag", Boolean.valueOf(config.statsSettings.nametagEnabled));
+                stats.put("nametagFkdrThreshold", Double.valueOf(config.statsSettings.nametagFkdrThreshold));
+            }
             root.put("stats", stats);
         }
         return SimpleJson.write(root);
@@ -295,6 +308,13 @@ public final class LegitilsConfigStore {
     private static long longValue(Object value, String name) {
         if (!(value instanceof Long)) throw new IllegalArgumentException(name + " must be an integer");
         return ((Long) value).longValue();
+    }
+
+    private static double doubleValue(Object value, String name) {
+        if (!(value instanceof Number)) throw new IllegalArgumentException(name + " must be a number");
+        double number = ((Number) value).doubleValue();
+        if (Double.isNaN(number) || Double.isInfinite(number)) throw new IllegalArgumentException(name + " must be finite");
+        return number;
     }
 
     private static boolean booleanValue(Object value, String name) {

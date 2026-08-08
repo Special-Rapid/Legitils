@@ -178,7 +178,9 @@ public final class DetectorSettingsService {
     private static boolean sameStatsSettings(StatsSettings left, StatsSettings right) {
         return left.enabled == right.enabled && left.tabEnabled == right.tabEnabled
             && left.starsEnabled == right.starsEnabled && left.fkdrEnabled == right.fkdrEnabled
-            && left.winStreakEnabled == right.winStreakEnabled && left.chatEnabled == right.chatEnabled;
+            && left.winStreakEnabled == right.winStreakEnabled && left.chatEnabled == right.chatEnabled
+            && left.nametagEnabled == right.nametagEnabled
+            && Double.compare(left.nametagFkdrThreshold, right.nametagFkdrThreshold) == 0;
     }
 
     private NotificationSettings notificationSettingsWith(NotificationChannel channel, boolean enabled) {

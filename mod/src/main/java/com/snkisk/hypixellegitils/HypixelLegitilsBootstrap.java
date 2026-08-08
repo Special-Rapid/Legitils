@@ -489,6 +489,18 @@ public final class HypixelLegitilsBootstrap {
         return "";
     }
 
+    /** Returns the opt-in FKDR suffix for the vanilla player-nametag render path. */
+    public static String statsNametagSuffix(String playerName, UUID playerId) {
+        StatsSettings settings = statsSettings;
+        if (!STARTED.get() || !settings.enabled || !settings.nametagEnabled || playerName == null || playerId == null || playerId.version() == 1) return "";
+        StatsBridgeLookupResult result = latestStatsBridgeResult;
+        if (result.status != StatsBridgeLookupResult.Status.READY) return "";
+        for (StatsBridgePlayerResult player : result.players) {
+            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.nametagFkdrSuffix(player, settings);
+        }
+        return "";
+    }
+
     public static String[] drainPendingStatsNotices() {
         List<String> notices = new ArrayList<String>();
         String notice;
@@ -597,11 +609,16 @@ public final class HypixelLegitilsBootstrap {
         try {
             StatsSettings current = detectorSettings.savedConfig().statsSettings;
             StatsSettings replacement = statsSettingsWith(current, request.statsOption, request.enabled);
+            if (request.statsOption == LocalCommand.StatsOption.NAMETAG && request.enabled) {
+                replacement = statsSettingsWith(current, request.statsOption, true, request.statsThreshold);
+            }
             DetectorSettingsService.Update update = detectorSettings.setStatsSettings(replacement);
             statsSettings = update.config.statsSettings;
             return new String[] {
                 ChatFormat.line("§fStats " + request.statsOption.displayName() + " "
                     + (request.enabled ? "§aenabled" : "§cdisabled")
+                    + (request.statsOption == LocalCommand.StatsOption.NAMETAG && request.enabled
+                        ? " §7at FKDR §f" + decimal(request.statsThreshold) + "+" : "")
                     + (update.changed ? " §asaved and applied" : " §7already active")),
                 ChatFormat.continuation("§7Changes apply immediately.")
             };
@@ -620,6 +637,10 @@ public final class HypixelLegitilsBootstrap {
     }
 
     private static StatsSettings statsSettingsWith(StatsSettings current, LocalCommand.StatsOption option, boolean enabled) {
+        return statsSettingsWith(current, option, enabled, current == null ? Double.NaN : current.nametagFkdrThreshold);
+    }
+
+    private static StatsSettings statsSettingsWith(StatsSettings current, LocalCommand.StatsOption option, boolean enabled, double nametagFkdrThreshold) {
         if (current == null || option == null) throw new IllegalArgumentException("Stats option is required");
         boolean stats = current.enabled;
         boolean tab = current.tabEnabled;
@@ -627,13 +648,19 @@ public final class HypixelLegitilsBootstrap {
         boolean stars = current.starsEnabled;
         boolean fkdr = current.fkdrEnabled;
         boolean winStreak = current.winStreakEnabled;
+        boolean nametag = current.nametagEnabled;
+        double nametagThreshold = current.nametagFkdrThreshold;
         if (option == LocalCommand.StatsOption.ENABLED) stats = enabled;
         else if (option == LocalCommand.StatsOption.TAB) tab = enabled;
         else if (option == LocalCommand.StatsOption.CHAT) chat = enabled;
         else if (option == LocalCommand.StatsOption.STARS) stars = enabled;
         else if (option == LocalCommand.StatsOption.FKDR) fkdr = enabled;
         else if (option == LocalCommand.StatsOption.WIN_STREAK) winStreak = enabled;
-        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat);
+        else if (option == LocalCommand.StatsOption.NAMETAG) {
+            nametag = enabled;
+            if (enabled) nametagThreshold = nametagFkdrThreshold;
+        }
+        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat, nametag, nametagThreshold);
     }
 
     private static String[] statsStatusLines(StatsSettings settings) {
@@ -643,12 +670,18 @@ public final class HypixelLegitilsBootstrap {
             ChatFormat.continuation("§7Tab: " + state(settings.tabEnabled) + " §8| §7Chat: " + state(settings.chatEnabled)),
             ChatFormat.continuation("§7Stars: " + state(settings.starsEnabled) + " §8| §7FKDR: " + state(settings.fkdrEnabled)
                 + " §8| §7Win Streak: " + state(settings.winStreakEnabled)),
+            ChatFormat.continuation("§7Nametag FKDR: " + state(settings.nametagEnabled)
+                + " §8| §7threshold: §f" + decimal(settings.nametagFkdrThreshold)),
             ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
         };
     }
 
     private static String state(boolean enabled) {
         return enabled ? "§aon" : "§coff";
+    }
+
+    private static String decimal(double value) {
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 
     /** Compatibility helper for callers that only need one local response line. */
@@ -1113,7 +1146,7 @@ public final class HypixelLegitilsBootstrap {
 
     /** Session-only local nick marker; it is deliberately separate from the persistent Blacklist. */
     public static boolean shouldShowNickedSessionMarker(java.util.UUID playerId) {
-        return nickDetectionEnabled && playerId != null && NICKED_SESSION_PLAYER_IDS.contains(playerId);
+        return nickDetectionEnabled && playerId != null && (playerId.version() == 1 || NICKED_SESSION_PLAYER_IDS.contains(playerId));
     }
 
     /** Tab profiles can arrive before a matching world entity; UUID-v1 remains a session-only Nick marker. */

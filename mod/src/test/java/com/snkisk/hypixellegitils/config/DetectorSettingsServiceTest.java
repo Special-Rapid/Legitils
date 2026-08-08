@@ -199,15 +199,18 @@ public class DetectorSettingsServiceTest {
         try {
             LegitilsConfig defaults = LegitilsConfig.defaults();
             DetectorSettingsService service = new DetectorSettingsService(new LegitilsConfigStore(), path, defaults);
-            StatsSettings changed = new StatsSettings(true, false, true, false, true, false);
+            StatsSettings changed = new StatsSettings(true, false, true, false, true, false, true, 3.5D);
             DetectorSettingsService.Update update = service.setStatsSettings(changed);
             assertTrue(update.changed);
             assertFalse(update.config.statsSettings.tabEnabled);
             assertFalse(update.config.statsSettings.fkdrEnabled);
             assertFalse(update.config.statsSettings.chatEnabled);
+            assertTrue(update.config.statsSettings.nametagEnabled);
+            assertEquals(3.5D, update.config.statsSettings.nametagFkdrThreshold, 0D);
             assertEquals(defaults.enabledDetectors, update.config.enabledDetectors);
             assertFalse(service.setStatsSettings(changed).changed);
             assertFalse(new LegitilsConfigStore().load(path).config.statsSettings.tabEnabled);
+            assertEquals(3.5D, new LegitilsConfigStore().load(path).config.statsSettings.nametagFkdrThreshold, 0D);
 
             DetectorSettingsService.Update detectorUpdate = service.setEnabled(DetectorId.NO_SLOW, true);
             assertFalse(detectorUpdate.config.statsSettings.tabEnabled);

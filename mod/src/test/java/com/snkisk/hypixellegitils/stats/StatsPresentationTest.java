@@ -1,5 +1,6 @@
 package com.snkisk.hypixellegitils.stats;
 
+import com.snkisk.hypixellegitils.config.StatsSettings;
 import java.util.Arrays;
 import java.util.Collections;
 import org.junit.Test;
@@ -33,6 +34,18 @@ public final class StatsPresentationTest {
         assertEquals(" §8| §c[§61§e0§a3§b4§d✪§5] §8| §a2.0 FKDR", StatsPresentation.tabSuffix(player("Rainbow", 1034, 2D, null)));
         assertEquals(" §8| §8[§72§f04§75⚝§8] §8| §e4.0 FKDR", StatsPresentation.tabSuffix(player("Mirror", 2045, 4D, null)));
         assertEquals(" §8| §9[§b1§f2345§c✭§4] §8| §c15.0 FKDR", StatsPresentation.tabSuffix(player("Prestigious", 12345, 15D, null)));
+    }
+
+    @Test
+    public void nametagFKDRIsOptInAndFiltersByTheConfiguredThreshold() {
+        StatsSettings disabled = StatsSettings.defaults();
+        StatsSettings enabled = new StatsSettings(true, true, true, true, true, true, true, 3.5D);
+        assertEquals("", StatsPresentation.nametagFkdrSuffix(player("Low", 10, 3.4D, null), enabled));
+        assertEquals(" §a3.5 FKDR", StatsPresentation.nametagFkdrSuffix(player("Match", 10, 3.5D, null), enabled));
+        assertEquals("", StatsPresentation.nametagFkdrSuffix(player("High", 10, 9D, null), disabled));
+        assertEquals("", StatsPresentation.nametagFkdrSuffix(new StatsBridgePlayerResult(
+            "Nick", StatsBridgePlayerResult.NickStatus.NICKED, 10, 9D, null, Collections.<StatsBridgePlayerResult.CommunityTag>emptyList()
+        ), enabled));
     }
 
     @Test

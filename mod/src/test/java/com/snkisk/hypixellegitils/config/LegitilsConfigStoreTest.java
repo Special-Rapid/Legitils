@@ -148,4 +148,30 @@ public class LegitilsConfigStoreTest {
             Files.deleteIfExists(directory);
         }
     }
+
+    @Test
+    public void schemaFiveStatsConfigurationAddsDisabledNametagAndMigratesOnSave() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-schema-five-stats-test");
+        Path path = directory.resolve("config.json");
+        try {
+            String json = "{\"schemaVersion\":5,\"revision\":4,\"enabledDetectors\":[],\"sensitivity\":\"balanced\",\"notifications\":{\"chat\":true,\"overlay\":false,\"sound\":false},\"cooldowns\":{\"normalMillis\":1000,\"airStallMillis\":30000},\"debug\":false,\"markers\":{\"enabled\":true,\"threshold\":2},\"nickDetection\":{\"enabled\":true},\"partyDetection\":{\"enabled\":true},\"stats\":{\"enabled\":true,\"tab\":true,\"stars\":true,\"fkdr\":true,\"winStreak\":true,\"chat\":true}}";
+            Files.write(path, json.getBytes("UTF-8"));
+            LegitilsConfigStore store = new LegitilsConfigStore();
+            ConfigLoadResult loaded = store.load(path);
+            assertFalse(loaded.usedDefaults);
+            assertFalse(loaded.config.statsSettings.nametagEnabled);
+            assertEquals(1D, loaded.config.statsSettings.nametagFkdrThreshold, 0D);
+
+            DetectorSettingsService service = new DetectorSettingsService(store, path, loaded.config);
+            DetectorSettingsService.Update update = service.setStatsSettings(
+                new StatsSettings(true, true, true, true, true, true, true, 2.5D)
+            );
+            assertEquals(LegitilsConfig.SCHEMA_VERSION, update.config.schemaVersion);
+            assertTrue(store.load(path).config.statsSettings.nametagEnabled);
+            assertEquals(2.5D, store.load(path).config.statsSettings.nametagFkdrThreshold, 0D);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
 }

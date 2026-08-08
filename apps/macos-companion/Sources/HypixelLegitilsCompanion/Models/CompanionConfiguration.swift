@@ -1,7 +1,7 @@
 import Foundation
 
 struct CompanionConfiguration: Codable, Equatable {
-    static let schemaVersion = 5
+    static let schemaVersion = 6
 
     var schemaVersion: Int
     var revision: Int64
@@ -75,15 +75,17 @@ struct CompanionConfiguration: Codable, Equatable {
         stars: true,
         fkdr: true,
         winStreak: true,
-        chat: true
+        chat: true,
+        nametag: false,
+        nametagFkdrThreshold: 1
     )
 
-    /// Reads the pre-Stats schema 4 format without losing any existing detector settings.
-    /// A later save persists the normalized schema 5 configuration.
+    /// Reads schemas before the optional nametag setting without losing existing configuration.
+    /// A later save persists the normalized current schema.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let storedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        guard storedSchemaVersion == 4 || storedSchemaVersion == Self.schemaVersion else {
+        guard storedSchemaVersion == 4 || storedSchemaVersion == 5 || storedSchemaVersion == Self.schemaVersion else {
             throw ConfigurationStoreError.unsupportedSchema(storedSchemaVersion)
         }
 
@@ -163,5 +165,41 @@ struct CompanionConfiguration: Codable, Equatable {
         var fkdr: Bool
         var winStreak: Bool
         var chat: Bool
+        var nametag: Bool
+        var nametagFkdrThreshold: Double
+
+        private enum CodingKeys: String, CodingKey {
+            case enabled
+            case tab
+            case stars
+            case fkdr
+            case winStreak
+            case chat
+            case nametag
+            case nametagFkdrThreshold
+        }
+
+        init(enabled: Bool, tab: Bool, stars: Bool, fkdr: Bool, winStreak: Bool, chat: Bool, nametag: Bool, nametagFkdrThreshold: Double) {
+            self.enabled = enabled
+            self.tab = tab
+            self.stars = stars
+            self.fkdr = fkdr
+            self.winStreak = winStreak
+            self.chat = chat
+            self.nametag = nametag
+            self.nametagFkdrThreshold = nametagFkdrThreshold
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try container.decode(Bool.self, forKey: .enabled)
+            tab = try container.decode(Bool.self, forKey: .tab)
+            stars = try container.decode(Bool.self, forKey: .stars)
+            fkdr = try container.decode(Bool.self, forKey: .fkdr)
+            winStreak = try container.decode(Bool.self, forKey: .winStreak)
+            chat = try container.decode(Bool.self, forKey: .chat)
+            nametag = try container.decodeIfPresent(Bool.self, forKey: .nametag) ?? false
+            nametagFkdrThreshold = try container.decodeIfPresent(Double.self, forKey: .nametagFkdrThreshold) ?? 1
+        }
     }
 }

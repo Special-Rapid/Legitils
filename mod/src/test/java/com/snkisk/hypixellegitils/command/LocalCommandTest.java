@@ -28,6 +28,7 @@ public class LocalCommandTest {
         assertTrue(contains(lines, ".l stats status"));
         assertTrue(contains(lines, ".l stats on/off"));
         assertTrue(contains(lines, ".l stats <tab|chat|stars|fkdr|winstreak> on/off"));
+        assertTrue(contains(lines, ".l stats nametag on <FKDR>"));
         assertTrue(contains(lines, ".l stats <player>"));
         assertTrue(contains(lines, "anticheat on"));
         assertTrue(contains(lines, "anticheat off"));
@@ -85,6 +86,15 @@ public class LocalCommandTest {
         assertEquals(LocalCommand.StatsOption.TAB, statsTab.statsOption);
         assertTrue(statsTab.enabled);
         assertEquals(LocalCommand.StatsOption.WIN_STREAK, LocalCommand.requestForUserInput(".l stats ws on", true).statsOption);
+        LocalCommand.Request nametagOn = LocalCommand.requestForUserInput(".l stats nametag on 3.5", true);
+        assertEquals(LocalCommand.StatsOption.NAMETAG, nametagOn.statsOption);
+        assertTrue(nametagOn.enabled);
+        assertEquals(3.5D, nametagOn.statsThreshold, 0D);
+        LocalCommand.Request nametagOff = LocalCommand.requestForUserInput(".l stats nametag off", true);
+        assertEquals(LocalCommand.StatsOption.NAMETAG, nametagOff.statsOption);
+        assertTrue(!nametagOff.enabled);
+        assertEquals(LocalCommand.Kind.USAGE, LocalCommand.requestForUserInput(".l stats nametag on nope", true).kind);
+        assertEquals(LocalCommand.Kind.USAGE, LocalCommand.requestForUserInput(".l stats nametag on", true).kind);
         assertEquals(4, LocalCommand.requestForUserInput(".legitils marker threshold 4", true).threshold);
         assertEquals(LocalCommand.Kind.MARKER_SET_THRESHOLD, LocalCommand.requestForUserInput(".legitils marker threshold 1", true).kind);
         assertEquals(LocalCommand.Kind.MARKER_SET_ENABLED, LocalCommand.requestForUserInput(".l blacklist on", true).kind);

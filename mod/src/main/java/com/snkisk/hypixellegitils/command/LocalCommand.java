@@ -19,6 +19,8 @@ public final class LocalCommand {
         ChatFormat.continuation("§b.l stats status §8— §fshow local Stats settings"),
         ChatFormat.continuation("§b.l stats on/off §8— §fenable or disable Stats"),
         ChatFormat.continuation("§b.l stats <tab|chat|stars|fkdr|winstreak> on/off"),
+        ChatFormat.continuation("§b.l stats nametag on <FKDR> §8— §fshow matching FKDR beside player names"),
+        ChatFormat.continuation("§b.l stats nametag off §8— §fhide FKDR beside player names"),
         ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph"),
         ChatFormat.continuation("§d.l log on/off §8— §ftemporary local Stats trace"),
         ChatFormat.continuation("§e.l anticheat list §8— §fshow detector settings"),
@@ -86,8 +88,19 @@ public final class LocalCommand {
             }
             if (parts.length == 4 && ("on".equals(parts[3]) || "off".equals(parts[3]))) {
                 StatsOption option = StatsOption.forCommand(parts[2]);
-                if (option != null && option != StatsOption.ENABLED) {
+                if (option != null && option != StatsOption.ENABLED
+                    && !(option == StatsOption.NAMETAG && "on".equals(parts[3]))) {
                     return new Request(Kind.STATS_SET, null, false, "on".equals(parts[3]), -1, null, null, option);
+                }
+            }
+            if (parts.length == 5 && "nametag".equals(parts[2]) && "on".equals(parts[3])) {
+                try {
+                    double threshold = Double.parseDouble(parts[4]);
+                    if (threshold >= 0D && threshold <= 1000D && !Double.isInfinite(threshold) && !Double.isNaN(threshold)) {
+                        return new Request(Kind.STATS_SET, null, false, true, -1, null, null, StatsOption.NAMETAG, threshold);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Falls through to local usage help.
                 }
             }
             if (parts.length == 3 && isValidPlayerName(parts[2])) {
@@ -227,7 +240,8 @@ public final class LocalCommand {
         CHAT("Chat"),
         STARS("Stars"),
         FKDR("FKDR"),
-        WIN_STREAK("Win Streak");
+        WIN_STREAK("Win Streak"),
+        NAMETAG("Nametag FKDR");
 
         private final String displayName;
 
@@ -245,6 +259,7 @@ public final class LocalCommand {
             if ("stars".equals(value)) return STARS;
             if ("fkdr".equals(value)) return FKDR;
             if ("winstreak".equals(value) || "win-streak".equals(value) || "ws".equals(value)) return WIN_STREAK;
+            if ("nametag".equals(value)) return NAMETAG;
             return null;
         }
     }
@@ -258,6 +273,7 @@ public final class LocalCommand {
         public final String playerName;
         public final NotificationChannel notificationChannel;
         public final StatsOption statsOption;
+        public final double statsThreshold;
 
         private Request(Kind kind, DetectorId detector, boolean all, boolean enabled) {
             this(kind, detector, all, enabled, -1);
@@ -280,7 +296,7 @@ public final class LocalCommand {
             String playerName,
             NotificationChannel notificationChannel
         ) {
-            this(kind, detector, all, enabled, threshold, playerName, notificationChannel, null);
+            this(kind, detector, all, enabled, threshold, playerName, notificationChannel, null, Double.NaN);
         }
 
         private Request(
@@ -293,6 +309,20 @@ public final class LocalCommand {
             NotificationChannel notificationChannel,
             StatsOption statsOption
         ) {
+            this(kind, detector, all, enabled, threshold, playerName, notificationChannel, statsOption, Double.NaN);
+        }
+
+        private Request(
+            Kind kind,
+            DetectorId detector,
+            boolean all,
+            boolean enabled,
+            int threshold,
+            String playerName,
+            NotificationChannel notificationChannel,
+            StatsOption statsOption,
+            double statsThreshold
+        ) {
             this.kind = kind;
             this.detector = detector;
             this.all = all;
@@ -301,6 +331,7 @@ public final class LocalCommand {
             this.playerName = playerName;
             this.notificationChannel = notificationChannel;
             this.statsOption = statsOption;
+            this.statsThreshold = statsThreshold;
         }
     }
 }

@@ -65,6 +65,15 @@ public final class StatsPresentation {
         return suffix.toString();
     }
 
+    /** Returns only the optional compact FKDR nametag suffix for a returned real profile. */
+    public static String nametagFkdrSuffix(StatsBridgePlayerResult player, StatsSettings settings) {
+        if (settings == null || !settings.enabled || !settings.nametagEnabled) return "";
+        if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN || player.finalKillDeathRatio == null) return "";
+        double value = player.finalKillDeathRatio.doubleValue();
+        if (value < settings.nametagFkdrThreshold) return "";
+        return " " + fkdr(value) + decimal(value) + " FKDR";
+    }
+
     /** Orders local target profiles by FKDR, stars, and case-insensitive name; no alert semantics are attached. */
     public static List<Profile> rankedHighStats(List<StatsBridgePlayerResult> players) {
         if (players == null || players.isEmpty()) return Collections.emptyList();
