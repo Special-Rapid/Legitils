@@ -501,6 +501,14 @@ public final class HypixelLegitilsBootstrap {
         return "";
     }
 
+    /** Returns all local-only markers for the renderer's actual player-nametag text. */
+    public static String playerNametagSuffix(String playerName, UUID playerId) {
+        String suffix = "";
+        if (shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
+        if (shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
+        return suffix + statsNametagSuffix(playerName, playerId);
+    }
+
     public static String[] drainPendingStatsNotices() {
         List<String> notices = new ArrayList<String>();
         String notice;

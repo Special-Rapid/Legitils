@@ -29,8 +29,8 @@ public final class HypixelLegitilsBootstrapTest {
 
     @Test
     public void versionOneNickProfilesKeepTheirSessionOnlyNametagMarker() {
-        assertTrue(HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(
-            java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000")
-        ));
+        java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
+        assertTrue(HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(nick));
+        assertEquals(" §c[NICK]", HypixelLegitilsBootstrap.playerNametagSuffix("Nick", nick));
     }
 }
