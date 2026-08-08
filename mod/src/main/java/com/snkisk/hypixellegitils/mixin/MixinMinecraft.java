@@ -206,6 +206,7 @@ public abstract class MixinMinecraft {
         String matchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
         if (matchId == null) return;
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
+        Map<String, String> teamFormattedNames = new LinkedHashMap<String, String>();
         for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
             GameProfile profile = info == null ? null : info.getGameProfile();
             if (profile == null || profile.getName() == null) continue;
@@ -216,26 +217,36 @@ public abstract class MixinMinecraft {
             String uuid = profileId == null || profileId.version() == 1 ? null : profileId.toString();
             StatsBridgeRosterMember member = new StatsBridgeRosterMember(profile.getName(), uuid);
             if (!member.isValid()) continue;
-            members.put(profile.getName().toLowerCase(java.util.Locale.ROOT), member);
+            String key = profile.getName().toLowerCase(java.util.Locale.ROOT);
+            members.put(key, member);
+            teamFormattedNames.put(key, hypixelLegitils$teamFormattedName(profileId, profile.getName()));
         }
         if (!members.isEmpty()) {
             HypixelLegitilsBootstrap.traceStats("roster due collected players=" + members.size());
             HypixelLegitilsBootstrap.requestStatsRoster(
                 matchId,
                 gameMode,
-                new ArrayList<StatsBridgeRosterMember>(members.values())
+                new ArrayList<StatsBridgeRosterMember>(members.values()),
+                teamFormattedNames
             );
         } else HypixelLegitilsBootstrap.traceStats("roster due had no valid visible players");
     }
 
     private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {
         EntityPlayer player = hypixelLegitils$visiblePlayer(playerId);
-        if (player != null && player.getDisplayName() != null) return player.getDisplayName().getFormattedText();
+        if (player != null && player.getDisplayName() != null) {
+            return FlagMessage.teamFormattedName(player.getDisplayName().getFormattedText(), fallbackName);
+        }
         NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
         NetworkPlayerInfo info = handler == null || playerId == null ? null : handler.getPlayerInfo(playerId);
         if (info == null) return fallbackName;
-        if (info.getDisplayName() != null) return info.getDisplayName().getFormattedText();
-        return ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName);
+        if (info.getDisplayName() != null) {
+            return FlagMessage.teamFormattedName(info.getDisplayName().getFormattedText(), fallbackName);
+        }
+        return FlagMessage.teamFormattedName(
+            ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName),
+            fallbackName
+        );
     }
 
     @Inject(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V", at = @At("HEAD"))

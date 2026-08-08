@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** Pure local presentation policy for normalized Bridge results; it never starts lookup work. */
 public final class StatsPresentation {
@@ -64,13 +65,17 @@ public final class StatsPresentation {
         return Collections.unmodifiableList(ranked);
     }
 
-    /** One neutral per-match header followed by every Target Player profile and source-labelled tags. */
+    /** Returns compact high-stat lines without a generic per-match header. */
     public static List<String> chatLines(StatsBridgeLookupResult result) {
+        return chatLines(result, Collections.<String, String>emptyMap());
+    }
+
+    /** Uses the team-formatted Tab name captured at roster time when it is available. */
+    public static List<String> chatLines(StatsBridgeLookupResult result, Map<String, String> teamFormattedNames) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
         List<String> lines = new ArrayList<String>();
-        lines.add("§fBed Wars stats: §a" + result.players.size() + " §fprofiles loaded.");
         for (Profile profile : rankedHighStats(result.players)) {
-            lines.add("§eTarget Player§7: §f" + profile.chatSummary());
+            lines.add(teamFormattedName(profile.player.name, teamFormattedNames) + " §8— " + profile.statsSummary());
         }
         for (StatsBridgePlayerResult player : result.players) {
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
@@ -134,12 +139,25 @@ public final class StatsPresentation {
         }
 
         public String chatSummary() {
-            StringBuilder line = new StringBuilder(player.name).append(" §8—");
+            StringBuilder line = new StringBuilder(player.name).append(" §8— ");
+            return line.append(statsSummary()).toString();
+        }
+
+        public String statsSummary() {
+            StringBuilder line = new StringBuilder();
             if (player.stars != null) line.append(" §b✫").append(player.stars.intValue());
             if (player.finalKillDeathRatio != null) line.append(" §eFKDR ").append(decimal(player.finalKillDeathRatio.doubleValue()));
             if (player.modeWinStreak != null) line.append(" §aWS ").append(player.modeWinStreak.intValue());
-            return line.toString();
+            return line.length() == 0 ? "§7no stats" : line.substring(1);
         }
+    }
+
+    private static String teamFormattedName(String name, Map<String, String> teamFormattedNames) {
+        if (name != null && teamFormattedNames != null) {
+            String formatted = teamFormattedNames.get(name.toLowerCase(Locale.ROOT));
+            if (formatted != null && !formatted.trim().isEmpty()) return formatted;
+        }
+        return "§f" + (name == null ? "Unknown" : name);
     }
 
     private static boolean atLeast(Integer value, int threshold) {

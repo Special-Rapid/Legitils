@@ -356,6 +356,16 @@ public final class HypixelLegitilsBootstrap {
         final BedwarsMode gameMode,
         final List<StatsBridgeRosterMember> players
     ) {
+        requestStatsRoster(matchId, gameMode, players, Collections.<String, String>emptyMap());
+    }
+
+    /** Carries the local visible team formatting only until the normalized Bridge result is presented. */
+    public static void requestStatsRoster(
+        final String matchId,
+        final BedwarsMode gameMode,
+        final List<StatsBridgeRosterMember> players,
+        Map<String, String> teamFormattedNames
+    ) {
         final StatsBridgeClient client = statsBridgeClient;
         if (client == null || matchId == null || players == null || players.isEmpty()) {
             traceStats("roster request skipped client=" + (client != null) + " mode=" + gameMode
@@ -364,13 +374,17 @@ public final class HypixelLegitilsBootstrap {
         }
         traceStats("roster request queued mode=" + gameMode + " players=" + players.size());
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
+        final Map<String, String> visibleTeamNames = Collections.unmodifiableMap(
+            new java.util.LinkedHashMap<String, String>(teamFormattedNames == null
+                ? Collections.<String, String>emptyMap() : teamFormattedNames)
+        );
         STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
             @Override
             public void run() {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
                 traceStats("roster bridge result=" + result.status + " players=" + result.players.size());
-                publishStatsBridgeResult(sessionGeneration, result);
+                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames);
             }
         });
     }
@@ -429,13 +443,17 @@ public final class HypixelLegitilsBootstrap {
         });
     }
 
-    private static void publishStatsBridgeResult(long sessionGeneration, StatsBridgeLookupResult result) {
+    private static void publishStatsBridgeResult(
+        long sessionGeneration,
+        StatsBridgeLookupResult result,
+        Map<String, String> teamFormattedNames
+    ) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
             latestStatsBridgeResult = result;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
-                for (String line : StatsPresentation.chatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
+                for (String line : StatsPresentation.chatLines(result, teamFormattedNames)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
             }
         }
     }

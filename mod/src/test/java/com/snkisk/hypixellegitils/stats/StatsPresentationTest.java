@@ -38,16 +38,18 @@ public final class StatsPresentationTest {
     }
 
     @Test
-    public void chatLinesAreNeutralAndSourceLabelCommunityTags() {
+    public void chatLinesUseCapturedTeamFormattingWithoutGenericHeadersOrTargetLabels() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "HighStats", StatsBridgePlayerResult.NickStatus.KNOWN, 100, 5D, 0,
             Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
         );
         assertEquals(Arrays.asList(
-            "§fBed Wars stats: §a1 §fprofiles loaded.",
-            "§eTarget Player§7: §fHighStats §8— §b✫100 §eFKDR 5.0 §aWS 0",
+            "§cR HighStats §8— §b✫100 §eFKDR 5.0 §aWS 0",
             "§durchin tag§7: §fHighStats §8— §dwatchlist"
-        ), StatsPresentation.chatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
+        ), StatsPresentation.chatLines(
+            StatsBridgeLookupResult.ready(Arrays.asList(player)),
+            Collections.singletonMap("highstats", "§cR HighStats")
+        ));
     }
 
     @Test
