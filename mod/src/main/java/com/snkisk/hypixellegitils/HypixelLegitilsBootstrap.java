@@ -324,7 +324,7 @@ public final class HypixelLegitilsBootstrap {
     public static void onBedwarsGameStart(long nowMillis) {
         if (!STARTED.get()) return;
         STATS_MATCH_REQUEST_GATE.onBedwarsGameStart(nowMillis);
-        traceStats("roster scheduled from start countdown");
+        traceStats("roster awaits game-world transition from start countdown");
     }
 
     /** A visibly cancelled start is not a completed match; the next countdown may schedule once. */
@@ -1128,6 +1128,7 @@ public final class HypixelLegitilsBootstrap {
 
     public static void onWorldLoading() {
         ObservationCoordinator active = coordinator;
+        boolean postStartRosterScheduled = STATS_MATCH_REQUEST_GATE.onWorldLoading(System.currentTimeMillis());
         developmentFrameGlobalLag = true;
         developmentSelfPlayerId = null;
         resetPartyDetectors();
@@ -1135,8 +1136,9 @@ public final class HypixelLegitilsBootstrap {
             STATS_BRIDGE_SESSION.reset();
             latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
         }
-        traceStats("world reset clears pending automatic roster and latest result");
-        STATS_MATCH_REQUEST_GATE.reset();
+        traceStats(postStartRosterScheduled
+            ? "game-world transition scheduled post-start roster"
+            : "world reset clears pending automatic roster and latest result");
         PENDING_STATS_NOTICES.clear();
         PENDING_CONFIGURATION_NOTICES.clear();
         PENDING_MANUAL_STATS_RESULTS.clear();
