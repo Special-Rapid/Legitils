@@ -113,7 +113,7 @@ public final class StatsPresentation {
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) continue;
             if (player.stars != null || player.finalKillDeathRatio != null || player.modeWinStreak != null) {
-                lines.add("§bPregame stats§7: §f" + new Profile(player, Tier.NONE).chatSummary());
+                lines.add(new Profile(player, Tier.NONE).chatSummary());
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);

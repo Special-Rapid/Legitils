@@ -63,13 +63,13 @@ public final class StatsPresentationTest {
     }
 
     @Test
-    public void pregameChatShowsTheChatterEvenWhenTheyAreBelowTargetThresholds() {
+    public void pregameChatShowsTheChatterWithoutAPregameHeader() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "Quiet", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, 0,
             Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
         );
         assertEquals(Arrays.asList(
-            "§bPregame stats§7: §fQuiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
+            "Quiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
             "§durchin tag§7: §fQuiet §8— §dwatchlist"
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }

@@ -1,7 +1,6 @@
 package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
-import com.snkisk.hypixellegitils.alert.FlagMessage;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
@@ -20,7 +19,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.server.S25PacketBlockBreakAnim;
 import net.minecraft.network.play.server.S02PacketChat;
 import net.minecraft.potion.Potion;
-import net.minecraft.scoreboard.ScorePlayerTeam;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.IChatComponent;
@@ -73,24 +71,10 @@ public abstract class MixinNetHandlerPlayClient {
             GameProfile profile = info == null ? null : info.getGameProfile();
             if (profile == null || profile.getId() == null || profile.getId().version() != 1) continue;
             if (NickChatSignal.isMessageFrom(message, profile.getName())) {
-                HypixelLegitilsBootstrap.onPregameNickChat(
-                    profile.getId(),
-                    profile.getName(),
-                    hypixelLegitils$teamFormattedName(info, profile.getName())
-                );
+                HypixelLegitilsBootstrap.onPregameNickChat(profile.getId(), profile.getName());
                 return;
             }
         }
-    }
-
-    private static String hypixelLegitils$teamFormattedName(NetworkPlayerInfo info, String fallbackName) {
-        String scoreboardTeamName = ScorePlayerTeam.formatPlayerName(info.getPlayerTeam(), fallbackName);
-        if (!fallbackName.equals(scoreboardTeamName)) {
-            return FlagMessage.teamFormattedName(scoreboardTeamName, fallbackName);
-        }
-        return info.getDisplayName() == null
-            ? fallbackName
-            : FlagMessage.teamFormattedName(info.getDisplayName().getFormattedText(), fallbackName);
     }
 
     @Inject(

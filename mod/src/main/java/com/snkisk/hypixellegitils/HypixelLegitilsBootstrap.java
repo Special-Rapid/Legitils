@@ -299,19 +299,15 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    /**
-     * Announces a Nick immediately with the currently visible team formatting, then
-     * preserves a delayed notice because final Bed Wars team assignment can arrive at game start.
-     */
-    public static void onPregameNickChat(UUID playerId, String serverPresentedName, String teamFormattedName) {
+    /** Queues a pre-game Nick until Bed Wars assigns their team at game start. */
+    public static void onPregameNickChat(UUID playerId, String serverPresentedName) {
         if (!STARTED.get() || !nickDetectionEnabled || playerId == null || playerId.version() != 1
             || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
         if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
-        PENDING_NICK_NOTICES.add(pregameNickNotice(serverPresentedName, teamFormattedName));
         PREGAME_NICK_CHATTERS.put(playerId, serverPresentedName);
     }
 
-    /** Releases a second pre-game Nick notice once Hypixel announces game start and the team is available. */
+    /** Releases one pre-game Nick notice once Hypixel announces game start and the team is available. */
     public static void onPregameGameStartChat(String rawMessage, long nowMillis) {
         if (!NickChatSignal.isGameStart(rawMessage)) return;
         for (Map.Entry<UUID, String> entry : PREGAME_NICK_CHATTERS.entrySet()) {
@@ -1178,7 +1174,7 @@ public final class HypixelLegitilsBootstrap {
             NICKED_SESSION_PLAYER_IDS.clear();
             PENDING_NICK_NOTICES.clear();
             PREGAME_NICK_CHATTERS.clear();
-            PENDING_PREGAME_NICK_NOTICES.clear();
+            if (!postStartRosterScheduled) PENDING_PREGAME_NICK_NOTICES.clear();
             NICK_OBSERVATION_LOGGED.set(false);
             MARKER_RENDER_LOGGED.set(false);
             TAB_RENDER_HOOK_LOGGED.set(false);
