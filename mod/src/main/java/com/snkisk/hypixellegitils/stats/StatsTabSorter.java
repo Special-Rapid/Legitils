@@ -16,8 +16,7 @@ public final class StatsTabSorter {
     }
 
     public static <T> List<T> sort(List<Entry<T>> original, StatsSettings settings) {
-        if (original == null || original.isEmpty() || settings == null || !settings.enabled
-            || (!settings.tabTeamSortingEnabled && !settings.tabPlayerSortingEnabled)) return values(original);
+        if (original == null || original.isEmpty() || settings == null || !settings.enabled) return values(original);
         List<Group<T>> groups = groups(original);
         if (settings.tabPlayerSortingEnabled) for (Group<T> group : groups) sortEntries(group.entries, PLAYER_ORDER);
         if (settings.tabTeamSortingEnabled) sortTeamSegments(groups);

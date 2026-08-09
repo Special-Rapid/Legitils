@@ -642,12 +642,12 @@ public final class HypixelLegitilsBootstrap {
     public static List<NetworkPlayerInfo> sortedTabPlayers(List<NetworkPlayerInfo> vanillaOrder) {
         StatsSettings settings = statsSettings;
         StatsBridgeLookupResult result = latestStatsBridgeResult;
-        if (vanillaOrder == null || !STARTED.get() || !settings.enabled
-            || (!settings.tabTeamSortingEnabled && !settings.tabPlayerSortingEnabled)
-            || result.status != StatsBridgeLookupResult.Status.READY) return vanillaOrder;
+        if (vanillaOrder == null || !STARTED.get() || !settings.enabled) return vanillaOrder;
         Map<String, StatsBridgePlayerResult> byName = new LinkedHashMap<String, StatsBridgePlayerResult>();
-        for (StatsBridgePlayerResult player : result.players) {
-            if (player != null && player.name != null) byName.put(player.name.toLowerCase(Locale.ROOT), player);
+        if (result.status == StatsBridgeLookupResult.Status.READY) {
+            for (StatsBridgePlayerResult player : result.players) {
+                if (player != null && player.name != null) byName.put(player.name.toLowerCase(Locale.ROOT), player);
+            }
         }
         List<StatsTabSorter.Entry<NetworkPlayerInfo>> entries = new ArrayList<StatsTabSorter.Entry<NetworkPlayerInfo>>(vanillaOrder.size());
         for (int index = 0; index < vanillaOrder.size(); index++) {
@@ -921,9 +921,9 @@ public final class HypixelLegitilsBootstrap {
                 + " §8| §7Win Streak: " + state(settings.winStreakEnabled)),
             ChatFormat.continuation("§7Nametag FKDR: " + state(settings.nametagEnabled)
                 + " §8| §7threshold: §f" + decimal(settings.nametagFkdrThreshold)),
-            ChatFormat.continuation("§7Tab sort: §fTeams " + state(settings.tabTeamSortingEnabled)
-                + " §8| §fPlayers " + state(settings.tabPlayerSortingEnabled)
-                + " §8| §7Nick = FKDR 5.0 for team score"),
+            ChatFormat.continuation("§7Tab teams (Stats on): §aalways grouped §8| §7Block rank: " + state(settings.tabTeamSortingEnabled)
+                + " §8| §7Player rank: " + state(settings.tabPlayerSortingEnabled)),
+            ChatFormat.continuation("§7Block score = known FKDR + Nick 5.0; player rank = Nick, then FKDR."),
             ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
             ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
             ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
@@ -1168,9 +1168,9 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Nametag FKDR: " + state(config.statsSettings.nametagEnabled)
             + " §8| §7threshold: §f" + decimal(config.statsSettings.nametagFkdrThreshold)
             + " §8| §7Nick [NICK]: " + nickState + " §8| §7Alert ⚠: " + state(config.markerSettings.enabled)));
-        lines.add(ChatFormat.continuation("§7Tab sort: §fTeams " + state(config.statsSettings.tabTeamSortingEnabled)
-            + " §8| §fPlayers " + state(config.statsSettings.tabPlayerSortingEnabled)
-            + " §8| §7Team score = FKDR + Nick 5.0"));
+        lines.add(ChatFormat.continuation("§7Tab teams (Stats on): §aalways grouped §8| §7Block rank: " + state(config.statsSettings.tabTeamSortingEnabled)
+            + " §8| §7Player rank: " + state(config.statsSettings.tabPlayerSortingEnabled)));
+        lines.add(ChatFormat.continuation("§7Block score = known FKDR + Nick 5.0; player rank = Nick, then FKDR."));
         lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
         lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
         lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));

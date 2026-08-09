@@ -29,7 +29,9 @@ public class LocalCommandTest {
         assertTrue(contains(lines, ".l stats status"));
         assertTrue(contains(lines, ".l stats on/off"));
         assertTrue(contains(lines, ".l stats <tab|chat|stars|fkdr|winstreak> on/off"));
-        assertTrue(contains(lines, ".l stats <teamsort|playersort> on/off"));
+        assertTrue(contains(lines, "Tab team members always stay together locally"));
+        assertTrue(contains(lines, ".l stats teamsort on/off"));
+        assertTrue(contains(lines, ".l stats playersort on/off"));
         assertTrue(contains(lines, ".l stats autowho on/off"));
         assertTrue(contains(lines, ".l stats nametag on <0-1000 FKDR>"));
         assertTrue(contains(lines, "provider tags add [BC]/[CC]/[LS]"));

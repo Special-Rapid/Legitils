@@ -27,12 +27,12 @@ struct StatsView: View {
                     Toggle("Win Streak", isOn: store.statsBinding(\.winStreak))
                     Toggle("Target Player とタグをchat表示", isOn: store.statsBinding(\.chat))
                     Toggle("試合開始後に自動 /who でStatsを更新", isOn: store.statsBinding(\.autoWho))
-                    Toggle("Tabのチームを合計FKDR順に並べ替え", isOn: store.statsBinding(\.tabTeamSorting))
+                    Toggle("Tabのチーム間を合計FKDR順に並べ替え", isOn: store.statsBinding(\.tabTeamSorting))
                     Toggle("Tabのチーム内をNick/FKDR順に並べ替え", isOn: store.statsBinding(\.tabPlayerSorting))
                     Button("表示設定を保存") { store.saveSettings() }
                     Text("Target Player: Stars ≥ 100、FKDR ≥ 1、または mode WS ≥ 3")
                     Text("Target Player は試合開始時のChatに上限なしで表示します。pregameで発言した実在プロフィールは、Target条件にかかわらずStatsをChat表示します。コミュニティタグは略号でChat・Tab・Nametagに表示し、Chatでは略号にhoverすると説明を確認できます。")
-                    Text("Tab並べ替えは任意です。チーム順は既知FKDRの合計にNick 1人あたり5.0を加算し、チーム内はNickを先頭、その後はFKDR順です。同点・Stats不明はHypixel本来の順序を維持します。")
+                    Text("Tabでは同じBed Warsチームを常にまとめて表示します。チーム間の並べ替えは任意で、既知FKDRの合計にNick 1人あたり5.0を加算します。チーム内も任意でNickを先頭、その後FKDR順です。同点・Stats不明はHypixel本来の順序を維持します。")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

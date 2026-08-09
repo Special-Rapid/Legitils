@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 
 public final class StatsTabSorterTest {
     @Test
-    public void disabledSortingPreservesTheOriginalServerOrder() {
+    public void disabledSortingStillKeepsEachServerTeamTogether() {
         List<String> actual = StatsTabSorter.sort(entries(), settings(false, false));
         assertEquals(Arrays.asList("BlueLow", "BlueNick", "BlueHigh", "RedFive", "RedNick", "RedUnknown"), actual);
     }
@@ -34,13 +34,26 @@ public final class StatsTabSorterTest {
         assertEquals(Arrays.asList("RedNick", "RedFive", "RedUnknown", "BlueNick", "BlueHigh", "BlueLow", "Lobby"), actual);
     }
 
+    @Test
+    public void unteamedEntriesAreNotIncludedInTeamScoringOrReorderedAcrossTheirSegment() {
+        List<StatsTabSorter.Entry<String>> entries = new java.util.ArrayList<StatsTabSorter.Entry<String>>(Arrays.asList(
+            new StatsTabSorter.Entry<String>("BlueOne", "blue", false, 1D, 0),
+            new StatsTabSorter.Entry<String>("Lobby", null, false, 999D, 1),
+            new StatsTabSorter.Entry<String>("RedOne", "red", false, 10D, 2),
+            new StatsTabSorter.Entry<String>("BlueTwo", "blue", false, 2D, 3),
+            new StatsTabSorter.Entry<String>("RedTwo", "red", false, 5D, 4)
+        ));
+        List<String> actual = StatsTabSorter.sort(entries, settings(true, false));
+        assertEquals(Arrays.asList("BlueOne", "BlueTwo", "Lobby", "RedOne", "RedTwo"), actual);
+    }
+
     private static List<StatsTabSorter.Entry<String>> entries() {
         return new java.util.ArrayList<StatsTabSorter.Entry<String>>(Arrays.asList(
             new StatsTabSorter.Entry<String>("BlueLow", "blue", false, 1D, 0),
-            new StatsTabSorter.Entry<String>("BlueNick", "blue", true, null, 1),
-            new StatsTabSorter.Entry<String>("BlueHigh", "blue", false, 2D, 2),
-            new StatsTabSorter.Entry<String>("RedFive", "red", false, 10D, 3),
-            new StatsTabSorter.Entry<String>("RedNick", "red", true, null, 4),
+            new StatsTabSorter.Entry<String>("RedFive", "red", false, 10D, 1),
+            new StatsTabSorter.Entry<String>("BlueNick", "blue", true, null, 2),
+            new StatsTabSorter.Entry<String>("RedNick", "red", true, null, 3),
+            new StatsTabSorter.Entry<String>("BlueHigh", "blue", false, 2D, 4),
             new StatsTabSorter.Entry<String>("RedUnknown", "red", false, null, 5)
         ));
     }
