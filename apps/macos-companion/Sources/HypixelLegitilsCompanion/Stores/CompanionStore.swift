@@ -148,7 +148,7 @@ final class CompanionStore: ObservableObject {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.statsBridgeStatus = "Stats Bridge: ローカル接続待機中"
+                    self?.statsBridgeStatus = "Stats Bridge: 準備完了・MODリクエスト待機中"
                 case .failure:
                     self?.statsBridgeStatus = "Stats Bridge: 利用できません"
                 }
