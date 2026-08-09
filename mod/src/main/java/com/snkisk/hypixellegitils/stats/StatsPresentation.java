@@ -159,15 +159,21 @@ public final class StatsPresentation {
 
     /** Pregame has no trustworthy team formatting yet, but keeps the tag hover semantics. */
     public static List<ChatNotice> pregameChatNotices(StatsBridgeLookupResult result) {
+        return pregameChatNotices(result, Collections.<String, String>emptyMap());
+    }
+
+    /** Reuses a current Tab display field when one is available without requiring pregame team data. */
+    public static List<ChatNotice> pregameChatNotices(StatsBridgeLookupResult result, Map<String, String> renderedNames) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
         List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) continue;
             if (player.stars != null || player.finalKillDeathRatio != null || player.modeWinStreak != null) {
-                lines.add(new ChatNotice(new Profile(player, Tier.NONE).chatSummary(), null));
+                lines.add(new ChatNotice(displayedName(player.name, renderedNames, player.name) + " §8— "
+                    + new Profile(player, Tier.NONE).statsSummary(), null));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
-                if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, "§f" + player.name));
+                if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, displayedName(player.name, renderedNames, "§f" + player.name)));
             }
         }
         return Collections.unmodifiableList(lines);
@@ -180,6 +186,11 @@ public final class StatsPresentation {
 
     /** Explicit command output preserves the same narrow hover affordance as automatic provider-tag notices. */
     public static List<ChatNotice> manualLookupNotices(StatsBridgeLookupResult result) {
+        return manualLookupNotices(result, Collections.<String, String>emptyMap());
+    }
+
+    /** Explicit lookup output reuses a current Tab display field when one has already been observed. */
+    public static List<ChatNotice> manualLookupNotices(StatsBridgeLookupResult result, Map<String, String> renderedNames) {
         if (result == null || result.status == StatsBridgeLookupResult.Status.UNAVAILABLE) {
             return Collections.singletonList(new ChatNotice("§cStats Bridge unavailable. §7Start Companion and check API keys.", null));
         }
@@ -189,9 +200,11 @@ public final class StatsPresentation {
         List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) {
-                lines.add(new ChatNotice("§eStats§7: §f" + player.name + " §8— §eprofile unavailable", null));
+                lines.add(new ChatNotice("§eStats§7: " + displayedName(player.name, renderedNames, "§f" + player.name)
+                    + " §8— §eprofile unavailable", null));
             } else {
-                lines.add(new ChatNotice("§bStats§7: §f" + new Profile(player, Tier.NONE).chatSummary(), null));
+                lines.add(new ChatNotice("§bStats§7: " + displayedName(player.name, renderedNames, "§f" + player.name)
+                    + " §8— " + new Profile(player, Tier.NONE).statsSummary(), null));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 if ("diagnostic".equals(tag.source)) {
@@ -199,7 +212,7 @@ public final class StatsPresentation {
                 } else if ("provider".equals(tag.source)) {
                     lines.add(new ChatNotice("§aAPI§7: §f" + tag.label, null));
                 } else if (isAdvisoryTag(tag)) {
-                    lines.add(tagChatNotice(tag, "§f" + player.name));
+                    lines.add(tagChatNotice(tag, displayedName(player.name, renderedNames, "§f" + player.name)));
                 }
             }
         }
@@ -230,11 +243,16 @@ public final class StatsPresentation {
     }
 
     private static String teamFormattedName(String name, Map<String, String> teamFormattedNames) {
-        if (name != null && teamFormattedNames != null) {
-            String formatted = teamFormattedNames.get(name.toLowerCase(Locale.ROOT));
+        String fallback = name == null ? "Unknown" : name;
+        return displayedName(name, teamFormattedNames, "§f" + fallback);
+    }
+
+    private static String displayedName(String name, Map<String, String> renderedNames, String fallback) {
+        if (name != null && renderedNames != null) {
+            String formatted = renderedNames.get(name.toLowerCase(Locale.ROOT));
             if (formatted != null && !formatted.trim().isEmpty()) return formatted;
         }
-        return "§f" + (name == null ? "Unknown" : name);
+        return fallback;
     }
 
     private static List<StatsBridgePlayerResult.CommunityTag> advisoryTags(StatsBridgePlayerResult player) {

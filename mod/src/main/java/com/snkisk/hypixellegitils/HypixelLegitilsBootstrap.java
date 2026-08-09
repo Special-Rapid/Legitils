@@ -25,6 +25,7 @@ import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import com.snkisk.hypixellegitils.stats.StatsBridgeClient;
+import com.snkisk.hypixellegitils.stats.StatsDisplayNameColumns;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.snkisk.hypixellegitils.stats.BedwarsModeTracker;
 import com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult;
@@ -67,6 +68,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile boolean nickDetectionEnabled = true;
     private static volatile boolean partyDetectionEnabled = true;
     private static volatile StatsSettings statsSettings = StatsSettings.defaults();
+    private static final StatsDisplayNameColumns STATS_DISPLAY_NAME_COLUMNS = new StatsDisplayNameColumns();
     private static volatile boolean developerSelfDetectionEnabled;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
@@ -516,7 +518,7 @@ public final class HypixelLegitilsBootstrap {
             }
             traceStats("pregame chat result published");
             if (statsSettings.chatEnabled) {
-                for (StatsPresentation.ChatNotice notice : StatsPresentation.pregameChatNotices(result)) {
+                for (StatsPresentation.ChatNotice notice : StatsPresentation.pregameChatNotices(result, statsChatDisplayNames(result))) {
                     PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
                 }
             }
@@ -553,6 +555,36 @@ public final class HypixelLegitilsBootstrap {
             if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.tabSuffix(player, settings);
         }
         return "";
+    }
+
+    /** Retains a third-party decorated Tab name and provides padding before our local suffix. */
+    public static String observeTabStatsName(String playerName, String renderedName) {
+        return STATS_DISPLAY_NAME_COLUMNS.observeTabName(playerName, renderedName);
+    }
+
+    /** Starts collecting the current Tab roster's rendered names for dynamic Stats alignment. */
+    public static void beginTabStatsRender() {
+        STATS_DISPLAY_NAME_COLUMNS.beginTabRender();
+    }
+
+    /** Publishes the current Tab roster's rendered names for the next frame and automatic Chat. */
+    public static void finishTabStatsRender() {
+        STATS_DISPLAY_NAME_COLUMNS.finishTabRender();
+    }
+
+    /** Uses a matching Tab display field for automatic Chat when a compatible client MOD decorates it. */
+    public static String statsChatDisplayName(String playerName, String fallbackName) {
+        return STATS_DISPLAY_NAME_COLUMNS.nameForChat(playerName, fallbackName);
+    }
+
+    private static Map<String, String> statsChatDisplayNames(StatsBridgeLookupResult result) {
+        if (result == null || result.players == null || result.players.isEmpty()) return Collections.emptyMap();
+        Map<String, String> names = new LinkedHashMap<String, String>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player == null || player.name == null) continue;
+            names.put(player.name.toLowerCase(Locale.ROOT), statsChatDisplayName(player.name, "§f" + player.name));
+        }
+        return names;
     }
 
     /** Reorders only the local Tab render snapshot; server roster, teams, and packets remain untouched. */
@@ -674,7 +706,7 @@ public final class HypixelLegitilsBootstrap {
         List<PendingStatsNotice> responses = new ArrayList<PendingStatsNotice>();
         StatsBridgeLookupResult result;
         while ((result = PENDING_MANUAL_STATS_RESULTS.poll()) != null) {
-            for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(result)) {
+            for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(result, statsChatDisplayNames(result))) {
                 responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
             }
         }
@@ -1399,6 +1431,7 @@ public final class HypixelLegitilsBootstrap {
     }
 
     public static void onWorldLoading() {
+        STATS_DISPLAY_NAME_COLUMNS.clear();
         ObservationCoordinator active = coordinator;
         boolean postStartRosterScheduled = STATS_MATCH_REQUEST_GATE.onWorldLoading(System.currentTimeMillis());
         developmentFrameGlobalLag = true;

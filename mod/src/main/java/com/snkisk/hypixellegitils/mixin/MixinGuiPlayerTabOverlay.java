@@ -2,13 +2,14 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import net.minecraft.client.gui.GuiPlayerTabOverlay;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetworkPlayerInfo;
-import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.scoreboard.ScoreObjective;
+import net.minecraft.scoreboard.Scoreboard;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Appends a local-only persistent or session-only marker to the transient Tab render string. */
@@ -28,17 +29,29 @@ public class MixinGuiPlayerTabOverlay {
         return HypixelLegitilsBootstrap.sortedTabPlayers(vanillaOrder);
     }
 
+    @Inject(method = {"renderPlayerlist"}, at = {@At("HEAD")}, require = 0)
+    private void hypixelLegitils$beginStatsNameColumn(int width, Scoreboard scoreboard, ScoreObjective objective, CallbackInfo callbackInfo) {
+        HypixelLegitilsBootstrap.beginTabStatsRender();
+    }
+
+    @Inject(method = {"renderPlayerlist"}, at = {@At("RETURN")}, require = 0)
+    private void hypixelLegitils$finishStatsNameColumn(int width, Scoreboard scoreboard, ScoreObjective objective, CallbackInfo callbackInfo) {
+        HypixelLegitilsBootstrap.finishTabStatsRender();
+    }
+
     @Inject(method = {"getPlayerName"}, at = {@At("RETURN")}, cancellable = true)
     private void hypixelLegitils$appendMarker(NetworkPlayerInfo info, CallbackInfoReturnable<String> callbackInfo) {
         HypixelLegitilsBootstrap.onMarkerRenderHookObserved("tab");
         if (info == null || info.getGameProfile() == null) return;
         java.util.UUID playerId = info.getGameProfile().getId();
+        String renderedName = callbackInfo.getReturnValue();
+        String padding = HypixelLegitilsBootstrap.observeTabStatsName(info.getGameProfile().getName(), renderedName);
         String suffix = "";
         if (HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId)) suffix += " §c[NICK]";
         if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
         suffix += HypixelLegitilsBootstrap.statsTabSuffix(info.getGameProfile().getName(), playerId);
         if (suffix.isEmpty()) return;
-        callbackInfo.setReturnValue(callbackInfo.getReturnValue() + suffix);
+        callbackInfo.setReturnValue(renderedName + padding + suffix);
         HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, suffix);
     }
 

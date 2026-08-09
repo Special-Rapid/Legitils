@@ -90,6 +90,32 @@ public final class StatsPresentationTest {
     }
 
     @Test
+    public void renderedTabNamesUseTheCurrentRosterWidthAndPreserveThirdPartySuffixes() {
+        StatsDisplayNameColumns columns = new StatsDisplayNameColumns();
+        columns.beginTabRender();
+        assertEquals("", columns.observeTabName("Short", "§cR Short [190]"));
+        assertEquals("", columns.observeTabName("Bee", "§aG Bee"));
+        columns.finishTabRender();
+
+        String paddedBee = "§aG Bee" + spaces(8);
+        assertEquals("§cR Short [190]", columns.nameForChat("Short", "§cR Short"));
+        assertEquals(paddedBee, columns.nameForChat("Bee", "§aG Bee"));
+
+        StatsBridgePlayerResult player = player("Bee", 100, 2D, null);
+        assertEquals(paddedBee + " §8— §f[100✫] §aFKDR 2.0", StatsPresentation.chatLines(
+            StatsBridgeLookupResult.ready(Collections.singletonList(player)),
+            Collections.singletonMap("bee", paddedBee)
+        ).get(0));
+
+        columns.beginTabRender();
+        columns.observeTabName("Jo", "§cR Jo");
+        columns.observeTabName("Ava", "§aG Ava");
+        columns.finishTabRender();
+        assertEquals("§cR Jo" + spaces(1), columns.nameForChat("Jo", "§cR Jo"));
+        assertEquals("§aG Ava", columns.nameForChat("Ava", "§aG Ava"));
+    }
+
+    @Test
     public void communityTagChatNoticeCarriesTheBoundedTooltipButNotTheDisplayLine() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "Tagged", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
@@ -112,6 +138,21 @@ public final class StatsPresentationTest {
             "Quiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
             "§c[LS] §8— §fQuiet"
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
+    }
+
+    @Test
+    public void pregameStatsAndTagReuseTheCachedRenderedTabField() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Quiet", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, null,
+            Collections.singletonList(new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper", "queue pattern"))
+        );
+        String rendered = "§cR Quiet [190]";
+        java.util.List<StatsPresentation.ChatNotice> notices = StatsPresentation.pregameChatNotices(
+            StatsBridgeLookupResult.ready(Collections.singletonList(player)),
+            Collections.singletonMap("quiet", rendered)
+        );
+        assertEquals(rendered + " §8— §7[12✫] §7FKDR 0.4", notices.get(0).text);
+        assertEquals("§c[LS] §8— " + rendered, notices.get(1).text);
     }
 
     @Test
@@ -147,6 +188,21 @@ public final class StatsPresentationTest {
     }
 
     @Test
+    public void manualStatsAndTagReuseTheCachedRenderedTabField() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Player", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, null,
+            Collections.singletonList(new StatsBridgePlayerResult.CommunityTag("seraph", "Blatant Cheating", "vape v4"))
+        );
+        String rendered = "§aG Player [190]";
+        java.util.List<StatsPresentation.ChatNotice> notices = StatsPresentation.manualLookupNotices(
+            StatsBridgeLookupResult.ready(Collections.singletonList(player)),
+            Collections.singletonMap("player", rendered)
+        );
+        assertEquals("§bStats§7: " + rendered + " §8— §7[12✫] §7FKDR 0.4", notices.get(0).text);
+        assertEquals("§6[BC] §8— " + rendered, notices.get(1).text);
+    }
+
+    @Test
     public void tagHoverUsesAColoredTitleAndWrapsTheProviderExplanation() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "Player", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
@@ -167,6 +223,12 @@ public final class StatsPresentationTest {
             name, StatsBridgePlayerResult.NickStatus.KNOWN, stars, fkdr, streak,
             Collections.<StatsBridgePlayerResult.CommunityTag>emptyList()
         );
+    }
+
+    private static String spaces(int count) {
+        StringBuilder spaces = new StringBuilder(count);
+        for (int index = 0; index < count; index++) spaces.append(' ');
+        return spaces.toString();
     }
 
     private static java.util.List<String> names(java.util.List<StatsPresentation.Profile> profiles) {

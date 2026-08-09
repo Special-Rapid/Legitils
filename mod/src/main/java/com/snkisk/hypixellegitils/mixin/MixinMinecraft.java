@@ -269,7 +269,9 @@ public abstract class MixinMinecraft {
             if (!member.isValid()) continue;
             String key = profile.getName().toLowerCase(java.util.Locale.ROOT);
             members.put(key, member);
-            teamFormattedNames.put(key, hypixelLegitils$teamFormattedName(profileId, profile.getName()));
+            teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatDisplayName(
+                profile.getName(), hypixelLegitils$teamFormattedName(profileId, profile.getName())
+            ));
         }
         if (!members.isEmpty()) {
             HypixelLegitilsBootstrap.traceStats(source + " collected players=" + members.size());
