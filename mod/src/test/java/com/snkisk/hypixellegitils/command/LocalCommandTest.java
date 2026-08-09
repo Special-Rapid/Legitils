@@ -38,6 +38,8 @@ public class LocalCommandTest {
         assertTrue(contains(lines, "Nick adds [NICK]"));
         assertTrue(contains(lines, "accepted alerts add ⚠"));
         assertTrue(contains(lines, ".l stats <player>"));
+        assertTrue(contains(lines, "/who"));
+        assertTrue(contains(lines, "fresh local Stats refresh"));
         assertTrue(contains(lines, "anticheat on"));
         assertTrue(contains(lines, "anticheat off"));
         assertTrue(lines[1].contains(".l <command>"));

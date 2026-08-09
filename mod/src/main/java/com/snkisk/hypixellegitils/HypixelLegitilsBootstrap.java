@@ -32,6 +32,7 @@ import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
 import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
 import com.snkisk.hypixellegitils.stats.StatsPresentation;
 import com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult;
+import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.util.Collections;
@@ -87,6 +88,8 @@ public final class HypixelLegitilsBootstrap {
     private static final Map<String, AtomicInteger> PREGAME_STATS_LOOKUP_ATTEMPTS
         = new ConcurrentHashMap<String, AtomicInteger>();
     private static final AtomicLong PREGAME_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
+    private static final WhoStatsRefresh.PendingRequests PENDING_WHO_STATS_REFRESHES
+        = new WhoStatsRefresh.PendingRequests(8);
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<PendingStatsNotice> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<PendingStatsNotice>();
     private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
@@ -359,6 +362,33 @@ public final class HypixelLegitilsBootstrap {
         final List<StatsBridgeRosterMember> players
     ) {
         requestStatsRoster(matchId, gameMode, players, Collections.<String, String>emptyMap());
+    }
+
+    /** Observes an ordinary user-entered `/who` without changing or consuming the outgoing command. */
+    public static boolean onWhoCommandSubmitted(String message) {
+        WhoStatsRefresh.Submission submission = WhoStatsRefresh.submissionFor(message);
+        if (!submission.shouldRefresh) return false;
+        StatsSettings settings = statsSettings;
+        if (!STARTED.get() || !settings.enabled || statsBridgeClient == null) return false;
+        long generation = STATS_BRIDGE_SESSION.currentGeneration();
+        if (PENDING_WHO_STATS_REFRESHES.enqueue(submission, generation) == null) {
+            traceStats("who refresh skipped queue limit");
+            return false;
+        }
+        traceStats("who refresh queued");
+        return true;
+    }
+
+    /** The client-thread roster collector consumes each explicit or automatic `/who` refresh once. */
+    public static String consumePendingWhoStatsRefresh() {
+        return STARTED.get() ? PENDING_WHO_STATS_REFRESHES.consume() : null;
+    }
+
+    /** Post-start uses this opaque ID for the one automatic `/who` refresh, replacing the old parallel roster request. */
+    public static String automaticWhoStatsRefreshMatchId(String postStartMatchId) {
+        if (postStartMatchId == null || postStartMatchId.trim().isEmpty()
+            || !STARTED.get() || !statsSettings.enabled || statsBridgeClient == null) return null;
+        return PENDING_WHO_STATS_REFRESHES.nextAutomaticMatchId(STATS_BRIDGE_SESSION.currentGeneration());
     }
 
     /** Carries the local visible team formatting only until the normalized Bridge result is presented. */
@@ -753,6 +783,7 @@ public final class HypixelLegitilsBootstrap {
             ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
             ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
             ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
+            ChatFormat.continuation("§7/who: §fserver command + fresh local Stats refresh §8| §7post-start: §fone automatic /who"),
             ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
         };
     }
@@ -996,6 +1027,7 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
         lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
         lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));
+        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who sends normally and refreshes once §8| §7post-start auto /who: §aone request"));
         lines.add(ChatFormat.continuation("§7Stats Bridge: " + statsBridgeState()
             + " §8| §7Trace: " + state(statsTraceEnabled)));
         lines.add(ChatFormat.continuation("§7Providers: §fHypixel/Urchin §7Companion Keychain §8| §fSeraph §apublic"));
@@ -1322,6 +1354,7 @@ public final class HypixelLegitilsBootstrap {
         PENDING_MANUAL_STATS_RESULTS.clear();
         PREGAME_STATS_CHATTERS.clear();
         PREGAME_STATS_LOOKUP_ATTEMPTS.clear();
+        PENDING_WHO_STATS_REFRESHES.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();
         if (active != null) {

@@ -9,6 +9,7 @@ import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
+import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
@@ -231,10 +232,28 @@ public abstract class MixinMinecraft {
             HypixelLegitilsBootstrap.traceStats("roster due skipped no net handler");
             return;
         }
-        if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) return;
         BedwarsMode gameMode = BedwarsPreGameState.mode(theWorld);
-        String matchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
-        if (matchId == null) return;
+        String requestedWhoRefresh = HypixelLegitilsBootstrap.consumePendingWhoStatsRefresh();
+        if (requestedWhoRefresh != null) {
+            hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, requestedWhoRefresh, "who refresh");
+        }
+        if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) return;
+        String postStartMatchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
+        String automaticWhoRefresh = HypixelLegitilsBootstrap.automaticWhoStatsRefreshMatchId(postStartMatchId);
+        WhoStatsRefresh.PostStartAction action = WhoStatsRefresh.postStartAction(postStartMatchId, automaticWhoRefresh);
+        if (action == null || thePlayer == null) return;
+        thePlayer.sendChatMessage(action.outboundCommand);
+        hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, action.refreshMatchId, "post-start automatic who");
+    }
+
+    /** Client-thread Tab snapshot used by both manual and automatic `/who` refreshes. */
+    private void hypixelLegitils$collectAndRequestStatsRoster(
+        NetHandlerPlayClient handler,
+        BedwarsMode gameMode,
+        String matchId,
+        String source
+    ) {
+        if (handler == null || matchId == null) return;
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
         Map<String, String> teamFormattedNames = new LinkedHashMap<String, String>();
         for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
@@ -252,14 +271,14 @@ public abstract class MixinMinecraft {
             teamFormattedNames.put(key, hypixelLegitils$teamFormattedName(profileId, profile.getName()));
         }
         if (!members.isEmpty()) {
-            HypixelLegitilsBootstrap.traceStats("roster due collected players=" + members.size());
+            HypixelLegitilsBootstrap.traceStats(source + " collected players=" + members.size());
             HypixelLegitilsBootstrap.requestStatsRoster(
                 matchId,
                 gameMode,
                 new ArrayList<StatsBridgeRosterMember>(members.values()),
                 teamFormattedNames
             );
-        } else HypixelLegitilsBootstrap.traceStats("roster due had no valid visible players");
+        } else HypixelLegitilsBootstrap.traceStats(source + " had no valid visible players");
     }
 
     private String hypixelLegitils$teamFormattedName(UUID playerId, String fallbackName) {

@@ -60,6 +60,7 @@ final class StatsProviderLookup {
 
     private func fetch(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
         let manualLookup = roster.matchID.hasPrefix("manual_")
+        let forceProviderRefresh = manualLookup || roster.matchID.hasPrefix("who_")
         let records = Dictionary(uniqueKeysWithValues: roster.players.map { player in
             (player.name.lowercased(), MutablePlayer(name: player.name, uuid: player.uuid))
         })
@@ -92,6 +93,7 @@ final class StatsProviderLookup {
                 records: records,
                 known: Array(knownByName.values),
                 manualLookup: manualLookup,
+                forceProviderRefresh: forceProviderRefresh,
                 diagnostics: diagnostics,
                 completion: completion
             )
@@ -105,6 +107,7 @@ final class StatsProviderLookup {
         records: [String: MutablePlayer],
         known: [StatsBridgeRosterMember],
         manualLookup: Bool,
+        forceProviderRefresh: Bool,
         diagnostics initialDiagnostics: [StatsBridgeCommunityTag],
         completion: @escaping (StatsBridgeRosterResponse) -> Void
     ) {
@@ -119,7 +122,7 @@ final class StatsProviderLookup {
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount), !key.isEmpty {
             for player in known {
-                if !manualLookup, let cached = hypixelCache.stats(for: player.uuid!, gameMode: roster.gameMode) {
+                if !forceProviderRefresh, let cached = hypixelCache.stats(for: player.uuid!, gameMode: roster.gameMode) {
                     records[player.name.lowercased()]?.apply(cached)
                     continue
                 }

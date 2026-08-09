@@ -2,6 +2,7 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.entity.player.EntityPlayer;
@@ -27,7 +28,9 @@ public abstract class MixinGuiChat {
     private void hypixelLegitils$handleManualSubmit(GuiChat chat, String message) {
         String[] responses = HypixelLegitilsBootstrap.localCommandResponses(message, true, hypixelLegitils$visiblePlayers());
         if (responses == null) {
-            chat.sendChatMessage(message);
+            WhoStatsRefresh.Submission submission = WhoStatsRefresh.submissionFor(message);
+            if (submission.shouldRefresh) HypixelLegitilsBootstrap.onWhoCommandSubmitted(submission.outboundMessage);
+            chat.sendChatMessage(submission.outboundMessage);
             return;
         }
         Minecraft minecraft = Minecraft.getMinecraft();

@@ -375,6 +375,42 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.modeWinStreak, 11)
     }
 
+    func testWhoRefreshBypassesThePersistentHypixelCacheWithoutManualDiagnostics() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
+        cache.store(
+            StatsProviderLookup.HypixelStats(stars: 130, finalKillDeathRatio: 6.5, modeWinStreak: 11),
+            for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            gameMode: .fours
+        )
+        let transport = FakeStatsTransport()
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            transport: transport,
+            hypixelCache: cache
+        )
+        let response = expectation(description: "who refresh response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "who_1_1",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "PlayerOne", uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(transport.requestCount, 2)
+        XCTAssertEqual(result?.players.first?.stars, 100)
+        XCTAssertEqual(result?.players.first?.communityTags, [
+            StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "vape v4 (legitscaff)\n- Added by @hexze 4 months ago")
+        ])
+    }
+
     func testProviderLookupResolvesVisiblePregameChatterBeforeFetchingStats() {
         let transport = FakeStatsTransport()
         let lookup = StatsProviderLookup(
