@@ -151,6 +151,9 @@ project(':mod') {
     }
 
     jar {
+        // Adventure is supplied by Lunar at runtime; no generated or stale
+        // compatibility class may be distributed in the MOD JAR.
+        exclude 'net/kyori/**'
         manifest {
             attributes(
                 'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',

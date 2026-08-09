@@ -1,6 +1,10 @@
 package com.snkisk.hypixellegitils;
 
 import com.snkisk.hypixellegitils.alert.ChatFormat;
+import java.util.Collections;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.LegitilsTestTextComponent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.junit.Test;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -32,5 +36,18 @@ public final class HypixelLegitilsBootstrapTest {
         java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
         assertTrue(HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(nick));
         assertEquals(" §c[NICK]", HypixelLegitilsBootstrap.playerNametagSuffix("Nick", nick));
+    }
+
+    @Test
+    public void lunarNametagComponentKeepsExistingContentAndAppendsTheLegacySuffixAsAChild() {
+        java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
+        LegitilsTestTextComponent original = new LegitilsTestTextComponent("Nick", Collections.<Object>emptyList());
+
+        LegitilsTestTextComponent updated = (LegitilsTestTextComponent)
+            HypixelLegitilsBootstrap.appendLunarNametagComponentSuffix(original, "Nick", nick);
+
+        assertEquals("Nick", updated.content);
+        assertEquals(1, updated.children().size());
+        assertEquals(" §c[NICK]", ((LegacyComponentSerializer.LegacyText) updated.children().get(0)).text);
     }
 }

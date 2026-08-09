@@ -12,8 +12,7 @@
     "MixinNetHandlerPlayClient",
     "MixinPlayerControllerMP",
     "MixinGuiPlayerTabOverlay",
-    "MixinEntityPlayer",
-    "MixinRendererLivingEntity"
+    "MixinEntityPlayer"
   ],
   "injectors": {
     "defaultRequire": 1

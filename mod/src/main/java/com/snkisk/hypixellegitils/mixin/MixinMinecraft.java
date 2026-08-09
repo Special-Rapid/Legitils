@@ -16,6 +16,7 @@ import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.multiplayer.WorldClient;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
@@ -43,6 +44,8 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -64,6 +67,9 @@ public abstract class MixinMinecraft {
     private UUID hypixelLegitils$selfPlayerId;
     private final Map<UUID, hypixelLegitils$VisiblePosition> hypixelLegitils$previousVisiblePositions
         = new HashMap<UUID, hypixelLegitils$VisiblePosition>();
+    private final Map<UUID, hypixelLegitils$LunarNametagCache> hypixelLegitils$lunarNametagCaches
+        = new HashMap<UUID, hypixelLegitils$LunarNametagCache>();
+    private boolean hypixelLegitils$lunarNametagCacheUnavailable;
 
     @Inject(method = "startGame", at = @At("RETURN"))
     private void hypixelLegitils$afterStartGame(CallbackInfo callbackInfo) {
@@ -116,10 +122,12 @@ public abstract class MixinMinecraft {
                 );
             }
             hypixelLegitils$submitDueStatsRoster();
+            hypixelLegitils$refreshLunarNametagCaches();
         } else {
             hypixelLegitils$observedWorld = null;
             hypixelLegitils$lastObservedWorldTick = -1L;
             hypixelLegitils$previousVisiblePositions.clear();
+            hypixelLegitils$lunarNametagCaches.clear();
         }
         if (thePlayer != null) {
             for (String response : HypixelLegitilsBootstrap.drainPendingBlacklistResponses()) {
@@ -342,6 +350,49 @@ public abstract class MixinMinecraft {
             : null;
     }
 
+    /**
+     * Lunar's renderer reads this cache directly instead of the vanilla String
+     * label. Updating it after every relevant invalidation keeps the local
+     * suffix in the same Adventure component and avoids renderer-Mixin races.
+     */
+    private void hypixelLegitils$refreshLunarNametagCaches() {
+        if (hypixelLegitils$lunarNametagCacheUnavailable || theWorld == null) return;
+        try {
+            Field cacheField = EntityLivingBase.class.getDeclaredField("lunar$displayNameCache");
+            cacheField.setAccessible(true);
+            Method displayNameComponent = EntityLivingBase.class.getMethod("bridge$getDisplayNameComponent");
+            Set<UUID> observed = new HashSet<UUID>();
+            for (EntityPlayer player : theWorld.playerEntities) {
+                UUID playerId = hypixelLegitils$profileId(player);
+                if (player == null || playerId == null) continue;
+                observed.add(playerId);
+                String suffix = HypixelLegitilsBootstrap.playerNametagSuffix(player.getName(), playerId);
+                hypixelLegitils$LunarNametagCache previous = hypixelLegitils$lunarNametagCaches.get(playerId);
+                Object cached = cacheField.get(player);
+                if (suffix.isEmpty()) {
+                    if (previous != null && cached == previous.component) cacheField.set(player, null);
+                    hypixelLegitils$lunarNametagCaches.remove(playerId);
+                    continue;
+                }
+                if (previous != null && suffix.equals(previous.suffix) && cached == previous.component) continue;
+                cacheField.set(player, null);
+                Object base = displayNameComponent.invoke(player);
+                Object updated = HypixelLegitilsBootstrap.appendLunarNametagComponentSuffix(base, player.getName(), playerId);
+                if (updated == base) {
+                    cacheField.set(player, null);
+                    continue;
+                }
+                cacheField.set(player, updated);
+                hypixelLegitils$lunarNametagCaches.put(playerId, new hypixelLegitils$LunarNametagCache(suffix, updated));
+                HypixelLegitilsBootstrap.onMarkerRenderHookObserved("name-tag-cache");
+            }
+            hypixelLegitils$lunarNametagCaches.keySet().retainAll(observed);
+        } catch (ReflectiveOperationException e) {
+            hypixelLegitils$lunarNametagCacheUnavailable = true;
+            HypixelLegitilsBootstrap.traceStats("name-tag Lunar cache unavailable");
+        }
+    }
+
     private hypixelLegitils$NearbyMovement hypixelLegitils$nearbyMovement(
         hypixelLegitils$PlayerFrame candidate,
         List<hypixelLegitils$PlayerFrame> frames
@@ -424,6 +475,16 @@ public abstract class MixinMinecraft {
             this.x = x;
             this.y = y;
             this.z = z;
+        }
+    }
+
+    private static final class hypixelLegitils$LunarNametagCache {
+        private final String suffix;
+        private final Object component;
+
+        private hypixelLegitils$LunarNametagCache(String suffix, Object component) {
+            this.suffix = suffix;
+            this.component = component;
         }
     }
 

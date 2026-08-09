@@ -99,6 +99,7 @@ public final class HypixelLegitilsBootstrap {
     private static final AtomicBoolean MARKER_RENDER_LOGGED = new AtomicBoolean(false);
     private static final AtomicBoolean TAB_RENDER_HOOK_LOGGED = new AtomicBoolean(false);
     private static final AtomicBoolean NAME_RENDER_HOOK_LOGGED = new AtomicBoolean(false);
+    private static final AtomicBoolean NAME_RENDER_SUFFIX_DECISION_LOGGED = new AtomicBoolean(false);
     private static final Set<String> PENDING_PROFILE_LOOKUP_KEYS
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Object PROFILE_LOOKUP_LOCK = new Object();
@@ -507,6 +508,41 @@ public final class HypixelLegitilsBootstrap {
         if (shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
         if (shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
         return suffix + statsNametagSuffix(playerName, playerId);
+    }
+
+    /**
+     * Extends Lunar's Adventure name component with a legacy-formatted local
+     * suffix. Reflection keeps the ordinary Forge build independent from
+     * Lunar's private runtime library while preserving every existing style on
+     * the server-provided component.
+     */
+    public static Object appendLunarNametagComponentSuffix(Object original, String playerName, UUID playerId) {
+        if (original == null) return null;
+        String suffix = playerNametagSuffix(playerName, playerId);
+        if (suffix.isEmpty()) {
+            traceNameTagSuffixDecision(true, false);
+            return original;
+        }
+        traceNameTagSuffixDecision(true, true);
+        onMarkerRenderObserved(playerId, suffix);
+        try {
+            ClassLoader loader = original.getClass().getClassLoader();
+            Class<?> componentClass = Class.forName("net.kyori.adventure.text.Component", false, loader);
+            Class<?> serializerClass = Class.forName(
+                "net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer",
+                false,
+                loader
+            );
+            Object serializer = serializerClass.getMethod("legacySection").invoke(null);
+            Object suffixComponent = serializerClass.getMethod("deserialize", String.class).invoke(serializer, suffix);
+            @SuppressWarnings("unchecked")
+            List<Object> children = new ArrayList<Object>((List<Object>) componentClass.getMethod("children").invoke(original));
+            children.add(suffixComponent);
+            return componentClass.getMethod("children", List.class).invoke(original, children);
+        } catch (ReflectiveOperationException e) {
+            traceStats("name-tag Adventure component unavailable");
+            return original;
+        }
     }
 
     public static String[] drainPendingStatsNotices() {
@@ -1173,6 +1209,13 @@ public final class HypixelLegitilsBootstrap {
         if (logged.compareAndSet(false, true)) System.out.println("[HypixelLegitils] " + hook + " marker render hook active.");
     }
 
+    /** Bounded opt-in trace for P0: no name, UUID, key, or provider payload is logged. */
+    public static void traceNameTagSuffixDecision(boolean profileAvailable, boolean suffixAvailable) {
+        if (!statsTraceEnabled || !NAME_RENDER_SUFFIX_DECISION_LOGGED.compareAndSet(false, true)) return;
+        System.out.println("[HypixelLegitils][StatsTrace] name-tag candidate profile=" + profileAvailable
+            + " suffix=" + suffixAvailable);
+    }
+
     /** Development-only adapter switch: production observations exclude the local player. */
     public static boolean shouldObserveLocalPlayerForDevelopment() {
         return STARTED.get() && developerSelfDetectionEnabled;
@@ -1224,6 +1267,7 @@ public final class HypixelLegitilsBootstrap {
             MARKER_RENDER_LOGGED.set(false);
             TAB_RENDER_HOOK_LOGGED.set(false);
             NAME_RENDER_HOOK_LOGGED.set(false);
+            NAME_RENDER_SUFFIX_DECISION_LOGGED.set(false);
             System.out.println("[HypixelLegitils] World lifecycle reset.");
         }
     }
