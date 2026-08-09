@@ -1,6 +1,8 @@
 package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiPlayerTabOverlay;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.scoreboard.ScoreObjective;
@@ -45,11 +47,23 @@ public class MixinGuiPlayerTabOverlay {
         if (info == null || info.getGameProfile() == null) return;
         java.util.UUID playerId = info.getGameProfile().getId();
         String renderedName = callbackInfo.getReturnValue();
-        String padding = HypixelLegitilsBootstrap.observeTabStatsName(info.getGameProfile().getName(), renderedName);
+        FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
+        int renderedPixelWidth = font == null ? 0 : font.getStringWidth(renderedName);
+        int spacePixelWidth = font == null ? 4 : font.getStringWidth(" ");
+        int boldSpacePixelWidth = font == null ? 5 : font.getStringWidth("§l ");
+        String starText = HypixelLegitilsBootstrap.statsTabStar(info.getGameProfile().getName(), playerId);
+        int starPixelWidth = font == null ? 0 : font.getStringWidth(starText);
+        String padding = HypixelLegitilsBootstrap.observeTabStatsName(
+            info.getGameProfile().getName(), renderedName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth,
+            starText, starPixelWidth
+        );
         String suffix = "";
         if (HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId)) suffix += " §c[NICK]";
         if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
-        suffix += HypixelLegitilsBootstrap.statsTabSuffix(info.getGameProfile().getName(), playerId);
+        suffix += HypixelLegitilsBootstrap.statsTabSuffix(
+            info.getGameProfile().getName(), playerId,
+            HypixelLegitilsBootstrap.statsTabStarPadding(info.getGameProfile().getName(), starText)
+        );
         if (suffix.isEmpty()) return;
         callbackInfo.setReturnValue(renderedName + padding + suffix);
         HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, suffix);

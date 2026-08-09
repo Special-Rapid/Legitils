@@ -71,10 +71,16 @@ public final class StatsPresentation {
     }
 
     public static String tabSuffix(StatsBridgePlayerResult player, StatsSettings settings) {
+        return tabSuffix(player, settings, "");
+    }
+
+    /** Adds per-roster Star-column padding after the Star value and before the following Tab field. */
+    public static String tabSuffix(StatsBridgePlayerResult player, StatsSettings settings, String starPadding) {
         if (settings == null || !settings.enabled || !settings.tabEnabled) return "";
         if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) return "";
         List<String> values = new ArrayList<String>();
-        if (settings.starsEnabled && player.stars != null) values.add(stars(player.stars.intValue()));
+        String star = tabStar(player, settings);
+        if (!star.isEmpty()) values.add(star + (starPadding == null ? "" : starPadding));
         if (settings.fkdrEnabled && player.finalKillDeathRatio != null) values.add(fkdr(player.finalKillDeathRatio.doubleValue()) + decimal(player.finalKillDeathRatio.doubleValue()) + " FKDR");
         if (settings.winStreakEnabled && player.modeWinStreak != null) values.add("§aWS " + player.modeWinStreak.intValue());
         for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) values.add(formattedTagCode(tag));
@@ -82,6 +88,18 @@ public final class StatsPresentation {
         StringBuilder suffix = new StringBuilder();
         for (String value : values) suffix.append(" §8| ").append(value);
         return suffix.toString();
+    }
+
+    /** Returns the exact Star text used in Tab when the local Tab Stars setting permits it. */
+    public static String tabStar(StatsBridgePlayerResult player, StatsSettings settings) {
+        if (settings == null || !settings.enabled || !settings.tabEnabled || !settings.starsEnabled) return "";
+        if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN || player.stars == null) return "";
+        return stars(player.stars.intValue());
+    }
+
+    /** Returns the exact Star text used in Chat summaries, independent of the optional Tab Stars setting. */
+    public static String chatStar(StatsBridgePlayerResult player) {
+        return player == null || player.stars == null ? "" : stars(player.stars.intValue());
     }
 
     /** Returns only the optional compact FKDR nametag suffix for a returned real profile. */
@@ -139,10 +157,20 @@ public final class StatsPresentation {
 
     /** Uses the team-formatted Tab name captured at roster time and preserves each tag's safe hover text. */
     public static List<ChatNotice> chatNotices(StatsBridgeLookupResult result, Map<String, String> teamFormattedNames) {
+        return chatNotices(result, teamFormattedNames, Collections.<String, String>emptyMap());
+    }
+
+    /** Uses the same measured Star field as Tab when the current roster provided one. */
+    public static List<ChatNotice> chatNotices(
+        StatsBridgeLookupResult result,
+        Map<String, String> teamFormattedNames,
+        Map<String, String> starPaddings
+    ) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
         List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (Profile profile : rankedHighStats(result.players)) {
-            lines.add(new ChatNotice(teamFormattedName(profile.player.name, teamFormattedNames) + " §8— " + profile.statsSummary(), null));
+            lines.add(new ChatNotice(teamFormattedName(profile.player.name, teamFormattedNames) + " §8— "
+                + profile.statsSummary(starPadding(profile.player.name, starPaddings)), null));
         }
         for (StatsBridgePlayerResult player : result.players) {
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
@@ -164,13 +192,22 @@ public final class StatsPresentation {
 
     /** Reuses a current Tab display field when one is available without requiring pregame team data. */
     public static List<ChatNotice> pregameChatNotices(StatsBridgeLookupResult result, Map<String, String> renderedNames) {
+        return pregameChatNotices(result, renderedNames, Collections.<String, String>emptyMap());
+    }
+
+    /** Reuses the same measured Star field as Tab when one is available. */
+    public static List<ChatNotice> pregameChatNotices(
+        StatsBridgeLookupResult result,
+        Map<String, String> renderedNames,
+        Map<String, String> starPaddings
+    ) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
         List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) continue;
             if (player.stars != null || player.finalKillDeathRatio != null || player.modeWinStreak != null) {
                 lines.add(new ChatNotice(displayedName(player.name, renderedNames, player.name) + " §8— "
-                    + new Profile(player, Tier.NONE).statsSummary(), null));
+                    + new Profile(player, Tier.NONE).statsSummary(starPadding(player.name, starPaddings)), null));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, displayedName(player.name, renderedNames, "§f" + player.name)));
@@ -191,6 +228,15 @@ public final class StatsPresentation {
 
     /** Explicit lookup output reuses a current Tab display field when one has already been observed. */
     public static List<ChatNotice> manualLookupNotices(StatsBridgeLookupResult result, Map<String, String> renderedNames) {
+        return manualLookupNotices(result, renderedNames, Collections.<String, String>emptyMap());
+    }
+
+    /** Explicit lookup output uses the same measured Star field as Tab when one is available. */
+    public static List<ChatNotice> manualLookupNotices(
+        StatsBridgeLookupResult result,
+        Map<String, String> renderedNames,
+        Map<String, String> starPaddings
+    ) {
         if (result == null || result.status == StatsBridgeLookupResult.Status.UNAVAILABLE) {
             return Collections.singletonList(new ChatNotice("§cStats Bridge unavailable. §7Start Companion and check API keys.", null));
         }
@@ -204,7 +250,7 @@ public final class StatsPresentation {
                     + " §8— §eprofile unavailable", null));
             } else {
                 lines.add(new ChatNotice("§bStats§7: " + displayedName(player.name, renderedNames, "§f" + player.name)
-                    + " §8— " + new Profile(player, Tier.NONE).statsSummary(), null));
+                    + " §8— " + new Profile(player, Tier.NONE).statsSummary(starPadding(player.name, starPaddings)), null));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 if ("diagnostic".equals(tag.source)) {
@@ -234,8 +280,12 @@ public final class StatsPresentation {
         }
 
         public String statsSummary() {
+            return statsSummary("");
+        }
+
+        public String statsSummary(String starPadding) {
             StringBuilder line = new StringBuilder();
-            if (player.stars != null) line.append(' ').append(stars(player.stars.intValue()));
+            if (player.stars != null) line.append(' ').append(stars(player.stars.intValue())).append(starPadding == null ? "" : starPadding);
             if (player.finalKillDeathRatio != null) line.append(' ').append(fkdr(player.finalKillDeathRatio.doubleValue())).append("FKDR ").append(decimal(player.finalKillDeathRatio.doubleValue()));
             if (player.modeWinStreak != null) line.append(" §aWS ").append(player.modeWinStreak.intValue());
             return line.length() == 0 ? "§7no stats" : line.substring(1);
@@ -253,6 +303,12 @@ public final class StatsPresentation {
             if (formatted != null && !formatted.trim().isEmpty()) return formatted;
         }
         return fallback;
+    }
+
+    private static String starPadding(String name, Map<String, String> starPaddings) {
+        if (name == null || starPaddings == null) return "";
+        String padding = starPaddings.get(name.toLowerCase(Locale.ROOT));
+        return padding == null ? "" : padding;
     }
 
     private static List<StatsBridgePlayerResult.CommunityTag> advisoryTags(StatsBridgePlayerResult player) {

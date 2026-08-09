@@ -90,28 +90,33 @@ public final class StatsPresentationTest {
     }
 
     @Test
-    public void renderedTabNamesUseTheCurrentRosterWidthAndPreserveThirdPartySuffixes() {
+    public void renderedTabNamesUseTheCurrentRosterPixelWidthAndPreserveThirdPartySuffixes() {
         StatsDisplayNameColumns columns = new StatsDisplayNameColumns();
+        String beeStar = "§f[100✫]";
         columns.beginTabRender();
-        assertEquals("", columns.observeTabName("Short", "§cR Short [190]"));
-        assertEquals("", columns.observeTabName("Bee", "§aG Bee"));
+        assertEquals("", columns.observeTabName("Short", "§cR Short [190]", 64, 4, 5, "§c[12345✭]", 40));
+        assertEquals("", columns.observeTabName("Bee", "§aG Bee", 33, 4, 5, beeStar, 28));
         columns.finishTabRender();
 
-        String paddedBee = "§aG Bee" + spaces(8);
+        String paddedBee = "§aG Bee§r" + spaces(4) + "§l" + spaces(3) + "§r";
+        String paddedBeeStar = beeStar + "§r" + spaces(3) + "§r";
         assertEquals("§cR Short [190]", columns.nameForChat("Short", "§cR Short"));
         assertEquals(paddedBee, columns.nameForChat("Bee", "§aG Bee"));
+        assertEquals("", columns.starPadding("Short", "§c[12345✭]"));
+        assertEquals("§r" + spaces(3) + "§r", columns.starPadding("Bee", beeStar));
 
         StatsBridgePlayerResult player = player("Bee", 100, 2D, null);
-        assertEquals(paddedBee + " §8— §f[100✫] §aFKDR 2.0", StatsPresentation.chatLines(
+        assertEquals(paddedBee + " §8— " + paddedBeeStar + " §aFKDR 2.0", StatsPresentation.chatNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player)),
-            Collections.singletonMap("bee", paddedBee)
-        ).get(0));
+            Collections.singletonMap("bee", paddedBee),
+            Collections.singletonMap("bee", columns.starPadding("Bee", beeStar))
+        ).get(0).text);
 
         columns.beginTabRender();
-        columns.observeTabName("Jo", "§cR Jo");
-        columns.observeTabName("Ava", "§aG Ava");
+        columns.observeTabName("Jo", "§cR Jo", 21, 4, 5, "", 0);
+        columns.observeTabName("Ava", "§aG Ava", 24, 4, 5, "", 0);
         columns.finishTabRender();
-        assertEquals("§cR Jo" + spaces(1), columns.nameForChat("Jo", "§cR Jo"));
+        assertEquals("§cR Jo§r" + spaces(1) + "§r", columns.nameForChat("Jo", "§cR Jo"));
         assertEquals("§aG Ava", columns.nameForChat("Ava", "§aG Ava"));
     }
 

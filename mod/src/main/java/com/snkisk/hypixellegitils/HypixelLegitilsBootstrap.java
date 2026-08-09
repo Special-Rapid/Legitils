@@ -502,7 +502,9 @@ public final class HypixelLegitilsBootstrap {
             latestStatsBridgeResult = result;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
-                for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(result, teamFormattedNames)) {
+                for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
+                    result, teamFormattedNames, statsChatStarPaddings(result)
+                )) {
                     PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
                 }
             }
@@ -518,7 +520,9 @@ public final class HypixelLegitilsBootstrap {
             }
             traceStats("pregame chat result published");
             if (statsSettings.chatEnabled) {
-                for (StatsPresentation.ChatNotice notice : StatsPresentation.pregameChatNotices(result, statsChatDisplayNames(result))) {
+                for (StatsPresentation.ChatNotice notice : StatsPresentation.pregameChatNotices(
+                    result, statsChatDisplayNames(result), statsChatStarPaddings(result)
+                )) {
                     PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
                 }
             }
@@ -547,19 +551,46 @@ public final class HypixelLegitilsBootstrap {
 
     /** Returns a local-only suffix for a known real profile; existing Tab markers stay ahead of it. */
     public static String statsTabSuffix(String playerName, UUID playerId) {
+        return statsTabSuffix(playerName, playerId, "");
+    }
+
+    /** Adds the local measured Star-column padding only to a matching rendered Star value. */
+    public static String statsTabSuffix(String playerName, UUID playerId, String starPadding) {
         StatsSettings settings = statsSettings;
         if (!STARTED.get() || !settings.enabled || !settings.tabEnabled || playerName == null || playerId == null || playerId.version() == 1) return "";
         StatsBridgeLookupResult result = latestStatsBridgeResult;
         if (result.status != StatsBridgeLookupResult.Status.READY) return "";
         for (StatsBridgePlayerResult player : result.players) {
-            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.tabSuffix(player, settings);
+            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.tabSuffix(player, settings, starPadding);
         }
         return "";
     }
 
-    /** Retains a third-party decorated Tab name and provides padding before our local suffix. */
-    public static String observeTabStatsName(String playerName, String renderedName) {
-        return STATS_DISPLAY_NAME_COLUMNS.observeTabName(playerName, renderedName);
+    /** Reads the Star text before suffix construction so the Tab renderer can measure its actual pixel width. */
+    public static String statsTabStar(String playerName, UUID playerId) {
+        StatsSettings settings = statsSettings;
+        if (!STARTED.get() || !settings.enabled || !settings.tabEnabled || playerName == null || playerId == null || playerId.version() == 1) return "";
+        StatsBridgeLookupResult result = latestStatsBridgeResult;
+        if (result.status != StatsBridgeLookupResult.Status.READY) return "";
+        for (StatsBridgePlayerResult player : result.players) {
+            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.tabStar(player, settings);
+        }
+        return "";
+    }
+
+    /** Retains a third-party decorated Tab name and uses Minecraft's actual glyph widths before our local suffix. */
+    public static String observeTabStatsName(
+        String playerName,
+        String renderedName,
+        int renderedPixelWidth,
+        int spacePixelWidth,
+        int boldSpacePixelWidth,
+        String starText,
+        int starPixelWidth
+    ) {
+        return STATS_DISPLAY_NAME_COLUMNS.observeTabName(
+            playerName, renderedName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth, starText, starPixelWidth
+        );
     }
 
     /** Starts collecting the current Tab roster's rendered names for dynamic Stats alignment. */
@@ -577,6 +608,16 @@ public final class HypixelLegitilsBootstrap {
         return STATS_DISPLAY_NAME_COLUMNS.nameForChat(playerName, fallbackName);
     }
 
+    /** Reuses the matching current Tab Star column for Chat without accessing Minecraft rendering from a bridge thread. */
+    public static String statsChatStarPadding(String playerName, String starText) {
+        return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText);
+    }
+
+    /** Reuses the matching current Tab Star column for a Tab suffix after the active snapshot has been read. */
+    public static String statsTabStarPadding(String playerName, String starText) {
+        return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText);
+    }
+
     private static Map<String, String> statsChatDisplayNames(StatsBridgeLookupResult result) {
         if (result == null || result.players == null || result.players.isEmpty()) return Collections.emptyMap();
         Map<String, String> names = new LinkedHashMap<String, String>();
@@ -585,6 +626,16 @@ public final class HypixelLegitilsBootstrap {
             names.put(player.name.toLowerCase(Locale.ROOT), statsChatDisplayName(player.name, "§f" + player.name));
         }
         return names;
+    }
+
+    private static Map<String, String> statsChatStarPaddings(StatsBridgeLookupResult result) {
+        if (result == null || result.players == null || result.players.isEmpty()) return Collections.emptyMap();
+        Map<String, String> paddings = new LinkedHashMap<String, String>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player == null || player.name == null) continue;
+            paddings.put(player.name.toLowerCase(Locale.ROOT), statsChatStarPadding(player.name, StatsPresentation.chatStar(player)));
+        }
+        return paddings;
     }
 
     /** Reorders only the local Tab render snapshot; server roster, teams, and packets remain untouched. */
@@ -706,7 +757,9 @@ public final class HypixelLegitilsBootstrap {
         List<PendingStatsNotice> responses = new ArrayList<PendingStatsNotice>();
         StatsBridgeLookupResult result;
         while ((result = PENDING_MANUAL_STATS_RESULTS.poll()) != null) {
-            for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(result, statsChatDisplayNames(result))) {
+            for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(
+                result, statsChatDisplayNames(result), statsChatStarPaddings(result)
+            )) {
                 responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
             }
         }
