@@ -180,7 +180,9 @@ public final class DetectorSettingsService {
             && left.starsEnabled == right.starsEnabled && left.fkdrEnabled == right.fkdrEnabled
             && left.winStreakEnabled == right.winStreakEnabled && left.chatEnabled == right.chatEnabled
             && left.nametagEnabled == right.nametagEnabled
-            && Double.compare(left.nametagFkdrThreshold, right.nametagFkdrThreshold) == 0;
+            && Double.compare(left.nametagFkdrThreshold, right.nametagFkdrThreshold) == 0
+            && left.tabTeamSortingEnabled == right.tabTeamSortingEnabled
+            && left.tabPlayerSortingEnabled == right.tabPlayerSortingEnabled;
     }
 
     private NotificationSettings notificationSettingsWith(NotificationChannel channel, boolean enabled) {

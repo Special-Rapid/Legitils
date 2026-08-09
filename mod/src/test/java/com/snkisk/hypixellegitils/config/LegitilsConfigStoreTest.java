@@ -174,4 +174,30 @@ public class LegitilsConfigStoreTest {
             Files.deleteIfExists(directory);
         }
     }
+
+    @Test
+    public void schemaSixStatsConfigurationAddsDisabledTabSortingAndMigratesOnSave() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-schema-six-tab-sort-test");
+        Path path = directory.resolve("config.json");
+        try {
+            String json = "{\"schemaVersion\":6,\"revision\":4,\"enabledDetectors\":[],\"sensitivity\":\"balanced\",\"notifications\":{\"chat\":true,\"overlay\":false,\"sound\":false},\"cooldowns\":{\"normalMillis\":1000,\"airStallMillis\":30000},\"debug\":false,\"markers\":{\"enabled\":true,\"threshold\":2},\"nickDetection\":{\"enabled\":true},\"partyDetection\":{\"enabled\":true},\"stats\":{\"enabled\":true,\"tab\":true,\"stars\":true,\"fkdr\":true,\"winStreak\":true,\"chat\":true,\"nametag\":false,\"nametagFkdrThreshold\":1}}";
+            Files.write(path, json.getBytes("UTF-8"));
+            LegitilsConfigStore store = new LegitilsConfigStore();
+            ConfigLoadResult loaded = store.load(path);
+            assertFalse(loaded.usedDefaults);
+            assertFalse(loaded.config.statsSettings.tabTeamSortingEnabled);
+            assertFalse(loaded.config.statsSettings.tabPlayerSortingEnabled);
+
+            DetectorSettingsService service = new DetectorSettingsService(store, path, loaded.config);
+            DetectorSettingsService.Update update = service.setStatsSettings(
+                new StatsSettings(true, true, true, true, true, true, false, 1D, true, true)
+            );
+            assertEquals(LegitilsConfig.SCHEMA_VERSION, update.config.schemaVersion);
+            assertTrue(store.load(path).config.statsSettings.tabTeamSortingEnabled);
+            assertTrue(store.load(path).config.statsSettings.tabPlayerSortingEnabled);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
 }

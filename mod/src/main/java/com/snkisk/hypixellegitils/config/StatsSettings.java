@@ -10,14 +10,24 @@ public final class StatsSettings {
     public final boolean chatEnabled;
     public final boolean nametagEnabled;
     public final double nametagFkdrThreshold;
+    public final boolean tabTeamSortingEnabled;
+    public final boolean tabPlayerSortingEnabled;
 
     public StatsSettings(boolean enabled, boolean tabEnabled, boolean starsEnabled, boolean fkdrEnabled, boolean winStreakEnabled, boolean chatEnabled) {
-        this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled, false, 1D);
+        this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled, false, 1D, false, false);
     }
 
     public StatsSettings(
         boolean enabled, boolean tabEnabled, boolean starsEnabled, boolean fkdrEnabled, boolean winStreakEnabled, boolean chatEnabled,
         boolean nametagEnabled, double nametagFkdrThreshold
+    ) {
+        this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled,
+            nametagEnabled, nametagFkdrThreshold, false, false);
+    }
+
+    public StatsSettings(
+        boolean enabled, boolean tabEnabled, boolean starsEnabled, boolean fkdrEnabled, boolean winStreakEnabled, boolean chatEnabled,
+        boolean nametagEnabled, double nametagFkdrThreshold, boolean tabTeamSortingEnabled, boolean tabPlayerSortingEnabled
     ) {
         if (Double.isNaN(nametagFkdrThreshold) || Double.isInfinite(nametagFkdrThreshold)
             || nametagFkdrThreshold < 0D || nametagFkdrThreshold > 1000D) {
@@ -31,9 +41,11 @@ public final class StatsSettings {
         this.chatEnabled = chatEnabled;
         this.nametagEnabled = nametagEnabled;
         this.nametagFkdrThreshold = nametagFkdrThreshold;
+        this.tabTeamSortingEnabled = tabTeamSortingEnabled;
+        this.tabPlayerSortingEnabled = tabPlayerSortingEnabled;
     }
 
     public static StatsSettings defaults() {
-        return new StatsSettings(true, true, true, true, true, true, false, 1D);
+        return new StatsSettings(true, true, true, true, true, true, false, 1D, false, false);
     }
 }

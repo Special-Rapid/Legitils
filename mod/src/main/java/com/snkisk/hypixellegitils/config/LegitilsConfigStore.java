@@ -121,6 +121,7 @@ public final class LegitilsConfigStore {
             && schemaVersion != LegitilsConfig.NICK_DETECTION_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.PARTY_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.STATS_SCHEMA_VERSION
+            && schemaVersion != LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.SCHEMA_VERSION) {
             throw new IllegalArgumentException("unsupported schemaVersion");
         }
@@ -212,15 +213,19 @@ public final class LegitilsConfigStore {
             Map<?, ?> rawStats = (Map<?, ?>) root.get("stats");
             if (schemaVersion == LegitilsConfig.STATS_SCHEMA_VERSION) {
                 requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat");
-            } else {
+            } else if (schemaVersion == LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION) {
                 requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat", "nametag", "nametagFkdrThreshold");
+            } else {
+                requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat", "nametag", "nametagFkdrThreshold", "tabTeamSorting", "tabPlayerSorting");
             }
             stats = new StatsSettings(booleanValue(rawStats.get("enabled"), "stats.enabled"),
                 booleanValue(rawStats.get("tab"), "stats.tab"), booleanValue(rawStats.get("stars"), "stats.stars"),
                 booleanValue(rawStats.get("fkdr"), "stats.fkdr"), booleanValue(rawStats.get("winStreak"), "stats.winStreak"),
                 booleanValue(rawStats.get("chat"), "stats.chat"),
                 schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION && booleanValue(rawStats.get("nametag"), "stats.nametag"),
-                schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION ? doubleValue(rawStats.get("nametagFkdrThreshold"), "stats.nametagFkdrThreshold") : 1D);
+                schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION ? doubleValue(rawStats.get("nametagFkdrThreshold"), "stats.nametagFkdrThreshold") : 1D,
+                schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION && booleanValue(rawStats.get("tabTeamSorting"), "stats.tabTeamSorting"),
+                schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION && booleanValue(rawStats.get("tabPlayerSorting"), "stats.tabPlayerSorting"));
         }
 
         return new LegitilsConfig(
@@ -285,6 +290,10 @@ public final class LegitilsConfigStore {
             if (config.schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION) {
                 stats.put("nametag", Boolean.valueOf(config.statsSettings.nametagEnabled));
                 stats.put("nametagFkdrThreshold", Double.valueOf(config.statsSettings.nametagFkdrThreshold));
+            }
+            if (config.schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION) {
+                stats.put("tabTeamSorting", Boolean.valueOf(config.statsSettings.tabTeamSortingEnabled));
+                stats.put("tabPlayerSorting", Boolean.valueOf(config.statsSettings.tabPlayerSortingEnabled));
             }
             root.put("stats", stats);
         }

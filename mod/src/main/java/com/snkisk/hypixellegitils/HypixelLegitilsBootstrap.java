@@ -32,6 +32,9 @@ import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
 import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
 import com.snkisk.hypixellegitils.stats.StatsPresentation;
 import com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult;
+import com.snkisk.hypixellegitils.stats.StatsTabSorter;
+import net.minecraft.client.network.NetworkPlayerInfo;
+import net.minecraft.scoreboard.ScorePlayerTeam;
 import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
 import java.nio.file.Path;
 import java.io.IOException;
@@ -540,6 +543,34 @@ public final class HypixelLegitilsBootstrap {
         return "";
     }
 
+    /** Reorders only the local Tab render snapshot; server roster, teams, and packets remain untouched. */
+    public static List<NetworkPlayerInfo> sortedTabPlayers(List<NetworkPlayerInfo> vanillaOrder) {
+        StatsSettings settings = statsSettings;
+        StatsBridgeLookupResult result = latestStatsBridgeResult;
+        if (vanillaOrder == null || !STARTED.get() || !settings.enabled
+            || (!settings.tabTeamSortingEnabled && !settings.tabPlayerSortingEnabled)
+            || result.status != StatsBridgeLookupResult.Status.READY) return vanillaOrder;
+        Map<String, StatsBridgePlayerResult> byName = new LinkedHashMap<String, StatsBridgePlayerResult>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player != null && player.name != null) byName.put(player.name.toLowerCase(Locale.ROOT), player);
+        }
+        List<StatsTabSorter.Entry<NetworkPlayerInfo>> entries = new ArrayList<StatsTabSorter.Entry<NetworkPlayerInfo>>(vanillaOrder.size());
+        for (int index = 0; index < vanillaOrder.size(); index++) {
+            NetworkPlayerInfo info = vanillaOrder.get(index);
+            String playerName = info == null || info.getGameProfile() == null ? null : info.getGameProfile().getName();
+            StatsBridgePlayerResult player = playerName == null ? null : byName.get(playerName.toLowerCase(Locale.ROOT));
+            ScorePlayerTeam team = info == null ? null : info.getPlayerTeam();
+            String teamKey = team == null ? null : team.getRegisteredName();
+            UUID playerId = info == null || info.getGameProfile() == null ? null : info.getGameProfile().getId();
+            boolean nicked = shouldShowNickedSessionMarker(playerId)
+                || player != null && player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED;
+            Double fkdr = !nicked && player != null && player.nickStatus == StatsBridgePlayerResult.NickStatus.KNOWN
+                ? player.finalKillDeathRatio : null;
+            entries.add(new StatsTabSorter.Entry<NetworkPlayerInfo>(info, teamKey, nicked, fkdr, index));
+        }
+        return StatsTabSorter.sort(entries, settings);
+    }
+
     /** Returns the opt-in FKDR suffix for the vanilla player-nametag render path. */
     public static String statsNametagSuffix(String playerName, UUID playerId) {
         StatsSettings settings = statsSettings;
@@ -758,6 +789,8 @@ public final class HypixelLegitilsBootstrap {
         boolean winStreak = current.winStreakEnabled;
         boolean nametag = current.nametagEnabled;
         double nametagThreshold = current.nametagFkdrThreshold;
+        boolean teamSort = current.tabTeamSortingEnabled;
+        boolean playerSort = current.tabPlayerSortingEnabled;
         if (option == LocalCommand.StatsOption.ENABLED) stats = enabled;
         else if (option == LocalCommand.StatsOption.TAB) tab = enabled;
         else if (option == LocalCommand.StatsOption.CHAT) chat = enabled;
@@ -767,8 +800,9 @@ public final class HypixelLegitilsBootstrap {
         else if (option == LocalCommand.StatsOption.NAMETAG) {
             nametag = enabled;
             if (enabled) nametagThreshold = nametagFkdrThreshold;
-        }
-        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat, nametag, nametagThreshold);
+        } else if (option == LocalCommand.StatsOption.TAB_TEAM_SORT) teamSort = enabled;
+        else if (option == LocalCommand.StatsOption.TAB_PLAYER_SORT) playerSort = enabled;
+        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat, nametag, nametagThreshold, teamSort, playerSort);
     }
 
     private static String[] statsStatusLines(StatsSettings settings) {
@@ -780,6 +814,9 @@ public final class HypixelLegitilsBootstrap {
                 + " §8| §7Win Streak: " + state(settings.winStreakEnabled)),
             ChatFormat.continuation("§7Nametag FKDR: " + state(settings.nametagEnabled)
                 + " §8| §7threshold: §f" + decimal(settings.nametagFkdrThreshold)),
+            ChatFormat.continuation("§7Tab sort: §fTeams " + state(settings.tabTeamSortingEnabled)
+                + " §8| §fPlayers " + state(settings.tabPlayerSortingEnabled)
+                + " §8| §7Nick = FKDR 5.0 for team score"),
             ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
             ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
             ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
@@ -1024,6 +1061,9 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Nametag FKDR: " + state(config.statsSettings.nametagEnabled)
             + " §8| §7threshold: §f" + decimal(config.statsSettings.nametagFkdrThreshold)
             + " §8| §7Nick [NICK]: " + nickState + " §8| §7Alert ⚠: " + state(config.markerSettings.enabled)));
+        lines.add(ChatFormat.continuation("§7Tab sort: §fTeams " + state(config.statsSettings.tabTeamSortingEnabled)
+            + " §8| §fPlayers " + state(config.statsSettings.tabPlayerSortingEnabled)
+            + " §8| §7Team score = FKDR + Nick 5.0"));
         lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
         lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
         lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));
