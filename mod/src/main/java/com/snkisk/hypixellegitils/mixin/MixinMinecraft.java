@@ -180,7 +180,7 @@ public abstract class MixinMinecraft {
 
     private ChatComponentText hypixelLegitils$statsChatComponent(HypixelLegitilsBootstrap.PendingStatsNotice notice) {
         ChatComponentText component = new ChatComponentText(notice.text);
-        String styledCode = notice.tagCode == null ? null : "§e" + notice.tagCode;
+        String styledCode = notice.tagCode;
         int codeStart = styledCode == null ? -1 : notice.text.indexOf(styledCode);
         if (notice.tooltip != null && !notice.tooltip.isEmpty() && codeStart >= 0) {
             component = new ChatComponentText(notice.text.substring(0, codeStart));

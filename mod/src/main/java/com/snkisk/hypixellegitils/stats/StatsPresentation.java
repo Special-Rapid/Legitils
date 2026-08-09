@@ -10,6 +10,7 @@ import java.util.Map;
 
 /** Pure local presentation policy for normalized Bridge results; it never starts lookup work. */
 public final class StatsPresentation {
+    private static final int TAG_TOOLTIP_LINE_WIDTH = 42;
     /**
      * Bed Wars prestige templates from sample/star-color-code/color-code.md.
      * Each entry keeps the document's colour codes and symbol; its visible digits are
@@ -76,7 +77,7 @@ public final class StatsPresentation {
         if (settings.starsEnabled && player.stars != null) values.add(stars(player.stars.intValue()));
         if (settings.fkdrEnabled && player.finalKillDeathRatio != null) values.add(fkdr(player.finalKillDeathRatio.doubleValue()) + decimal(player.finalKillDeathRatio.doubleValue()) + " FKDR");
         if (settings.winStreakEnabled && player.modeWinStreak != null) values.add("§aWS " + player.modeWinStreak.intValue());
-        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) values.add(tagAbbreviation(tag));
+        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) values.add(formattedTagCode(tag));
         if (values.isEmpty()) return "";
         StringBuilder suffix = new StringBuilder();
         for (String value : values) suffix.append(" §8| ").append(value);
@@ -101,7 +102,7 @@ public final class StatsPresentation {
     public static String nametagTagSuffix(StatsBridgePlayerResult player) {
         if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) return "";
         StringBuilder suffix = new StringBuilder();
-        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) suffix.append(" §e").append(tagAbbreviation(tag));
+        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) suffix.append(" ").append(formattedTagCode(tag));
         return suffix.toString();
     }
 
@@ -263,9 +264,64 @@ public final class StatsPresentation {
         return "[CA]";
     }
 
+    /** One source-independent palette, matched to the supplied Seraph/Urchin tag references. */
+    private static String tagColor(StatsBridgePlayerResult.CommunityTag tag) {
+        String label = tag.label == null ? "" : tag.label;
+        if ("Blatant Cheating".equals(label) || "Blatant Cheater".equals(label)) return "§6";
+        if ("Closet Cheating".equals(label) || "Closet Cheater".equals(label)) return "§6";
+        if ("Confirmed Cheater".equals(label)) return "§5";
+        if ("Sniping".equals(label) || "Sniper".equals(label)) return "§c";
+        if ("Possible Sniper".equals(label) || "Potential Sniper".equals(label)) return "§c";
+        if ("Legit Sniper".equals(label)) return "§c";
+        if ("Alt Account".equals(label) || "Account".equals(label)) return "§6";
+        if ("Bot".equals(label)) return "§7";
+        if ("Annoying".equals(label)) return "§e";
+        return "§6";
+    }
+
+    private static String formattedTagCode(StatsBridgePlayerResult.CommunityTag tag) {
+        return tagColor(tag) + tagAbbreviation(tag);
+    }
+
     private static ChatNotice tagChatNotice(StatsBridgePlayerResult.CommunityTag tag, String formattedName) {
-        String code = tagAbbreviation(tag);
-        return new ChatNotice("§e" + code + " §8— " + formattedName, tag.tooltip, code);
+        String code = formattedTagCode(tag);
+        return new ChatNotice(code + " §8— " + formattedName, tagTooltip(tag), code);
+    }
+
+    /** Keeps Minecraft's hover card narrow while making the provider's canonical category explicit. */
+    private static String tagTooltip(StatsBridgePlayerResult.CommunityTag tag) {
+        String title = tagColor(tag) + "§l" + tag.label;
+        if (tag.tooltip == null || tag.tooltip.trim().isEmpty()) return title;
+        return title + "\n§7" + wrapTooltip(tag.tooltip).replace("\n", "\n§7");
+    }
+
+    private static String wrapTooltip(String tooltip) {
+        String[] sourceLines = tooltip.replace('\r', '\n').split("\\n", -1);
+        List<String> lines = new ArrayList<String>();
+        for (String sourceLine : sourceLines) {
+            String remaining = sourceLine.trim();
+            if (remaining.isEmpty()) {
+                if (!lines.isEmpty()) lines.add("");
+                continue;
+            }
+            while (remaining.length() > TAG_TOOLTIP_LINE_WIDTH) {
+                int split = remaining.lastIndexOf(' ', TAG_TOOLTIP_LINE_WIDTH);
+                if (split <= 0) split = TAG_TOOLTIP_LINE_WIDTH;
+                lines.add(remaining.substring(0, split));
+                remaining = remaining.substring(split).trim();
+            }
+            if (!remaining.isEmpty()) lines.add(remaining);
+        }
+        return lines.isEmpty() ? "" : joinLines(lines);
+    }
+
+    private static String joinLines(List<String> lines) {
+        StringBuilder joined = new StringBuilder();
+        for (String line : lines) {
+            if (joined.length() > 0) joined.append('\n');
+            joined.append(line);
+        }
+        return joined.toString();
     }
 
     private static List<String> textLines(List<ChatNotice> notices) {

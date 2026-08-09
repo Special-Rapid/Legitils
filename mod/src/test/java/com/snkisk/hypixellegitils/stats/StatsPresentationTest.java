@@ -57,8 +57,8 @@ public final class StatsPresentationTest {
                 new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper", "queued repeatedly")
             )
         );
-        assertEquals(" §8| [BC] §8| [LS]", StatsPresentation.tabSuffix(player));
-        assertEquals(" §e[BC] §e[LS]", StatsPresentation.nametagTagSuffix(player));
+        assertEquals(" §8| §6[BC] §8| §c[LS]", StatsPresentation.tabSuffix(player));
+        assertEquals(" §6[BC] §c[LS]", StatsPresentation.nametagTagSuffix(player));
         assertEquals(true, StatsPresentation.hasCommunityAdvisoryTag(player));
     }
 
@@ -82,7 +82,7 @@ public final class StatsPresentationTest {
         );
         assertEquals(Arrays.asList(
             "§cR HighStats §8— §f[100✫] §eFKDR 5.0 §aWS 0",
-            "§e[LS] §8— §cR HighStats"
+            "§c[LS] §8— §cR HighStats"
         ), StatsPresentation.chatLines(
             StatsBridgeLookupResult.ready(Arrays.asList(player)),
             Collections.singletonMap("highstats", "§cR HighStats")
@@ -98,8 +98,8 @@ public final class StatsPresentationTest {
         StatsPresentation.ChatNotice notice = StatsPresentation.chatNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player)), Collections.<String, String>emptyMap()
         ).get(0);
-        assertEquals("§e[CC] §8— §fTagged", notice.text);
-        assertEquals("vape v4\n- Added by @hexze", notice.tooltip);
+        assertEquals("§6[CC] §8— §fTagged", notice.text);
+        assertEquals("§6§lCloset Cheater\n§7vape v4\n§7- Added by @hexze", notice.tooltip);
     }
 
     @Test
@@ -110,7 +110,7 @@ public final class StatsPresentationTest {
         );
         assertEquals(Arrays.asList(
             "Quiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
-            "§e[LS] §8— §fQuiet"
+            "§c[LS] §8— §fQuiet"
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }
 
@@ -141,9 +141,25 @@ public final class StatsPresentationTest {
         StatsPresentation.ChatNotice notice = StatsPresentation.manualLookupNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player))
         ).get(1);
-        assertEquals("§e[BC] §8— §fPlayer", notice.text);
-        assertEquals("[BC]", notice.tagCode);
-        assertEquals("vape v4", notice.tooltip);
+        assertEquals("§6[BC] §8— §fPlayer", notice.text);
+        assertEquals("§6[BC]", notice.tagCode);
+        assertEquals("§6§lBlatant Cheating\n§7vape v4", notice.tooltip);
+    }
+
+    @Test
+    public void tagHoverUsesAColoredTitleAndWrapsTheProviderExplanation() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Player", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
+            Collections.singletonList(new StatsBridgePlayerResult.CommunityTag(
+                "urchin", "Confirmed Cheater",
+                "vape v4 (legitscaff, aa + ac, hitselect, autoblockhit, visuals)"
+            ))
+        );
+        StatsPresentation.ChatNotice notice = StatsPresentation.manualLookupNotices(
+            StatsBridgeLookupResult.ready(Collections.singletonList(player))
+        ).get(1);
+        assertEquals("§5[CF] §8— §fPlayer", notice.text);
+        assertEquals("§5§lConfirmed Cheater\n§7vape v4 (legitscaff, aa + ac, hitselect,\n§7autoblockhit, visuals)", notice.tooltip);
     }
 
     private static StatsBridgePlayerResult player(String name, Integer stars, Double fkdr, Integer streak) {
