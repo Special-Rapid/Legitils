@@ -30,6 +30,11 @@ public class LocalCommandTest {
         assertTrue(contains(lines, ".l stats on/off"));
         assertTrue(contains(lines, ".l stats <tab|chat|stars|fkdr|winstreak> on/off"));
         assertTrue(contains(lines, ".l stats nametag on <0-1000 FKDR>"));
+        assertTrue(contains(lines, "provider tags add [BC]/[CC]/[LS]"));
+        assertTrue(contains(lines, "[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA]"));
+        assertTrue(contains(lines, "BC Blatant"));
+        assertTrue(contains(lines, "A Account/Alt"));
+        assertTrue(contains(lines, "provider tag codes stay visible"));
         assertTrue(contains(lines, "Nick adds [NICK]"));
         assertTrue(contains(lines, "accepted alerts add ⚠"));
         assertTrue(contains(lines, ".l stats <player>"));

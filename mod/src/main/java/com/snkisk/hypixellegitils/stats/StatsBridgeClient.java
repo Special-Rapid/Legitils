@@ -196,11 +196,19 @@ public final class StatsBridgeClient {
         for (Object rawTag : rawTags) {
             if (!(rawTag instanceof Map)) return null;
             Map<?, ?> tag = (Map<?, ?>) rawTag;
-            if (tag.size() != 2 || !(tag.get("source") instanceof String) || !(tag.get("label") instanceof String)) return null;
+            if (tag.size() < 2 || tag.size() > 3 || !(tag.get("source") instanceof String) || !(tag.get("label") instanceof String)) return null;
+            for (Object rawKey : tag.keySet()) {
+                if (!(rawKey instanceof String) || (!"source".equals(rawKey) && !"label".equals(rawKey) && !"tooltip".equals(rawKey))) return null;
+            }
             String source = (String) tag.get("source");
             String label = (String) tag.get("label");
             if (!TAG_SOURCE.matcher(source).matches() || label.length() < 1 || label.length() > MAXIMUM_TAG_LABEL_LENGTH) return null;
-            tags.add(new StatsBridgePlayerResult.CommunityTag(source, label));
+            if (("seraph".equals(source) || "urchin".equals(source)) && !isCanonicalAdvisoryLabel(label)) return null;
+            Object rawTooltip = tag.get("tooltip");
+            if (rawTooltip != null && !(rawTooltip instanceof String)) return null;
+            String tooltip = (String) rawTooltip;
+            if (tooltip != null && (tooltip.length() < 1 || tooltip.length() > 384 || containsUnsafeTooltipCharacter(tooltip))) return null;
+            tags.add(new StatsBridgePlayerResult.CommunityTag(source, label, tooltip));
         }
         return new StatsBridgePlayerResult((String) player.get("name"), nickStatus, stars, fkdr, winStreak, tags);
     }
@@ -221,5 +229,25 @@ public final class StatsBridgeClient {
         double number = ((Number) value).doubleValue();
         if (Double.isNaN(number) || Double.isInfinite(number) || number < minimum || number > maximum) return null;
         return Double.valueOf(number);
+    }
+
+    private static boolean containsUnsafeTooltipCharacter(String tooltip) {
+        for (int index = 0; index < tooltip.length(); index++) {
+            char character = tooltip.charAt(index);
+            if (character == '\n') continue;
+            if (character < 0x20 || character == 0x7F || character == '\u00A7') return true;
+        }
+        return false;
+    }
+
+    private static boolean isCanonicalAdvisoryLabel(String label) {
+        return "Blatant Cheating".equals(label) || "Blatant Cheater".equals(label)
+            || "Closet Cheating".equals(label) || "Closet Cheater".equals(label)
+            || "Confirmed Cheater".equals(label)
+            || "Sniping".equals(label) || "Sniper".equals(label)
+            || "Potential Sniper".equals(label) || "Possible Sniper".equals(label)
+            || "Legit Sniper".equals(label)
+            || "Alt Account".equals(label) || "Account".equals(label)
+            || "Bot".equals(label) || "Annoying".equals(label) || "Caution".equals(label);
     }
 }

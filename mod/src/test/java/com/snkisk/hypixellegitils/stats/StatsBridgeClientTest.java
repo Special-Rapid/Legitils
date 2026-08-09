@@ -195,6 +195,25 @@ public final class StatsBridgeClientTest {
         assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, result.status);
     }
 
+    @Test
+    public void acceptsOnlyBoundedSafeCommunityTagTooltips() throws Exception {
+        StatsBridgeLookupResult accepted = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"urchin\",\"label\":\"Closet Cheater\",\"tooltip\":\"vape v4\\n- Added by @hexze\"}]}]}"
+        );
+        assertEquals(StatsBridgeLookupResult.Status.READY, accepted.status);
+        assertEquals("vape v4\n- Added by @hexze", accepted.players.get(0).communityTags.get(0).tooltip);
+
+        StatsBridgeLookupResult unsafe = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"urchin\",\"label\":\"Closet Cheater\",\"tooltip\":\"unsafe\\u00a7cformat\"}]}]}"
+        );
+        assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, unsafe.status);
+
+        StatsBridgeLookupResult unknownLabel = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"urchin\",\"label\":\"unreviewed provider field\"}]}]}"
+        );
+        assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, unknownLabel.status);
+    }
+
     private static List<StatsBridgeRosterMember> players() {
         List<StatsBridgeRosterMember> players = new ArrayList<StatsBridgeRosterMember>();
         players.add(new StatsBridgeRosterMember("Player_1", null));
@@ -211,7 +230,7 @@ public final class StatsBridgeClientTest {
     }
 
     private static String readyResponse() {
-        return "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"stars\":100,\"finalKillDeathRatio\":5.0,\"modeWinStreak\":10,\"communityTags\":[{\"source\":\"urchin\",\"label\":\"tag\"}]}]}";
+        return "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"stars\":100,\"finalKillDeathRatio\":5.0,\"modeWinStreak\":10,\"communityTags\":[{\"source\":\"urchin\",\"label\":\"Legit Sniper\",\"tooltip\":\"queued repeatedly\"}]}]}";
     }
 
     private static String companionStyleReadyResponse() {

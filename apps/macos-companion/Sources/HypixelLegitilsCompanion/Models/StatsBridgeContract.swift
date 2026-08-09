@@ -85,4 +85,12 @@ enum NickStatus: String, Codable, Equatable {
 struct StatsBridgeCommunityTag: Codable, Equatable {
     let source: String
     let label: String
+    /// The sole provider-text exception: an optional, sanitised, length-bounded explanation for Chat hover.
+    let tooltip: String?
+
+    init(source: String, label: String, tooltip: String? = nil) {
+        self.source = source
+        self.label = label
+        self.tooltip = tooltip
+    }
 }

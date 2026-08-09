@@ -29,7 +29,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.potion.Potion;
 import net.minecraft.potion.PotionEffect;
 import net.minecraft.event.ClickEvent;
+import net.minecraft.event.HoverEvent;
 import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatStyle;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
@@ -146,14 +148,18 @@ public abstract class MixinMinecraft {
             for (String notice : HypixelLegitilsBootstrap.drainPendingPartyDetectorNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
-            for (String notice : HypixelLegitilsBootstrap.drainPendingStatsNotices()) {
-                if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
+            for (HypixelLegitilsBootstrap.PendingStatsNotice notice : HypixelLegitilsBootstrap.drainPendingStatsNotices()) {
+                if (notice != null && notice.text != null && !notice.text.isEmpty()) {
+                    thePlayer.addChatMessage(hypixelLegitils$statsChatComponent(notice));
+                }
             }
             for (String notice : HypixelLegitilsBootstrap.drainPendingConfigurationNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
-            for (String response : HypixelLegitilsBootstrap.drainPendingManualStatsResponses()) {
-                if (response != null && !response.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(response));
+            for (HypixelLegitilsBootstrap.PendingStatsNotice response : HypixelLegitilsBootstrap.drainPendingManualStatsNotices()) {
+                if (response != null && response.text != null && !response.text.isEmpty()) {
+                    thePlayer.addChatMessage(hypixelLegitils$statsChatComponent(response));
+                }
             }
         }
         AlertPresentation presentation = HypixelLegitilsBootstrap.onClientTick(hypixelLegitils$frameNowMillis);
@@ -170,6 +176,22 @@ public abstract class MixinMinecraft {
             }
             hypixelLegitils$lastSoundSequence = presentation.sequence;
         }
+    }
+
+    private ChatComponentText hypixelLegitils$statsChatComponent(HypixelLegitilsBootstrap.PendingStatsNotice notice) {
+        ChatComponentText component = new ChatComponentText(notice.text);
+        String styledCode = notice.tagCode == null ? null : "§e" + notice.tagCode;
+        int codeStart = styledCode == null ? -1 : notice.text.indexOf(styledCode);
+        if (notice.tooltip != null && !notice.tooltip.isEmpty() && codeStart >= 0) {
+            component = new ChatComponentText(notice.text.substring(0, codeStart));
+            ChatComponentText code = new ChatComponentText(styledCode);
+            code.setChatStyle(new ChatStyle().setChatHoverEvent(new HoverEvent(
+                HoverEvent.Action.SHOW_TEXT, new ChatComponentText(notice.tooltip)
+            )));
+            component.appendSibling(code);
+            component.appendText(notice.text.substring(codeStart + styledCode.length()));
+        }
+        return component;
     }
 
     private ChatComponentText hypixelLegitils$chatComponent(AlertPresentation presentation) {

@@ -37,10 +37,17 @@ public final class StatsBridgePlayerResult {
     public static final class CommunityTag {
         public final String source;
         public final String label;
+        /** Sanitised, bounded provider explanation used solely by the local Chat hover component. */
+        public final String tooltip;
 
         public CommunityTag(String source, String label) {
+            this(source, label, null);
+        }
+
+        public CommunityTag(String source, String label, String tooltip) {
             this.source = source;
             this.label = label;
+            this.tooltip = tooltip;
         }
     }
 }

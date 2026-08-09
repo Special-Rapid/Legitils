@@ -49,6 +49,20 @@ public final class StatsPresentationTest {
     }
 
     @Test
+    public void providerTagsUseOneSharedAbbreviationVocabularyAcrossTabAndNametag() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Tagged", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
+            Arrays.asList(
+                new StatsBridgePlayerResult.CommunityTag("seraph", "Blatant Cheating", "vape v4"),
+                new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper", "queued repeatedly")
+            )
+        );
+        assertEquals(" §8| [BC] §8| [LS]", StatsPresentation.tabSuffix(player));
+        assertEquals(" §e[BC] §e[LS]", StatsPresentation.nametagTagSuffix(player));
+        assertEquals(true, StatsPresentation.hasCommunityAdvisoryTag(player));
+    }
+
+    @Test
     public void ranksTargetPlayersByFkdrThenStarsAndProvidesOnlyProfileSummaries() {
         assertEquals(Arrays.asList("HighStats", "HigherFKDR", "HigherStars"), names(StatsPresentation.rankedHighStats(Arrays.asList(
             player("HigherStars", 200, 1D, 0),
@@ -64,11 +78,11 @@ public final class StatsPresentationTest {
     public void chatLinesUseCapturedTeamFormattingWithoutGenericHeadersOrTargetLabels() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "HighStats", StatsBridgePlayerResult.NickStatus.KNOWN, 100, 5D, 0,
-            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
+            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper"))
         );
         assertEquals(Arrays.asList(
             "§cR HighStats §8— §f[100✫] §eFKDR 5.0 §aWS 0",
-            "§durchin tag§7: §fHighStats §8— §dwatchlist"
+            "§e[LS] §8— §cR HighStats"
         ), StatsPresentation.chatLines(
             StatsBridgeLookupResult.ready(Arrays.asList(player)),
             Collections.singletonMap("highstats", "§cR HighStats")
@@ -76,14 +90,27 @@ public final class StatsPresentationTest {
     }
 
     @Test
+    public void communityTagChatNoticeCarriesTheBoundedTooltipButNotTheDisplayLine() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Tagged", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
+            Collections.singletonList(new StatsBridgePlayerResult.CommunityTag("urchin", "Closet Cheater", "vape v4\n- Added by @hexze"))
+        );
+        StatsPresentation.ChatNotice notice = StatsPresentation.chatNotices(
+            StatsBridgeLookupResult.ready(Collections.singletonList(player)), Collections.<String, String>emptyMap()
+        ).get(0);
+        assertEquals("§e[CC] §8— §fTagged", notice.text);
+        assertEquals("vape v4\n- Added by @hexze", notice.tooltip);
+    }
+
+    @Test
     public void pregameChatShowsTheChatterWithoutAPregameHeader() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "Quiet", StatsBridgePlayerResult.NickStatus.KNOWN, 12, 0.4D, 0,
-            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "watchlist"))
+            Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper"))
         );
         assertEquals(Arrays.asList(
             "Quiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
-            "§durchin tag§7: §fQuiet §8— §dwatchlist"
+            "§e[LS] §8— §fQuiet"
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }
 
@@ -103,6 +130,20 @@ public final class StatsPresentationTest {
             "§aAPI§7: §fUrchin: no active tags",
             "§cAPI§7: §fSeraph: authorization failed"
         ), StatsPresentation.manualLookupLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
+    }
+
+    @Test
+    public void manualLookupKeepsTagHoverOnTheAbbreviation() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "Player", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
+            Collections.singletonList(new StatsBridgePlayerResult.CommunityTag("seraph", "Blatant Cheating", "vape v4"))
+        );
+        StatsPresentation.ChatNotice notice = StatsPresentation.manualLookupNotices(
+            StatsBridgeLookupResult.ready(Collections.singletonList(player))
+        ).get(1);
+        assertEquals("§e[BC] §8— §fPlayer", notice.text);
+        assertEquals("[BC]", notice.tagCode);
+        assertEquals("vape v4", notice.tooltip);
     }
 
     private static StatsBridgePlayerResult player(String name, Integer stars, Double fkdr, Integer streak) {

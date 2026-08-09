@@ -39,6 +39,23 @@ public final class StatsPresentation {
         TARGET
     }
 
+    /** A local Chat line with an optional provider explanation for vanilla's hover event. */
+    public static final class ChatNotice {
+        public final String text;
+        public final String tooltip;
+        public final String tagCode;
+
+        public ChatNotice(String text, String tooltip) {
+            this(text, tooltip, null);
+        }
+
+        public ChatNotice(String text, String tooltip, String tagCode) {
+            this.text = text;
+            this.tooltip = tooltip;
+            this.tagCode = tagCode;
+        }
+    }
+
     /** Identifies one locally presented target tier; it does not imply a violation or an alert. */
     public static Tier tierFor(StatsBridgePlayerResult player) {
         if (player == null) return Tier.NONE;
@@ -59,6 +76,7 @@ public final class StatsPresentation {
         if (settings.starsEnabled && player.stars != null) values.add(stars(player.stars.intValue()));
         if (settings.fkdrEnabled && player.finalKillDeathRatio != null) values.add(fkdr(player.finalKillDeathRatio.doubleValue()) + decimal(player.finalKillDeathRatio.doubleValue()) + " FKDR");
         if (settings.winStreakEnabled && player.modeWinStreak != null) values.add("§aWS " + player.modeWinStreak.intValue());
+        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) values.add(tagAbbreviation(tag));
         if (values.isEmpty()) return "";
         StringBuilder suffix = new StringBuilder();
         for (String value : values) suffix.append(" §8| ").append(value);
@@ -72,6 +90,19 @@ public final class StatsPresentation {
         double value = player.finalKillDeathRatio.doubleValue();
         if (value < settings.nametagFkdrThreshold) return "";
         return " " + fkdr(value) + decimal(value) + " FKDR";
+    }
+
+    /** Provider tags are advisory data from the two named sources, never local detection conclusions. */
+    public static boolean hasCommunityAdvisoryTag(StatsBridgePlayerResult player) {
+        return !advisoryTags(player).isEmpty();
+    }
+
+    /** Keeps provider tag abbreviations compact on the always-visible 3D name surface. */
+    public static String nametagTagSuffix(StatsBridgePlayerResult player) {
+        if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) return "";
+        StringBuilder suffix = new StringBuilder();
+        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) suffix.append(" §e").append(tagAbbreviation(tag));
+        return suffix.toString();
     }
 
     /** Orders local target profiles by FKDR, stars, and case-insensitive name; no alert semantics are attached. */
@@ -102,14 +133,19 @@ public final class StatsPresentation {
 
     /** Uses the team-formatted Tab name captured at roster time when it is available. */
     public static List<String> chatLines(StatsBridgeLookupResult result, Map<String, String> teamFormattedNames) {
+        return textLines(chatNotices(result, teamFormattedNames));
+    }
+
+    /** Uses the team-formatted Tab name captured at roster time and preserves each tag's safe hover text. */
+    public static List<ChatNotice> chatNotices(StatsBridgeLookupResult result, Map<String, String> teamFormattedNames) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
-        List<String> lines = new ArrayList<String>();
+        List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (Profile profile : rankedHighStats(result.players)) {
-            lines.add(teamFormattedName(profile.player.name, teamFormattedNames) + " §8— " + profile.statsSummary());
+            lines.add(new ChatNotice(teamFormattedName(profile.player.name, teamFormattedNames) + " §8— " + profile.statsSummary(), null));
         }
         for (StatsBridgePlayerResult player : result.players) {
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
-                lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);
+                if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, teamFormattedName(player.name, teamFormattedNames)));
             }
         }
         return Collections.unmodifiableList(lines);
@@ -117,15 +153,20 @@ public final class StatsPresentation {
 
     /** A chatter explicitly made their visible name available, so show their returned values even below Target thresholds. */
     public static List<String> pregameChatLines(StatsBridgeLookupResult result) {
+        return textLines(pregameChatNotices(result));
+    }
+
+    /** Pregame has no trustworthy team formatting yet, but keeps the tag hover semantics. */
+    public static List<ChatNotice> pregameChatNotices(StatsBridgeLookupResult result) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
-        List<String> lines = new ArrayList<String>();
+        List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) continue;
             if (player.stars != null || player.finalKillDeathRatio != null || player.modeWinStreak != null) {
-                lines.add(new Profile(player, Tier.NONE).chatSummary());
+                lines.add(new ChatNotice(new Profile(player, Tier.NONE).chatSummary(), null));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
-                lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);
+                if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, "§f" + player.name));
             }
         }
         return Collections.unmodifiableList(lines);
@@ -133,26 +174,31 @@ public final class StatsPresentation {
 
     /** Explicit command output: all returned values plus compact provider diagnostics, never raw payloads. */
     public static List<String> manualLookupLines(StatsBridgeLookupResult result) {
+        return textLines(manualLookupNotices(result));
+    }
+
+    /** Explicit command output preserves the same narrow hover affordance as automatic provider-tag notices. */
+    public static List<ChatNotice> manualLookupNotices(StatsBridgeLookupResult result) {
         if (result == null || result.status == StatsBridgeLookupResult.Status.UNAVAILABLE) {
-            return Collections.singletonList("§cStats Bridge unavailable. §7Start Companion and check API keys.");
+            return Collections.singletonList(new ChatNotice("§cStats Bridge unavailable. §7Start Companion and check API keys.", null));
         }
         if (result.status != StatsBridgeLookupResult.Status.READY || result.players.isEmpty()) {
-            return Collections.singletonList("§eStats lookup did not return a profile.");
+            return Collections.singletonList(new ChatNotice("§eStats lookup did not return a profile.", null));
         }
-        List<String> lines = new ArrayList<String>();
+        List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) {
-                lines.add("§eStats§7: §f" + player.name + " §8— §eprofile unavailable");
+                lines.add(new ChatNotice("§eStats§7: §f" + player.name + " §8— §eprofile unavailable", null));
             } else {
-                lines.add("§bStats§7: §f" + new Profile(player, Tier.NONE).chatSummary());
+                lines.add(new ChatNotice("§bStats§7: §f" + new Profile(player, Tier.NONE).chatSummary(), null));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 if ("diagnostic".equals(tag.source)) {
-                    lines.add("§cAPI§7: §f" + tag.label);
+                    lines.add(new ChatNotice("§cAPI§7: §f" + tag.label, null));
                 } else if ("provider".equals(tag.source)) {
-                    lines.add("§aAPI§7: §f" + tag.label);
-                } else {
-                    lines.add("§d" + tag.source + " tag§7: §f" + player.name + " §8— §d" + tag.label);
+                    lines.add(new ChatNotice("§aAPI§7: §f" + tag.label, null));
+                } else if (isAdvisoryTag(tag)) {
+                    lines.add(tagChatNotice(tag, "§f" + player.name));
                 }
             }
         }
@@ -188,6 +234,45 @@ public final class StatsPresentation {
             if (formatted != null && !formatted.trim().isEmpty()) return formatted;
         }
         return "§f" + (name == null ? "Unknown" : name);
+    }
+
+    private static List<StatsBridgePlayerResult.CommunityTag> advisoryTags(StatsBridgePlayerResult player) {
+        if (player == null || player.communityTags == null || player.communityTags.isEmpty()) return Collections.emptyList();
+        List<StatsBridgePlayerResult.CommunityTag> tags = new ArrayList<StatsBridgePlayerResult.CommunityTag>();
+        for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
+            if (isAdvisoryTag(tag)) tags.add(tag);
+        }
+        return tags;
+    }
+
+    private static boolean isAdvisoryTag(StatsBridgePlayerResult.CommunityTag tag) {
+        return tag != null && ("seraph".equals(tag.source) || "urchin".equals(tag.source));
+    }
+
+    private static String tagAbbreviation(StatsBridgePlayerResult.CommunityTag tag) {
+        String label = tag.label == null ? "" : tag.label;
+        if ("Blatant Cheating".equals(label) || "Blatant Cheater".equals(label)) return "[BC]";
+        if ("Closet Cheating".equals(label) || "Closet Cheater".equals(label)) return "[CC]";
+        if ("Confirmed Cheater".equals(label)) return "[CF]";
+        if ("Sniping".equals(label) || "Sniper".equals(label)) return "[S]";
+        if ("Possible Sniper".equals(label) || "Potential Sniper".equals(label)) return "[PS]";
+        if ("Legit Sniper".equals(label)) return "[LS]";
+        if ("Alt Account".equals(label) || "Account".equals(label)) return "[A]";
+        if ("Bot".equals(label)) return "[B]";
+        if ("Annoying".equals(label)) return "[AN]";
+        return "[CA]";
+    }
+
+    private static ChatNotice tagChatNotice(StatsBridgePlayerResult.CommunityTag tag, String formattedName) {
+        String code = tagAbbreviation(tag);
+        return new ChatNotice("§e" + code + " §8— " + formattedName, tag.tooltip, code);
+    }
+
+    private static List<String> textLines(List<ChatNotice> notices) {
+        if (notices == null || notices.isEmpty()) return Collections.emptyList();
+        List<String> lines = new ArrayList<String>();
+        for (ChatNotice notice : notices) lines.add(notice.text);
+        return Collections.unmodifiableList(lines);
     }
 
     private static boolean atLeast(Integer value, int threshold) {

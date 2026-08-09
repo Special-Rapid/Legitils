@@ -145,27 +145,36 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertNil(StatsProviderLookup.parseHypixelStats(hypixel, gameMode: nil)?.modeWinStreak)
 
         let urchin = Data("""
-        {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"cheating","reason":"not returned"},{"tag_type":"  ","reason":"ignored"}]}}
+        {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"blatantcheater","reason":"vape v4\\n- Added by @hexze 4 months ago"},{"tag_type":"  ","reason":"ignored"},{"tag_type":"unknown_provider_tag","reason":"discarded"}]}}
         """.utf8)
         XCTAssertEqual(StatsProviderLookup.parseUrchinTags(urchin), [
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": ["cheating"]
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": [
+                StatsProviderLookup.ProviderTag(label: "Blatant Cheater", tooltip: "vape v4\n- Added by @hexze 4 months ago")
+            ]
         ])
 
         let listBasedUrchin = Data("""
         {"players":[
-          {"uuid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","tags":[{"tag":"watchlist"}]},
-          {"id":"cccccccccccccccccccccccccccccccc","data":[{"type":"suspicious"}]}
+          {"uuid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","tags":[{"tag":"legitsniper","tooltip":"queued on stream"}]},
+          {"id":"cccccccccccccccccccccccccccccccc","data":[{"type":"caution"}]}
         ]}
         """.utf8)
         XCTAssertEqual(StatsProviderLookup.parseUrchinTags(listBasedUrchin), [
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": ["watchlist"],
-            "cccccccccccccccccccccccccccccccc": ["suspicious"]
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": [
+                StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: "queued on stream")
+            ],
+            "cccccccccccccccccccccccccccccccc": [
+                StatsProviderLookup.ProviderTag(label: "Caution", tooltip: nil)
+            ]
         ])
 
         let seraph = Data("""
-        {"player":{"blacklist":{"reason":"not returned"}}}
+        {"data":{"blacklist":{"report_type":"cheating_closet","tooltip":"vape v4 (legitscaff)\\n- Added by @hexze 4 months ago"},"bot":{"tagged":true,"tooltip":"automated account"}}}
         """.utf8)
-        XCTAssertEqual(StatsProviderLookup.parseSeraphTags(seraph), ["blacklist"])
+        XCTAssertEqual(StatsProviderLookup.parseSeraphTags(seraph), [
+            StatsProviderLookup.ProviderTag(label: "Bot", tooltip: "automated account"),
+            StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "vape v4 (legitscaff)\n- Added by @hexze 4 months ago")
+        ])
         XCTAssertEqual(StatsProviderLookup.parseSeraphTags(Data("{\"player\":{\"blacklist\":null}}".utf8)), [])
     }
 
@@ -221,8 +230,8 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(firstResponse?.players.first?.stars, 100)
         XCTAssertEqual(firstResponse?.players.first?.modeWinStreak, 9)
         XCTAssertEqual(firstResponse?.players.first?.communityTags, [
-            StatsBridgeCommunityTag(source: "seraph", label: "blacklist"),
-            StatsBridgeCommunityTag(source: "urchin", label: "watchlist")
+            StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "vape v4 (legitscaff)\n- Added by @hexze 4 months ago"),
+            StatsBridgeCommunityTag(source: "urchin", label: "Legit Sniper", tooltip: "queued on stream")
         ])
         XCTAssertEqual(transport.requestCount, 3)
 
@@ -426,7 +435,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.communityTags, [
             StatsBridgeCommunityTag(source: "diagnostic", label: "Hypixel: authorization failed"),
             StatsBridgeCommunityTag(source: "diagnostic", label: "Urchin: API key unavailable"),
-            StatsBridgeCommunityTag(source: "provider", label: "Seraph: no blacklist")
+            StatsBridgeCommunityTag(source: "provider", label: "Seraph: no active tags")
         ])
     }
 
@@ -455,10 +464,10 @@ final class CompanionConfigurationTests: XCTestCase {
 
         XCTAssertEqual(result?.players.first?.communityTags, [
             StatsBridgeCommunityTag(source: "provider", label: "Hypixel: OK"),
-            StatsBridgeCommunityTag(source: "provider", label: "Seraph: blacklist"),
-            StatsBridgeCommunityTag(source: "provider", label: "Urchin: watchlist"),
-            StatsBridgeCommunityTag(source: "seraph", label: "blacklist"),
-            StatsBridgeCommunityTag(source: "urchin", label: "watchlist")
+            StatsBridgeCommunityTag(source: "provider", label: "Seraph: Closet Cheating"),
+            StatsBridgeCommunityTag(source: "provider", label: "Urchin: Legit Sniper"),
+            StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "vape v4 (legitscaff)\n- Added by @hexze 4 months ago"),
+            StatsBridgeCommunityTag(source: "urchin", label: "Legit Sniper", tooltip: "queued on stream")
         ])
     }
 
@@ -552,11 +561,11 @@ private final class FakeStatsTransport: StatsHTTPTransport {
             """.utf8)
         case "api.urchin.gg":
             body = Data("""
-            {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"watchlist"}]}}
+            {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"legitsniper","tooltip":"queued on stream"}]}}
             """.utf8)
         case "developer-api.seraph.si":
             body = Data("""
-            {"player":{"blacklist":{"reason":"not returned"}}}
+            {"player":{"blacklist":{"report_type":"cheating_closet","tooltip":"vape v4 (legitscaff)\\n- Added by @hexze 4 months ago"}}}
             """.utf8)
         default:
             body = Data("{\"success\":true}".utf8)

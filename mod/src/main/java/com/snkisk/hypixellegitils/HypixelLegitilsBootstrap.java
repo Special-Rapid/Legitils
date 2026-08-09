@@ -37,6 +37,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
@@ -87,7 +88,7 @@ public final class HypixelLegitilsBootstrap {
         = new ConcurrentHashMap<String, AtomicInteger>();
     private static final AtomicLong PREGAME_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
-    private static final Queue<String> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<PendingStatsNotice> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<PendingStatsNotice>();
     private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<StatsBridgeLookupResult> PENDING_MANUAL_STATS_RESULTS
         = new ConcurrentLinkedQueue<StatsBridgeLookupResult>();
@@ -397,7 +398,7 @@ public final class HypixelLegitilsBootstrap {
      */
     public static void onPregameStatsChat(String serverPresentedName, BedwarsMode gameMode) {
         StatsSettings settings = statsSettings;
-        if (!STARTED.get() || !settings.enabled || !settings.chatEnabled || serverPresentedName == null) {
+        if (!STARTED.get() || !settings.enabled || serverPresentedName == null) {
             traceStats("pregame chat skipped started=" + STARTED.get() + " stats=" + settings.enabled
                 + " chat=" + settings.chatEnabled + " mode=" + gameMode);
             return;
@@ -454,18 +455,37 @@ public final class HypixelLegitilsBootstrap {
             latestStatsBridgeResult = result;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
-                for (String line : StatsPresentation.chatLines(result, teamFormattedNames)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
+                for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(result, teamFormattedNames)) {
+                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
+                }
             }
         }
     }
 
-    /** Pregame chatter results are chat-only, so they cannot replace the later complete match roster. */
+    /** Pregame chatter results merge only resolved chatters for display until the later complete match roster supersedes them. */
     private static void publishPregameStatsResult(long sessionGeneration, StatsBridgeLookupResult result) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
-            if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration) || !statsSettings.enabled || !statsSettings.chatEnabled) return;
+            if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration) || !statsSettings.enabled) return;
+            if (result.status == StatsBridgeLookupResult.Status.READY) {
+                latestStatsBridgeResult = mergePregameStatsResult(latestStatsBridgeResult, result);
+            }
             traceStats("pregame chat result published");
-            for (String line : StatsPresentation.pregameChatLines(result)) PENDING_STATS_NOTICES.add(ChatFormat.line(line));
+            if (statsSettings.chatEnabled) {
+                for (StatsPresentation.ChatNotice notice : StatsPresentation.pregameChatNotices(result)) {
+                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
+                }
+            }
         }
+    }
+
+    /** Retains each resolved pregame chatter for Tab/Nametag until the complete after-start roster supersedes it. */
+    private static StatsBridgeLookupResult mergePregameStatsResult(StatsBridgeLookupResult current, StatsBridgeLookupResult incoming) {
+        Map<String, StatsBridgePlayerResult> players = new LinkedHashMap<String, StatsBridgePlayerResult>();
+        if (current != null && current.status == StatsBridgeLookupResult.Status.READY) {
+            for (StatsBridgePlayerResult player : current.players) players.put(player.name.toLowerCase(Locale.ROOT), player);
+        }
+        for (StatsBridgePlayerResult player : incoming.players) players.put(player.name.toLowerCase(Locale.ROOT), player);
+        return StatsBridgeLookupResult.ready(new ArrayList<StatsBridgePlayerResult>(players.values()));
     }
 
     /** Retained only as normalized Bridge data for the forthcoming local display stage. */
@@ -502,12 +522,24 @@ public final class HypixelLegitilsBootstrap {
         return "";
     }
 
+    /** Provider tag codes are local display data and intentionally do not inherit the optional FKDR toggle. */
+    public static String statsNametagTagSuffix(String playerName, UUID playerId) {
+        StatsSettings settings = statsSettings;
+        if (!STARTED.get() || !settings.enabled || playerName == null || playerId == null || playerId.version() == 1) return "";
+        StatsBridgeLookupResult result = latestStatsBridgeResult;
+        if (result.status != StatsBridgeLookupResult.Status.READY) return "";
+        for (StatsBridgePlayerResult player : result.players) {
+            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.nametagTagSuffix(player);
+        }
+        return "";
+    }
+
     /** Returns all local-only markers for the renderer's actual player-nametag text. */
     public static String playerNametagSuffix(String playerName, UUID playerId) {
         String suffix = "";
         if (shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
         if (shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
-        return suffix + statsNametagSuffix(playerName, playerId);
+        return suffix + statsNametagTagSuffix(playerName, playerId) + statsNametagSuffix(playerName, playerId);
     }
 
     /**
@@ -545,11 +577,11 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
-    public static String[] drainPendingStatsNotices() {
-        List<String> notices = new ArrayList<String>();
-        String notice;
+    public static PendingStatsNotice[] drainPendingStatsNotices() {
+        List<PendingStatsNotice> notices = new ArrayList<PendingStatsNotice>();
+        PendingStatsNotice notice;
         while ((notice = PENDING_STATS_NOTICES.poll()) != null) notices.add(notice);
-        return notices.toArray(new String[notices.size()]);
+        return notices.toArray(new PendingStatsNotice[notices.size()]);
     }
 
     /** Emits settings changes that arrived from the Companion rather than a local Minecraft command. */
@@ -565,13 +597,15 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /** Emits completed explicit API-test results on the client thread. */
-    public static String[] drainPendingManualStatsResponses() {
-        List<String> responses = new ArrayList<String>();
+    public static PendingStatsNotice[] drainPendingManualStatsNotices() {
+        List<PendingStatsNotice> responses = new ArrayList<PendingStatsNotice>();
         StatsBridgeLookupResult result;
         while ((result = PENDING_MANUAL_STATS_RESULTS.poll()) != null) {
-            for (String line : StatsPresentation.manualLookupLines(result)) responses.add(ChatFormat.line(line));
+            for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(result)) {
+                responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
+            }
         }
-        return responses.toArray(new String[responses.size()]);
+        return responses.toArray(new PendingStatsNotice[responses.size()]);
     }
 
     /** A paused, skipped, or replaced client-world tick invalidates timing signals. */
@@ -716,6 +750,9 @@ public final class HypixelLegitilsBootstrap {
                 + " §8| §7Win Streak: " + state(settings.winStreakEnabled)),
             ChatFormat.continuation("§7Nametag FKDR: " + state(settings.nametagEnabled)
                 + " §8| §7threshold: §f" + decimal(settings.nametagFkdrThreshold)),
+            ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
+            ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
+            ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
             ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
         };
     }
@@ -956,6 +993,9 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Nametag FKDR: " + state(config.statsSettings.nametagEnabled)
             + " §8| §7threshold: §f" + decimal(config.statsSettings.nametagFkdrThreshold)
             + " §8| §7Nick [NICK]: " + nickState + " §8| §7Alert ⚠: " + state(config.markerSettings.enabled)));
+        lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
+        lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
+        lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));
         lines.add(ChatFormat.continuation("§7Stats Bridge: " + statsBridgeState()
             + " §8| §7Trace: " + state(statsTraceEnabled)));
         lines.add(ChatFormat.continuation("§7Providers: §fHypixel/Urchin §7Companion Keychain §8| §fSeraph §apublic"));
@@ -1080,6 +1120,19 @@ public final class HypixelLegitilsBootstrap {
             this.resolution = resolution;
             this.generation = generation;
             this.lookupKey = lookupKey;
+        }
+    }
+
+    /** Local-only Chat payload; tooltip text is already bounded and sanitised by the Companion and bridge parser. */
+    public static final class PendingStatsNotice {
+        public final String text;
+        public final String tooltip;
+        public final String tagCode;
+
+        private PendingStatsNotice(String text, String tooltip, String tagCode) {
+            this.text = text;
+            this.tooltip = tooltip;
+            this.tagCode = tagCode;
         }
     }
 
