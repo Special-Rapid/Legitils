@@ -24,11 +24,14 @@ public class LocalCommandTest {
         assertEquals(LocalCommand.Kind.HELP, help.kind);
         assertTrue(lines.length >= 6);
         assertTrue(lines[0].contains(ChatFormat.PREFIX));
-        assertTrue(lines[2].contains(".l status"));
+        assertTrue(contains(lines, ".l help"));
+        assertTrue(contains(lines, ".l status"));
         assertTrue(contains(lines, ".l stats status"));
         assertTrue(contains(lines, ".l stats on/off"));
         assertTrue(contains(lines, ".l stats <tab|chat|stars|fkdr|winstreak> on/off"));
-        assertTrue(contains(lines, ".l stats nametag on <FKDR>"));
+        assertTrue(contains(lines, ".l stats nametag on <0-1000 FKDR>"));
+        assertTrue(contains(lines, "Nick adds [NICK]"));
+        assertTrue(contains(lines, "accepted alerts add ⚠"));
         assertTrue(contains(lines, ".l stats <player>"));
         assertTrue(contains(lines, "anticheat on"));
         assertTrue(contains(lines, "anticheat off"));
@@ -37,7 +40,8 @@ public class LocalCommandTest {
         assertTrue(contains(lines, ".l partydetect on/off"));
         assertTrue(contains(lines, ".l dev on/off"));
         assertTrue(contains(lines, ".l notify"));
-        assertTrue(contains(lines, ".l blacklist add/remove"));
+        assertTrue(contains(lines, ".l blacklist|marker add/remove"));
+        assertTrue(contains(lines, "blacklist|marker status/list"));
         assertTrue(contains(lines, "through Mojang"));
         assertTrue(!contains(lines, "partydetect method"));
         assertTrue(!contains(lines, ".l dev log"));

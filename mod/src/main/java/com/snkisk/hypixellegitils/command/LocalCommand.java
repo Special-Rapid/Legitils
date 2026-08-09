@@ -15,11 +15,12 @@ public final class LocalCommand {
     private static final String[] HELP_LINES = new String[] {
         ChatFormat.line("§fCommands"),
         ChatFormat.continuation("§7Alias: §b.l <command>"),
+        ChatFormat.continuation("§b.l help §8— §fshow these local commands"),
         ChatFormat.continuation("§a.l status §8— §fshow all feature status"),
         ChatFormat.continuation("§b.l stats status §8— §fshow local Stats settings"),
         ChatFormat.continuation("§b.l stats on/off §8— §fenable or disable Stats"),
         ChatFormat.continuation("§b.l stats <tab|chat|stars|fkdr|winstreak> on/off"),
-        ChatFormat.continuation("§b.l stats nametag on <FKDR> §8— §fshow matching FKDR beside player names"),
+        ChatFormat.continuation("§b.l stats nametag on <0-1000 FKDR> §8— §fshow FKDR; Nick adds [NICK], accepted alerts add ⚠"),
         ChatFormat.continuation("§b.l stats nametag off §8— §fhide FKDR beside player names"),
         ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph"),
         ChatFormat.continuation("§d.l log on/off §8— §ftemporary local Stats trace"),
@@ -32,12 +33,12 @@ public final class LocalCommand {
         ChatFormat.continuation("§b.l partydetect on/off §8— §ftoggle Party Detector"),
         ChatFormat.continuation("§6.l dev on/off §8— §finclude yourself in anti-cheat checks"),
         ChatFormat.continuation("§d.l notify <chat|actionbar|sound> on/off §8— §falert delivery"),
-        ChatFormat.continuation("§e.l blacklist on/off §8— §fenable auto Blacklist"),
-        ChatFormat.continuation("§e.l blacklist threshold <2-10> §8— §fauto-add threshold"),
-        ChatFormat.continuation("§e.l blacklist clear all §8— §fclear stored entries"),
-        ChatFormat.continuation("§c.l blacklist add/remove <player> §8— §fmanual edit"),
+        ChatFormat.continuation("§e.l blacklist|marker on/off §8— §fenable auto Blacklist"),
+        ChatFormat.continuation("§e.l blacklist|marker threshold <2-10> §8— §fauto-add threshold"),
+        ChatFormat.continuation("§e.l blacklist|marker clear all §8— §fclear stored entries"),
+        ChatFormat.continuation("§c.l blacklist|marker add/remove <player> §8— §fmanual edit"),
         ChatFormat.continuation("§8If not visible, resolves the name through Mojang."),
-        ChatFormat.continuation("§e.l blacklist status/list [page] §8— §fshow entries")
+        ChatFormat.continuation("§e.l blacklist|marker status/list [page] §8— §fshow entries")
     };
 
     private LocalCommand() {

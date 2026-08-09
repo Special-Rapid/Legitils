@@ -950,7 +950,23 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Stats: " + state(config.statsSettings.enabled)
             + " §8| §7Tab " + state(config.statsSettings.tabEnabled)
             + " §8| §7Chat " + state(config.statsSettings.chatEnabled)));
+        lines.add(ChatFormat.continuation("§7Stats fields: §fStars " + state(config.statsSettings.starsEnabled)
+            + " §8| §fFKDR " + state(config.statsSettings.fkdrEnabled)
+            + " §8| §fWin Streak " + state(config.statsSettings.winStreakEnabled)));
+        lines.add(ChatFormat.continuation("§7Nametag FKDR: " + state(config.statsSettings.nametagEnabled)
+            + " §8| §7threshold: §f" + decimal(config.statsSettings.nametagFkdrThreshold)
+            + " §8| §7Nick [NICK]: " + nickState + " §8| §7Alert ⚠: " + state(config.markerSettings.enabled)));
+        lines.add(ChatFormat.continuation("§7Stats Bridge: " + statsBridgeState()
+            + " §8| §7Trace: " + state(statsTraceEnabled)));
+        lines.add(ChatFormat.continuation("§7Providers: §fHypixel/Urchin §7Companion Keychain §8| §fSeraph §apublic"));
         return lines.toArray(new String[lines.size()]);
+    }
+
+    private static String statsBridgeState() {
+        StatsBridgeLookupResult.Status status = latestStatsBridgeResult.status;
+        if (status == StatsBridgeLookupResult.Status.READY) return "§aready";
+        if (status == StatsBridgeLookupResult.Status.ALREADY_REQUESTED) return "§epending";
+        return "§cunavailable";
     }
 
     private static String[] clearLocalBlacklist(ObservationCoordinator active) {
