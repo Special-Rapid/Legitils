@@ -286,6 +286,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertTrue(installed.loaderURL.path.hasPrefix(runtimeDirectory.path))
         XCTAssertFalse(installed.jvmArgument.contains("/absolute/path"))
         XCTAssertEqual(installed.jvmArgument, "-javaagent:\(installed.loaderURL.path)=\(installed.configurationURL.path)")
+        XCTAssertEqual(installed.modFingerprint.count, 64)
 
         let configuration = try JSONSerialization.jsonObject(with: Data(contentsOf: installed.configurationURL)) as? [String: Any]
         XCTAssertEqual(configuration?["modJar"] as? String, installed.modURL.path)
@@ -330,6 +331,40 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(moved.count, 2)
         XCTAssertTrue(moved.allSatisfy { $0.lastPathComponent == "bake.zip" })
         XCTAssertTrue(try service.scan().isEmpty)
+    }
+
+    func testLunarBakeInvalidationRunsOnlyForANewModAndDefersWhileLunarRuns() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archive = root.appendingPathComponent("hash/bake.zip")
+        let fingerprint = root.appendingPathComponent("state/fingerprint.txt")
+        try FileManager.default.createDirectory(at: archive.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("first archive".utf8).write(to: archive)
+
+        var moved: [URL] = []
+        let cache = LunarBakeCacheService(cacheRoot: root) { url in
+            moved.append(url)
+            try FileManager.default.removeItem(at: url)
+        }
+        let invalidator = LunarBakeCacheInvalidator(fingerprintURL: fingerprint, cache: cache, lunarIsRunning: { false })
+        XCTAssertEqual(try invalidator.invalidateIfNeeded(for: "mod-one"), .movedToTrash(1))
+        XCTAssertEqual(moved.count, 1)
+        XCTAssertEqual(moved.first?.lastPathComponent, "bake.zip")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.path))
+        XCTAssertEqual(try String(contentsOf: fingerprint), "mod-one")
+
+        XCTAssertEqual(try invalidator.invalidateIfNeeded(for: "mod-empty"), .movedToTrash(0))
+        XCTAssertEqual(try String(contentsOf: fingerprint), "mod-empty")
+
+        try Data("new archive without MOD update".utf8).write(to: archive)
+        XCTAssertEqual(try invalidator.invalidateIfNeeded(for: "mod-empty"), .unchanged)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
+
+        let deferredFingerprint = root.appendingPathComponent("state/deferred.txt")
+        let deferred = LunarBakeCacheInvalidator(fingerprintURL: deferredFingerprint, cache: cache, lunarIsRunning: { true })
+        XCTAssertEqual(try deferred.invalidateIfNeeded(for: "mod-two"), .deferredWhileLunarRuns)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deferredFingerprint.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
     }
 
     func testHypixelStatsCachePersistsNormalizedValuesForTwentyFourHours() {

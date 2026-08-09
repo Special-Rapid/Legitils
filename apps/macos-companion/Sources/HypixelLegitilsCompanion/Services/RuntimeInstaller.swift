@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Installs the bundled Java artifacts outside the app bundle so a copied JVM argument remains valid after updates.
@@ -43,6 +44,7 @@ struct RuntimeInstaller {
         let loaderURL = runtimeDirectory.appendingPathComponent(Self.loaderFileName)
         let modURL = runtimeDirectory.appendingPathComponent(Self.modFileName)
         let configurationURL = runtimeDirectory.appendingPathComponent(Self.configurationFileName)
+        let modFingerprint = try fingerprint(of: bundledModURL)
 
         try replace(loaderURL, with: bundledLoaderURL)
         try replace(modURL, with: bundledModURL)
@@ -54,7 +56,7 @@ struct RuntimeInstaller {
         ]
         let data = try JSONSerialization.data(withJSONObject: configuration, options: [.sortedKeys])
         try data.write(to: configurationURL, options: .atomic)
-        return InstalledRuntime(loaderURL: loaderURL, modURL: modURL, configurationURL: configurationURL)
+        return InstalledRuntime(loaderURL: loaderURL, modURL: modURL, configurationURL: configurationURL, modFingerprint: modFingerprint)
     }
 
     private func isRegularFile(_ url: URL) -> Bool {
@@ -71,12 +73,19 @@ struct RuntimeInstaller {
             try fileManager.moveItem(at: temporary, to: destination)
         }
     }
+
+    private func fingerprint(of file: URL) throws -> String {
+        let digest = SHA256.hash(data: try Data(contentsOf: file))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 struct InstalledRuntime: Equatable {
     let loaderURL: URL
     let modURL: URL
     let configurationURL: URL
+    /// Content digest of the bundled MOD used to decide whether Lunar's bake cache is stale.
+    let modFingerprint: String
 
     var jvmArgument: String {
         "-javaagent:\(loaderURL.path)=\(configurationURL.path)"

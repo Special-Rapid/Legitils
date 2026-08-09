@@ -30,6 +30,8 @@ struct InstallView: View {
             }
             Text(store.runtimeInstallStatus)
                 .foregroundStyle(.secondary)
+            Text(store.bakeCacheInvalidationStatus)
+                .foregroundStyle(.secondary)
             Divider()
             GroupBox("Lunar bake cache") {
                 VStack(alignment: .leading, spacing: 10) {
@@ -50,7 +52,6 @@ struct InstallView: View {
             Spacer()
         }
         .task {
-            store.prepareRuntime()
             scanBakeArchives()
         }
         .alert("見つかった bake.zip をゴミ箱へ移動しますか？", isPresented: $showsTrashConfirmation) {

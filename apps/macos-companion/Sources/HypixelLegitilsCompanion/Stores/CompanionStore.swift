@@ -8,6 +8,7 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var runtimeStatus: RuntimeStatus?
     @Published private(set) var installedRuntime: InstalledRuntime?
     @Published private(set) var runtimeInstallStatus = "JVM runtime を準備していません。"
+    @Published private(set) var bakeCacheInvalidationStatus = "MOD更新後にLunar bake cacheを自動確認します。"
     @Published private(set) var statusMessage = "Legitils の状態を確認しています。"
     @Published private(set) var statsStatusMessage = "APIキーはこのMacのKeychainだけに保存します。"
     @Published private(set) var statsBridgeStatus = "Stats Bridge: 停止中"
@@ -20,6 +21,7 @@ final class CompanionStore: ObservableObject {
     private let statsProviderLookup: StatsProviderLookup
     private let statsBridgeServer: StatsBridgeServer
     private let runtimeInstaller: RuntimeInstaller
+    private let lunarBakeCacheInvalidator: LunarBakeCacheInvalidator
 
     init() {
         let keychainStore = KeychainStore()
@@ -29,6 +31,7 @@ final class CompanionStore: ObservableObject {
         self.statsProviderLookup = lookup
         self.statsBridgeServer = StatsBridgeServer(lookup: lookup.lookup)
         self.runtimeInstaller = RuntimeInstaller()
+        self.lunarBakeCacheInvalidator = LunarBakeCacheInvalidator()
     }
 
     func refresh() {
@@ -53,9 +56,18 @@ final class CompanionStore: ObservableObject {
         do {
             installedRuntime = try runtimeInstaller.prepare()
             runtimeInstallStatus = "最新のLoaderとMODをローカルruntimeへ配置しました。"
+            switch try lunarBakeCacheInvalidator.invalidateIfNeeded(for: installedRuntime!.modFingerprint) {
+            case .unchanged:
+                bakeCacheInvalidationStatus = "bake.zip: MOD更新なし（自動削除なし）"
+            case .deferredWhileLunarRuns:
+                bakeCacheInvalidationStatus = "bake.zip: Lunar実行中のため、終了後の次回更新で自動削除します。"
+            case .movedToTrash(let count):
+                bakeCacheInvalidationStatus = "bake.zip: MOD更新を検出し、\(count) 件をゴミ箱へ移動しました。"
+            }
         } catch {
             installedRuntime = nil
             runtimeInstallStatus = "JVM runtime を準備できませんでした: \(error.localizedDescription)"
+            bakeCacheInvalidationStatus = "bake.zip: 自動確認できませんでした: \(error.localizedDescription)"
         }
     }
 
