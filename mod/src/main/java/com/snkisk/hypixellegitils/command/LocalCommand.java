@@ -21,6 +21,7 @@ public final class LocalCommand {
         ChatFormat.continuation("§b.l stats on/off §8— §fenable or disable Stats"),
         ChatFormat.continuation("§b.l stats <tab|chat|stars|fkdr|winstreak> on/off"),
         ChatFormat.continuation("§b.l stats <teamsort|playersort> on/off §8— §foptional local Tab order"),
+        ChatFormat.continuation("§b.l stats autowho on/off §8— §frefresh Stats after game start"),
         ChatFormat.continuation("§b.l stats nametag on <0-1000 FKDR> §8— §fshow FKDR; provider tags add [BC]/[CC]/[LS]; Nick adds [NICK], accepted alerts add ⚠"),
         ChatFormat.continuation("§7Tag codes: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA]"),
         ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
@@ -249,7 +250,8 @@ public final class LocalCommand {
         WIN_STREAK("Win Streak"),
         NAMETAG("Nametag FKDR"),
         TAB_TEAM_SORT("Tab team sort"),
-        TAB_PLAYER_SORT("Tab player sort");
+        TAB_PLAYER_SORT("Tab player sort"),
+        AUTO_WHO("Auto /who");
 
         private final String displayName;
 
@@ -270,6 +272,7 @@ public final class LocalCommand {
             if ("nametag".equals(value)) return NAMETAG;
             if ("teamsort".equals(value) || "team-sort".equals(value)) return TAB_TEAM_SORT;
             if ("playersort".equals(value) || "player-sort".equals(value)) return TAB_PLAYER_SORT;
+            if ("autowho".equals(value) || "auto-who".equals(value)) return AUTO_WHO;
             return null;
         }
     }

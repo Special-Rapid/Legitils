@@ -1,7 +1,7 @@
 import Foundation
 
 struct CompanionConfiguration: Codable, Equatable {
-    static let schemaVersion = 7
+    static let schemaVersion = 8
 
     var schemaVersion: Int
     var revision: Int64
@@ -79,7 +79,8 @@ struct CompanionConfiguration: Codable, Equatable {
         nametag: false,
         nametagFkdrThreshold: 1,
         tabTeamSorting: false,
-        tabPlayerSorting: false
+        tabPlayerSorting: false,
+        autoWho: true
     )
 
     /// Reads schemas before the optional nametag setting without losing existing configuration.
@@ -87,7 +88,7 @@ struct CompanionConfiguration: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let storedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        guard storedSchemaVersion == 4 || storedSchemaVersion == 5 || storedSchemaVersion == 6 || storedSchemaVersion == Self.schemaVersion else {
+        guard storedSchemaVersion == 4 || storedSchemaVersion == 5 || storedSchemaVersion == 6 || storedSchemaVersion == 7 || storedSchemaVersion == Self.schemaVersion else {
             throw ConfigurationStoreError.unsupportedSchema(storedSchemaVersion)
         }
 
@@ -171,6 +172,7 @@ struct CompanionConfiguration: Codable, Equatable {
         var nametagFkdrThreshold: Double
         var tabTeamSorting: Bool
         var tabPlayerSorting: Bool
+        var autoWho: Bool
 
         private enum CodingKeys: String, CodingKey {
             case enabled
@@ -183,9 +185,10 @@ struct CompanionConfiguration: Codable, Equatable {
             case nametagFkdrThreshold
             case tabTeamSorting
             case tabPlayerSorting
+            case autoWho
         }
 
-        init(enabled: Bool, tab: Bool, stars: Bool, fkdr: Bool, winStreak: Bool, chat: Bool, nametag: Bool, nametagFkdrThreshold: Double, tabTeamSorting: Bool, tabPlayerSorting: Bool) {
+        init(enabled: Bool, tab: Bool, stars: Bool, fkdr: Bool, winStreak: Bool, chat: Bool, nametag: Bool, nametagFkdrThreshold: Double, tabTeamSorting: Bool, tabPlayerSorting: Bool, autoWho: Bool) {
             self.enabled = enabled
             self.tab = tab
             self.stars = stars
@@ -196,6 +199,7 @@ struct CompanionConfiguration: Codable, Equatable {
             self.nametagFkdrThreshold = nametagFkdrThreshold
             self.tabTeamSorting = tabTeamSorting
             self.tabPlayerSorting = tabPlayerSorting
+            self.autoWho = autoWho
         }
 
         init(from decoder: Decoder) throws {
@@ -210,6 +214,7 @@ struct CompanionConfiguration: Codable, Equatable {
             nametagFkdrThreshold = try container.decodeIfPresent(Double.self, forKey: .nametagFkdrThreshold) ?? 1
             tabTeamSorting = try container.decodeIfPresent(Bool.self, forKey: .tabTeamSorting) ?? false
             tabPlayerSorting = try container.decodeIfPresent(Bool.self, forKey: .tabPlayerSorting) ?? false
+            autoWho = try container.decodeIfPresent(Bool.self, forKey: .autoWho) ?? true
         }
     }
 }

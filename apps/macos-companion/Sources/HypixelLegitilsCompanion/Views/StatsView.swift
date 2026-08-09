@@ -26,6 +26,7 @@ struct StatsView: View {
                     Toggle("FKDR", isOn: store.statsBinding(\.fkdr))
                     Toggle("Win Streak", isOn: store.statsBinding(\.winStreak))
                     Toggle("Target Player とタグをchat表示", isOn: store.statsBinding(\.chat))
+                    Toggle("試合開始後に自動 /who でStatsを更新", isOn: store.statsBinding(\.autoWho))
                     Toggle("Tabのチームを合計FKDR順に並べ替え", isOn: store.statsBinding(\.tabTeamSorting))
                     Toggle("Tabのチーム内をNick/FKDR順に並べ替え", isOn: store.statsBinding(\.tabPlayerSorting))
                     Button("表示設定を保存") { store.saveSettings() }

@@ -12,9 +12,10 @@ public final class StatsSettings {
     public final double nametagFkdrThreshold;
     public final boolean tabTeamSortingEnabled;
     public final boolean tabPlayerSortingEnabled;
+    public final boolean autoWhoEnabled;
 
     public StatsSettings(boolean enabled, boolean tabEnabled, boolean starsEnabled, boolean fkdrEnabled, boolean winStreakEnabled, boolean chatEnabled) {
-        this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled, false, 1D, false, false);
+        this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled, false, 1D, false, false, true);
     }
 
     public StatsSettings(
@@ -22,12 +23,21 @@ public final class StatsSettings {
         boolean nametagEnabled, double nametagFkdrThreshold
     ) {
         this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled,
-            nametagEnabled, nametagFkdrThreshold, false, false);
+            nametagEnabled, nametagFkdrThreshold, false, false, true);
     }
 
     public StatsSettings(
         boolean enabled, boolean tabEnabled, boolean starsEnabled, boolean fkdrEnabled, boolean winStreakEnabled, boolean chatEnabled,
         boolean nametagEnabled, double nametagFkdrThreshold, boolean tabTeamSortingEnabled, boolean tabPlayerSortingEnabled
+    ) {
+        this(enabled, tabEnabled, starsEnabled, fkdrEnabled, winStreakEnabled, chatEnabled,
+            nametagEnabled, nametagFkdrThreshold, tabTeamSortingEnabled, tabPlayerSortingEnabled, true);
+    }
+
+    public StatsSettings(
+        boolean enabled, boolean tabEnabled, boolean starsEnabled, boolean fkdrEnabled, boolean winStreakEnabled, boolean chatEnabled,
+        boolean nametagEnabled, double nametagFkdrThreshold, boolean tabTeamSortingEnabled, boolean tabPlayerSortingEnabled,
+        boolean autoWhoEnabled
     ) {
         if (Double.isNaN(nametagFkdrThreshold) || Double.isInfinite(nametagFkdrThreshold)
             || nametagFkdrThreshold < 0D || nametagFkdrThreshold > 1000D) {
@@ -43,9 +53,10 @@ public final class StatsSettings {
         this.nametagFkdrThreshold = nametagFkdrThreshold;
         this.tabTeamSortingEnabled = tabTeamSortingEnabled;
         this.tabPlayerSortingEnabled = tabPlayerSortingEnabled;
+        this.autoWhoEnabled = autoWhoEnabled;
     }
 
     public static StatsSettings defaults() {
-        return new StatsSettings(true, true, true, true, true, true, false, 1D, false, false);
+        return new StatsSettings(true, true, true, true, true, true, false, 1D, false, false, true);
     }
 }

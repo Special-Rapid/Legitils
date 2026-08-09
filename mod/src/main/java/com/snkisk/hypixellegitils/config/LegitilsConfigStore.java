@@ -122,6 +122,7 @@ public final class LegitilsConfigStore {
             && schemaVersion != LegitilsConfig.PARTY_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.STATS_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION
+            && schemaVersion != LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION
             && schemaVersion != LegitilsConfig.SCHEMA_VERSION) {
             throw new IllegalArgumentException("unsupported schemaVersion");
         }
@@ -215,8 +216,10 @@ public final class LegitilsConfigStore {
                 requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat");
             } else if (schemaVersion == LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION) {
                 requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat", "nametag", "nametagFkdrThreshold");
-            } else {
+            } else if (schemaVersion == LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION) {
                 requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat", "nametag", "nametagFkdrThreshold", "tabTeamSorting", "tabPlayerSorting");
+            } else {
+                requireOnlyKeys(rawStats, "enabled", "tab", "stars", "fkdr", "winStreak", "chat", "nametag", "nametagFkdrThreshold", "tabTeamSorting", "tabPlayerSorting", "autoWho");
             }
             stats = new StatsSettings(booleanValue(rawStats.get("enabled"), "stats.enabled"),
                 booleanValue(rawStats.get("tab"), "stats.tab"), booleanValue(rawStats.get("stars"), "stats.stars"),
@@ -225,7 +228,8 @@ public final class LegitilsConfigStore {
                 schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION && booleanValue(rawStats.get("nametag"), "stats.nametag"),
                 schemaVersion >= LegitilsConfig.STATS_NAMETAG_SCHEMA_VERSION ? doubleValue(rawStats.get("nametagFkdrThreshold"), "stats.nametagFkdrThreshold") : 1D,
                 schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION && booleanValue(rawStats.get("tabTeamSorting"), "stats.tabTeamSorting"),
-                schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION && booleanValue(rawStats.get("tabPlayerSorting"), "stats.tabPlayerSorting"));
+                schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION && booleanValue(rawStats.get("tabPlayerSorting"), "stats.tabPlayerSorting"),
+                schemaVersion < LegitilsConfig.STATS_AUTO_WHO_SCHEMA_VERSION || booleanValue(rawStats.get("autoWho"), "stats.autoWho"));
         }
 
         return new LegitilsConfig(
@@ -294,6 +298,9 @@ public final class LegitilsConfigStore {
             if (config.schemaVersion >= LegitilsConfig.STATS_TAB_SORT_SCHEMA_VERSION) {
                 stats.put("tabTeamSorting", Boolean.valueOf(config.statsSettings.tabTeamSortingEnabled));
                 stats.put("tabPlayerSorting", Boolean.valueOf(config.statsSettings.tabPlayerSortingEnabled));
+            }
+            if (config.schemaVersion >= LegitilsConfig.STATS_AUTO_WHO_SCHEMA_VERSION) {
+                stats.put("autoWho", Boolean.valueOf(config.statsSettings.autoWhoEnabled));
             }
             root.put("stats", stats);
         }

@@ -392,7 +392,7 @@ public final class HypixelLegitilsBootstrap {
     /** Post-start uses this opaque ID for the one automatic `/who` refresh, replacing the old parallel roster request. */
     public static String automaticWhoStatsRefreshMatchId(String postStartMatchId) {
         if (postStartMatchId == null || postStartMatchId.trim().isEmpty()
-            || !STARTED.get() || !statsSettings.enabled || statsBridgeClient == null) return null;
+            || !STARTED.get() || !statsSettings.enabled || !statsSettings.autoWhoEnabled || statsBridgeClient == null) return null;
         return PENDING_WHO_STATS_REFRESHES.nextAutomaticMatchId(STATS_BRIDGE_SESSION.currentGeneration());
     }
 
@@ -811,6 +811,7 @@ public final class HypixelLegitilsBootstrap {
         double nametagThreshold = current.nametagFkdrThreshold;
         boolean teamSort = current.tabTeamSortingEnabled;
         boolean playerSort = current.tabPlayerSortingEnabled;
+        boolean autoWho = current.autoWhoEnabled;
         if (option == LocalCommand.StatsOption.ENABLED) stats = enabled;
         else if (option == LocalCommand.StatsOption.TAB) tab = enabled;
         else if (option == LocalCommand.StatsOption.CHAT) chat = enabled;
@@ -822,7 +823,8 @@ public final class HypixelLegitilsBootstrap {
             if (enabled) nametagThreshold = nametagFkdrThreshold;
         } else if (option == LocalCommand.StatsOption.TAB_TEAM_SORT) teamSort = enabled;
         else if (option == LocalCommand.StatsOption.TAB_PLAYER_SORT) playerSort = enabled;
-        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat, nametag, nametagThreshold, teamSort, playerSort);
+        else if (option == LocalCommand.StatsOption.AUTO_WHO) autoWho = enabled;
+        return new StatsSettings(stats, tab, stars, fkdr, winStreak, chat, nametag, nametagThreshold, teamSort, playerSort, autoWho);
     }
 
     private static String[] statsStatusLines(StatsSettings settings) {
@@ -840,7 +842,7 @@ public final class HypixelLegitilsBootstrap {
             ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
             ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
             ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
-            ChatFormat.continuation("§7/who: §fserver command + fresh local Stats refresh §8| §7post-start: §fone automatic /who"),
+            ChatFormat.continuation("§7/who: §fserver command + fresh local Stats refresh §8| §7post-start auto /who: " + state(settings.autoWhoEnabled)),
             ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
         };
     }
@@ -1087,7 +1089,7 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
         lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
         lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));
-        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who sends normally and refreshes once §8| §7post-start auto /who: §aone request"));
+        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who sends normally and refreshes once §8| §7post-start auto /who: " + state(config.statsSettings.autoWhoEnabled)));
         lines.add(ChatFormat.continuation("§7Stats Bridge: " + statsBridgeState()
             + " §8| §7Trace: " + state(statsTraceEnabled)));
         lines.add(ChatFormat.continuation("§7Providers: §fHypixel/Urchin §7Companion Keychain §8| §fSeraph §apublic"));

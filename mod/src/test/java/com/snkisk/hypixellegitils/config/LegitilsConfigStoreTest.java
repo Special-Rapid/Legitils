@@ -200,4 +200,28 @@ public class LegitilsConfigStoreTest {
             Files.deleteIfExists(directory);
         }
     }
+
+    @Test
+    public void schemaSevenStatsConfigurationKeepsAutomaticWhoEnabledAndPersistsItsToggle() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-schema-seven-auto-who-test");
+        Path path = directory.resolve("config.json");
+        try {
+            String json = "{\"schemaVersion\":7,\"revision\":4,\"enabledDetectors\":[],\"sensitivity\":\"balanced\",\"notifications\":{\"chat\":true,\"overlay\":false,\"sound\":false},\"cooldowns\":{\"normalMillis\":1000,\"airStallMillis\":30000},\"debug\":false,\"markers\":{\"enabled\":true,\"threshold\":2},\"nickDetection\":{\"enabled\":true},\"partyDetection\":{\"enabled\":true},\"stats\":{\"enabled\":true,\"tab\":true,\"stars\":true,\"fkdr\":true,\"winStreak\":true,\"chat\":true,\"nametag\":false,\"nametagFkdrThreshold\":1,\"tabTeamSorting\":false,\"tabPlayerSorting\":false}}";
+            Files.write(path, json.getBytes("UTF-8"));
+            LegitilsConfigStore store = new LegitilsConfigStore();
+            ConfigLoadResult loaded = store.load(path);
+            assertFalse(loaded.usedDefaults);
+            assertTrue(loaded.config.statsSettings.autoWhoEnabled);
+
+            DetectorSettingsService service = new DetectorSettingsService(store, path, loaded.config);
+            DetectorSettingsService.Update update = service.setStatsSettings(
+                new StatsSettings(true, true, true, true, true, true, false, 1D, false, false, false)
+            );
+            assertEquals(LegitilsConfig.SCHEMA_VERSION, update.config.schemaVersion);
+            assertFalse(store.load(path).config.statsSettings.autoWhoEnabled);
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
+        }
+    }
 }

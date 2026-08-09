@@ -30,6 +30,7 @@ public class LocalCommandTest {
         assertTrue(contains(lines, ".l stats on/off"));
         assertTrue(contains(lines, ".l stats <tab|chat|stars|fkdr|winstreak> on/off"));
         assertTrue(contains(lines, ".l stats <teamsort|playersort> on/off"));
+        assertTrue(contains(lines, ".l stats autowho on/off"));
         assertTrue(contains(lines, ".l stats nametag on <0-1000 FKDR>"));
         assertTrue(contains(lines, "provider tags add [BC]/[CC]/[LS]"));
         assertTrue(contains(lines, "[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA]"));
@@ -99,6 +100,7 @@ public class LocalCommandTest {
         assertTrue(statsTab.enabled);
         assertEquals(LocalCommand.StatsOption.TAB_TEAM_SORT, LocalCommand.requestForUserInput(".l stats teamsort on", true).statsOption);
         assertEquals(LocalCommand.StatsOption.TAB_PLAYER_SORT, LocalCommand.requestForUserInput(".l stats player-sort off", true).statsOption);
+        assertEquals(LocalCommand.StatsOption.AUTO_WHO, LocalCommand.requestForUserInput(".l stats auto-who off", true).statsOption);
         assertEquals(LocalCommand.StatsOption.WIN_STREAK, LocalCommand.requestForUserInput(".l stats ws on", true).statsOption);
         LocalCommand.Request nametagOn = LocalCommand.requestForUserInput(".l stats nametag on 3.5", true);
         assertEquals(LocalCommand.StatsOption.NAMETAG, nametagOn.statsOption);

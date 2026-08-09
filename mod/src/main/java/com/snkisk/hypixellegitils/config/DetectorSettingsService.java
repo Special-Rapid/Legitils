@@ -182,7 +182,8 @@ public final class DetectorSettingsService {
             && left.nametagEnabled == right.nametagEnabled
             && Double.compare(left.nametagFkdrThreshold, right.nametagFkdrThreshold) == 0
             && left.tabTeamSortingEnabled == right.tabTeamSortingEnabled
-            && left.tabPlayerSortingEnabled == right.tabPlayerSortingEnabled;
+            && left.tabPlayerSortingEnabled == right.tabPlayerSortingEnabled
+            && left.autoWhoEnabled == right.autoWhoEnabled;
     }
 
     private NotificationSettings notificationSettingsWith(NotificationChannel channel, boolean enabled) {

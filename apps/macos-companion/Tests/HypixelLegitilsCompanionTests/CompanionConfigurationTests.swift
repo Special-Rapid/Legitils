@@ -36,6 +36,13 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertFalse(configuration.stats.tabPlayerSorting)
     }
 
+    func testSchemaSevenConfigurationKeepsAutomaticWhoEnabled() throws {
+        let configuration = try JSONDecoder().decode(CompanionConfiguration.self, from: schemaSevenFixture)
+
+        XCTAssertEqual(configuration.schemaVersion, CompanionConfiguration.schemaVersion)
+        XCTAssertTrue(configuration.stats.autoWho)
+    }
+
     func testSchemaFourConfigurationWritesCurrentSchemaAfterSaving() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("config.json")
@@ -591,6 +598,22 @@ private let schemaSixFixture = Data("""
   "nickDetection": {"enabled": true},
   "partyDetection": {"enabled": true},
   "stats": {"enabled": true, "tab": true, "stars": true, "fkdr": true, "winStreak": true, "chat": true, "nametag": false, "nametagFkdrThreshold": 1}
+}
+""".utf8)
+
+private let schemaSevenFixture = Data("""
+{
+  "schemaVersion": 7,
+  "revision": 16,
+  "enabledDetectors": [],
+  "sensitivity": "balanced",
+  "notifications": {"chat": true, "overlay": false, "sound": false},
+  "cooldowns": {"normalMillis": 1000, "airStallMillis": 30000},
+  "debug": false,
+  "markers": {"enabled": true, "threshold": 2},
+  "nickDetection": {"enabled": true},
+  "partyDetection": {"enabled": true},
+  "stats": {"enabled": true, "tab": true, "stars": true, "fkdr": true, "winStreak": true, "chat": true, "nametag": false, "nametagFkdrThreshold": 1, "tabTeamSorting": false, "tabPlayerSorting": false}
 }
 """.utf8)
 
