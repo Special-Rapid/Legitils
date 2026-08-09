@@ -26,6 +26,7 @@ import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import com.snkisk.hypixellegitils.stats.StatsBridgeClient;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
+import com.snkisk.hypixellegitils.stats.BedwarsModeTracker;
 import com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
@@ -76,6 +77,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile StatsBridgeLookupResult latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
     private static volatile boolean statsTraceEnabled;
     private static final StatsMatchRequestGate STATS_MATCH_REQUEST_GATE = new StatsMatchRequestGate();
+    private static final BedwarsModeTracker BEDWARS_MODE_TRACKER = new BedwarsModeTracker();
     private static final StatsBridgeSession STATS_BRIDGE_SESSION = new StatsBridgeSession();
     private static final Object STATS_BRIDGE_RESULT_LOCK = new Object();
     private static final MojangProfileResolver PROFILE_RESOLVER = new MojangProfileResolver();
@@ -478,6 +480,16 @@ public final class HypixelLegitilsBootstrap {
         });
     }
 
+    /** Records an unambiguous current-world sidebar mode; UNKNOWN never replaces a known value. */
+    public static void onVisibleBedwarsMode(BedwarsMode visibleMode) {
+        BEDWARS_MODE_TRACKER.observe(visibleMode);
+    }
+
+    /** Uses only the current sidebar mode or a value visibly confirmed earlier in this same world. */
+    public static BedwarsMode statsModeFor(BedwarsMode visibleMode) {
+        return BEDWARS_MODE_TRACKER.resolve(visibleMode);
+    }
+
     private static void publishStatsBridgeResult(
         long sessionGeneration,
         StatsBridgeLookupResult result,
@@ -686,6 +698,13 @@ public final class HypixelLegitilsBootstrap {
 
     /** Handles local commands; a missing local UUID is resolved asynchronously through Mojang after explicit user input. */
     public static String[] localCommandResponses(String input, boolean addToChat, Map<String, UUID> visiblePlayers) {
+        return localCommandResponses(input, addToChat, visiblePlayers, statsModeFor(BedwarsMode.UNKNOWN));
+    }
+
+    /** Handles local commands with the currently visible Bed Wars mode when the client can prove it. */
+    public static String[] localCommandResponses(
+        String input, boolean addToChat, Map<String, UUID> visiblePlayers, BedwarsMode visibleMode
+    ) {
         ObservationCoordinator active = coordinator;
         LocalCommand.Request request = LocalCommand.requestForUserInput(input, addToChat);
         if (request == null) return null;
@@ -696,7 +715,7 @@ public final class HypixelLegitilsBootstrap {
         if (request.kind == LocalCommand.Kind.STATS_SET) return updateStatsSetting(request);
         if (request.kind == LocalCommand.Kind.STATS_TRACE_SET_ENABLED) return updateStatsTrace(request.enabled);
         if (request.kind == LocalCommand.Kind.STATS_LOOKUP) {
-            requestManualStatsLookup(request.playerName, visiblePlayers);
+            requestManualStatsLookup(request.playerName, visiblePlayers, visibleMode);
             return new String[] { ChatFormat.line("§bStats lookup started for §f" + request.playerName + "§b.") };
         }
         if (request.kind == LocalCommand.Kind.ANTICHEAT_LIST) return detectorListLines(active.statusText(), detectorSettings.savedConfig());
@@ -720,7 +739,7 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /** Explicit user lookup; it works even when automatic Stats presentation is disabled. */
-    private static void requestManualStatsLookup(String playerName, Map<String, UUID> visiblePlayers) {
+    private static void requestManualStatsLookup(String playerName, Map<String, UUID> visiblePlayers, BedwarsMode visibleMode) {
         if (playerName == null) return;
         StatsBridgeRosterMember requested = new StatsBridgeRosterMember(playerName, null);
         if (!requested.isValid()) return;
@@ -734,11 +753,12 @@ public final class HypixelLegitilsBootstrap {
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
         final String requestId = "manual_" + sessionGeneration + "_" + MANUAL_STATS_LOOKUP_SEQUENCE.incrementAndGet();
         final List<StatsBridgeRosterMember> players = Collections.singletonList(requested);
+        final BedwarsMode gameMode = statsModeFor(visibleMode);
         STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
             @Override
             public void run() {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
-                StatsBridgeLookupResult result = client.requestOnce(requestId, BedwarsMode.FOURS, players, System.currentTimeMillis());
+                StatsBridgeLookupResult result = client.requestOnce(requestId, gameMode, players, System.currentTimeMillis());
                 if (STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) PENDING_MANUAL_STATS_RESULTS.add(result);
             }
         });
@@ -1394,6 +1414,7 @@ public final class HypixelLegitilsBootstrap {
         PENDING_MANUAL_STATS_RESULTS.clear();
         PREGAME_STATS_CHATTERS.clear();
         PREGAME_STATS_LOOKUP_ATTEMPTS.clear();
+        BEDWARS_MODE_TRACKER.reset();
         PENDING_WHO_STATS_REFRESHES.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();

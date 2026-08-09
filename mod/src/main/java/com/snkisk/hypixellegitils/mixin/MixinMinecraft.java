@@ -99,6 +99,7 @@ public abstract class MixinMinecraft {
 
     @Inject(method = "runTick", at = @At("RETURN"))
     private void hypixelLegitils$afterClientTick(CallbackInfo callbackInfo) {
+        HypixelLegitilsBootstrap.onVisibleBedwarsMode(BedwarsPreGameState.mode(theWorld));
         boolean bedwarsPreGame = BedwarsPreGameState.isActive(theWorld);
         HypixelLegitilsBootstrap.onPartyDetectorTick(BedwarsPreGameState.playerCount(theWorld));
         HypixelLegitilsBootstrap.onBedwarsPregameState(bedwarsPreGame, hypixelLegitils$frameNowMillis);
@@ -232,7 +233,7 @@ public abstract class MixinMinecraft {
             HypixelLegitilsBootstrap.traceStats("roster due skipped no net handler");
             return;
         }
-        BedwarsMode gameMode = BedwarsPreGameState.mode(theWorld);
+        BedwarsMode gameMode = HypixelLegitilsBootstrap.statsModeFor(BedwarsPreGameState.mode(theWorld));
         String requestedWhoRefresh = HypixelLegitilsBootstrap.consumePendingWhoStatsRefresh();
         if (requestedWhoRefresh != null) {
             hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, requestedWhoRefresh, "who refresh");

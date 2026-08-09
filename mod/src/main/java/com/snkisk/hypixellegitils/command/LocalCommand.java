@@ -26,7 +26,7 @@ public final class LocalCommand {
         ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
         ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
         ChatFormat.continuation("§b.l stats nametag off §8— §fhide FKDR beside player names; provider tag codes stay visible"),
-        ChatFormat.continuation("§b.l stats <player> §8— §ftest Hypixel, Urchin, and Seraph"),
+        ChatFormat.continuation("§b.l stats <player> §8— §ftest providers; show current-mode WS when visible"),
         ChatFormat.continuation("§b/who §8— §fserver command + fresh local Stats refresh; one automatic /who runs after game start"),
         ChatFormat.continuation("§d.l log on/off §8— §ftemporary local Stats trace"),
         ChatFormat.continuation("§e.l anticheat list §8— §fshow detector settings"),

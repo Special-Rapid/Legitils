@@ -2,6 +2,8 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
+import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
+import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
@@ -26,14 +28,19 @@ public abstract class MixinGuiChat {
         )
     )
     private void hypixelLegitils$handleManualSubmit(GuiChat chat, String message) {
-        String[] responses = HypixelLegitilsBootstrap.localCommandResponses(message, true, hypixelLegitils$visiblePlayers());
+        Minecraft minecraft = Minecraft.getMinecraft();
+        BedwarsMode visibleMode = HypixelLegitilsBootstrap.statsModeFor(
+            minecraft == null ? BedwarsMode.UNKNOWN : BedwarsPreGameState.mode(minecraft.theWorld)
+        );
+        String[] responses = HypixelLegitilsBootstrap.localCommandResponses(
+            message, true, hypixelLegitils$visiblePlayers(), visibleMode
+        );
         if (responses == null) {
             WhoStatsRefresh.Submission submission = WhoStatsRefresh.submissionFor(message);
             if (submission.shouldRefresh) HypixelLegitilsBootstrap.onWhoCommandSubmitted(submission.outboundMessage);
             chat.sendChatMessage(submission.outboundMessage);
             return;
         }
-        Minecraft minecraft = Minecraft.getMinecraft();
         if (minecraft != null && minecraft.thePlayer != null) {
             for (String response : responses) {
                 if (response != null && !response.isEmpty()) {

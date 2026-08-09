@@ -92,7 +92,8 @@ public final class FlagMessage {
     }
 
     private static boolean isBedWarsTeamInitial(char value) {
-        return value == 'R' || value == 'G' || value == 'B' || value == 'Y' || value == 'W';
+        return value == 'R' || value == 'B' || value == 'G' || value == 'Y'
+            || value == 'A' || value == 'W' || value == 'P' || value == 'S';
     }
 
     private static String detectorText(DetectorId detector) {
