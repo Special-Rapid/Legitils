@@ -48,7 +48,8 @@ public class MixinGuiPlayerTabOverlay {
         java.util.UUID playerId = info.getGameProfile().getId();
         String renderedName = callbackInfo.getReturnValue();
         FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-        int renderedPixelWidth = font == null ? 0 : font.getStringWidth(renderedName);
+        int plainRenderedPixelWidth = font == null ? 0 : font.getStringWidth(renderedName);
+        int renderedPixelWidth = LunarTabIconWidth.measuredWidth(this, playerId, font, renderedName, plainRenderedPixelWidth);
         int spacePixelWidth = font == null ? 4 : font.getStringWidth(" ");
         int boldSpacePixelWidth = font == null ? 5 : font.getStringWidth("§l ");
         String starText = HypixelLegitilsBootstrap.statsTabStar(info.getGameProfile().getName(), playerId);
