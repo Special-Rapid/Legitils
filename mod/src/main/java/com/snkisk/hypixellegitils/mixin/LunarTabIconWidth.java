@@ -9,11 +9,15 @@ import net.minecraft.client.gui.FontRenderer;
 
 /** Reads Lunar's own measured Tab-logo width without a compile-time dependency on Lunar internals.
  * Lunar reports the full footprint for both its left- and right-side icon preferences. */
-final class LunarTabIconWidth {
+/**
+ * Public because Mixin copies call sites into Minecraft's transformed Tab-overlay class.
+ * Package-private visibility would fail there with {@link IllegalAccessError}.
+ */
+public final class LunarTabIconWidth {
     private LunarTabIconWidth() {
     }
 
-    static int measuredWidth(Object tabOverlay, UUID playerId, FontRenderer font, String text, int fallbackWidth) {
+    public static int measuredWidth(Object tabOverlay, UUID playerId, FontRenderer font, String text, int fallbackWidth) {
         if (tabOverlay == null || playerId == null || font == null) return fallbackWidth;
         try {
             Field playerField = tabOverlay.getClass().getDeclaredField("lunar$modifyingPlayerEntry");
