@@ -614,8 +614,8 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /** Reuses the matching current Tab Star column for a Tab suffix after the active snapshot has been read. */
-    public static String statsTabStarPadding(String playerName, String starText) {
-        return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText);
+    public static String statsTabStarPadding(String playerName, String starText, int starPixelWidth) {
+        return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText, starPixelWidth);
     }
 
     private static Map<String, String> statsChatDisplayNames(StatsBridgeLookupResult result) {
@@ -655,7 +655,11 @@ public final class HypixelLegitilsBootstrap {
             String playerName = info == null || info.getGameProfile() == null ? null : info.getGameProfile().getName();
             StatsBridgePlayerResult player = playerName == null ? null : byName.get(playerName.toLowerCase(Locale.ROOT));
             ScorePlayerTeam team = info == null ? null : info.getPlayerTeam();
-            String teamKey = team == null ? null : team.getRegisteredName();
+            String displayText = info == null || info.getDisplayName() == null ? null : info.getDisplayName().getFormattedText();
+            String teamKey = FlagMessage.bedWarsTeamKey(displayText);
+            if (teamKey == null && playerName != null) {
+                teamKey = FlagMessage.bedWarsTeamKey(ScorePlayerTeam.formatPlayerName(team, playerName));
+            }
             UUID playerId = info == null || info.getGameProfile() == null ? null : info.getGameProfile().getId();
             boolean nicked = shouldShowNickedSessionMarker(playerId)
                 || player != null && player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED;

@@ -75,7 +75,13 @@ public final class StatsDisplayNameColumns {
         if (profileName == null || starText == null || starText.isEmpty()) return "";
         RenderedName rendered = activeRenderedNames.get(key(profileName));
         if (rendered == null || !starText.equals(rendered.starText)) return "";
-        return spacesFor(activeStarPixelWidth, rendered.starPixelWidth, activeSpacePixelWidth, activeBoldSpacePixelWidth);
+        return starPadding(profileName, starText, rendered.starPixelWidth);
+    }
+
+    /** Keeps FKDR anchored even when a newly rendered Star differs from the prior Tab snapshot. */
+    public synchronized String starPadding(String profileName, String starText, int starPixelWidth) {
+        if (profileName == null || starText == null || starText.isEmpty()) return "";
+        return spacesFor(activeStarPixelWidth, Math.max(0, starPixelWidth), activeSpacePixelWidth, activeBoldSpacePixelWidth);
     }
 
     public synchronized void clear() {

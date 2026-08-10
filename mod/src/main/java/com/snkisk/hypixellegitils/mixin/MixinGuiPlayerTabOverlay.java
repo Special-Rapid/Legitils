@@ -63,7 +63,7 @@ public class MixinGuiPlayerTabOverlay {
         if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
         suffix += HypixelLegitilsBootstrap.statsTabSuffix(
             info.getGameProfile().getName(), playerId,
-            HypixelLegitilsBootstrap.statsTabStarPadding(info.getGameProfile().getName(), starText)
+            HypixelLegitilsBootstrap.statsTabStarPadding(info.getGameProfile().getName(), starText, starPixelWidth)
         );
         if (suffix.isEmpty()) return;
         callbackInfo.setReturnValue(renderedName + padding + suffix);

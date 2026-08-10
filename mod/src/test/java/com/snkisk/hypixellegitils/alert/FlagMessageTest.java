@@ -55,6 +55,15 @@ public class FlagMessageTest {
         assertTrue(FlagMessage.hasBedWarsTeamPrefix("§d§lP Pink"));
         assertTrue(FlagMessage.hasBedWarsTeamPrefix("§8S Gray"));
         assertFalse(FlagMessage.hasBedWarsTeamPrefix("§fFlaming"));
+        assertEquals("R", FlagMessage.bedWarsTeamKey("§cR Red"));
+        assertEquals("B", FlagMessage.bedWarsTeamKey("§9B Blue"));
+        assertEquals("G", FlagMessage.bedWarsTeamKey("§aG Green"));
+        assertEquals("Y", FlagMessage.bedWarsTeamKey("§eY Yellow"));
+        assertEquals("A", FlagMessage.bedWarsTeamKey("§b§lA Aqua"));
+        assertEquals("W", FlagMessage.bedWarsTeamKey("§7W White"));
+        assertEquals("P", FlagMessage.bedWarsTeamKey("§dP Pink"));
+        assertEquals("S", FlagMessage.bedWarsTeamKey("§8S Gray"));
+        assertNull(FlagMessage.bedWarsTeamKey("§b[MVP§f+§b] Player"));
     }
 
     @Test

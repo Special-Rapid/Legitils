@@ -104,6 +104,7 @@ public final class StatsPresentationTest {
         assertEquals(paddedBee, columns.nameForChat("Bee", "§aG Bee"));
         assertEquals("", columns.starPadding("Short", "§c[12345✭]"));
         assertEquals("§r" + spaces(3) + "§r", columns.starPadding("Bee", beeStar));
+        assertEquals("§r" + spaces(3) + "§r", columns.starPadding("Bee", "§f[101✫]", 28));
 
         StatsBridgePlayerResult player = player("Bee", 100, 2D, null);
         assertEquals(paddedBee + " §8— " + paddedBeeStar + " §aFKDR 2.0", StatsPresentation.chatNotices(

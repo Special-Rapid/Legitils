@@ -65,13 +65,23 @@ public final class FlagMessage {
 
     /** Identifies the normalized Bed Wars team prefix used for a local player identity. */
     public static boolean hasBedWarsTeamPrefix(String formattedDisplayName) {
-        if (formattedDisplayName == null) return false;
-        if (formattedDisplayName.startsWith("§7W ")) return true;
+        return bedWarsTeamKey(formattedDisplayName) != null;
+    }
+
+    /** Returns the visible Bed Wars team initial, or null when the display text is not a known team prefix. */
+    public static String bedWarsTeamKey(String formattedDisplayName) {
+        if (formattedDisplayName == null) return null;
+        if (formattedDisplayName.startsWith("§7W ")) return "W";
         if (formattedDisplayName.length() >= 4 && formattedDisplayName.charAt(0) == '§'
-            && isBedWarsTeamInitial(formattedDisplayName.charAt(2)) && formattedDisplayName.charAt(3) == ' ') return true;
-        return formattedDisplayName.length() >= 6 && formattedDisplayName.charAt(0) == '§'
+            && isBedWarsTeamInitial(formattedDisplayName.charAt(2)) && formattedDisplayName.charAt(3) == ' ') {
+            return String.valueOf(formattedDisplayName.charAt(2));
+        }
+        if (formattedDisplayName.length() >= 6 && formattedDisplayName.charAt(0) == '§'
             && formattedDisplayName.charAt(2) == '§' && formattedDisplayName.charAt(3) == 'l'
-            && isBedWarsTeamInitial(formattedDisplayName.charAt(4)) && formattedDisplayName.charAt(5) == ' ';
+            && isBedWarsTeamInitial(formattedDisplayName.charAt(4)) && formattedDisplayName.charAt(5) == ' ') {
+            return String.valueOf(formattedDisplayName.charAt(4));
+        }
+        return null;
     }
 
     private static boolean isUsableDisplayName(String formattedDisplayName) {
