@@ -1,11 +1,11 @@
 import Foundation
 
-/// A bounded local cache of already-normalized Hypixel values. It deliberately never stores
-/// API keys or raw provider responses, and is only consulted by the Companion process.
-final class HypixelStatsCache {
+/// A bounded local cache of already-normalized Seraph and Urchin tags.
+/// It never stores provider credentials or raw provider responses.
+final class CommunityTagCache {
     static let lifetime: TimeInterval = 24 * 60 * 60
-    private static let schemaVersion = 2
-    private static let maximumEntries = 512
+    private static let schemaVersion = 1
+    private static let maximumEntries = 1_024
 
     private struct StoredCache: Codable {
         let schemaVersion: Int
@@ -14,33 +14,37 @@ final class HypixelStatsCache {
 
     private struct Entry: Codable {
         let fetchedAtMillis: Int64
-        let stats: StatsProviderLookup.HypixelStats
+        let tags: [StatsProviderLookup.ProviderTag]
     }
 
     private let url: URL
     private let now: () -> Date
     private var entries: [String: Entry] = [:]
 
-    init(url: URL = CompanionPaths.hypixelStatsCacheURL, now: @escaping () -> Date = Date.init) {
+    init(url: URL = CompanionPaths.communityTagCacheURL, now: @escaping () -> Date = Date.init) {
         self.url = url
         self.now = now
         load()
     }
 
-    func stats(for uuid: String, gameMode: StatsBridgeGameMode?) -> StatsProviderLookup.HypixelStats? {
-        let key = cacheKey(uuid: uuid, gameMode: gameMode)
+    /// `nil` means no usable cached response; an empty array is a cached no-tag response.
+    func tags(for provider: StatsProvider, uuid: String) -> [StatsProviderLookup.ProviderTag]? {
+        guard provider == .seraph || provider == .urchin else { return nil }
+        let key = cacheKey(provider: provider, uuid: uuid)
         guard let entry = entries[key], !isExpired(entry) else {
             if entries.removeValue(forKey: key) != nil { persist() }
             return nil
         }
-        return entry.stats
+        return entry.tags
     }
 
-    func store(_ stats: StatsProviderLookup.HypixelStats, for uuid: String, gameMode: StatsBridgeGameMode?) {
-        entries[cacheKey(uuid: uuid, gameMode: gameMode)] = Entry(
+    func store(_ tags: [StatsProviderLookup.ProviderTag], for provider: StatsProvider, uuid: String) {
+        guard provider == .seraph || provider == .urchin,
+              tags.allSatisfy({ validTag($0, provider: provider) }) else { return }
+        entries[cacheKey(provider: provider, uuid: uuid)] = Entry(
             // Truncate rather than round: a rounded-up timestamp looks briefly future-dated and expires immediately.
             fetchedAtMillis: Int64(now().timeIntervalSince1970 * 1_000),
-            stats: stats
+            tags: tags
         )
         prune()
         persist()
@@ -52,8 +56,23 @@ final class HypixelStatsCache {
               stored.schemaVersion == Self.schemaVersion else {
             return
         }
-        entries = stored.entries.filter { validCacheKey($0.key) && !isExpired($0.value) }
+        entries = stored.entries.filter {
+            guard let provider = provider(forCacheKey: $0.key) else { return false }
+            return validEntry($0.value, provider: provider) && !isExpired($0.value)
+        }
         prune()
+    }
+
+    private func validEntry(_ entry: Entry, provider: StatsProvider) -> Bool {
+        entry.fetchedAtMillis >= 0 && entry.tags.allSatisfy { validTag($0, provider: provider) }
+    }
+
+    private func validTag(_ tag: StatsProviderLookup.ProviderTag, provider: StatsProvider) -> Bool {
+        guard tag.label.count <= 64,
+              StatsProviderLookup.isCanonicalTagLabel(tag.label, source: provider) else { return false }
+        guard let tooltip = tag.tooltip else { return true }
+        return tooltip.count <= 384
+            && tooltip.unicodeScalars.allSatisfy { $0 == "\n" || ($0.value >= 0x20 && $0.value != 0x00A7 && $0.value != 0x007F) }
     }
 
     private func prune() {
@@ -75,7 +94,7 @@ final class HypixelStatsCache {
         do {
             let directory = url.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let temporary = directory.appendingPathComponent("hypixel-stats-cache.tmp-\(UUID().uuidString)")
+            let temporary = directory.appendingPathComponent("community-tag-cache.tmp-\(UUID().uuidString)")
             try data.write(to: temporary, options: .atomic)
             if FileManager.default.fileExists(atPath: url.path) {
                 _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary, backupItemName: nil, options: [])
@@ -87,20 +106,26 @@ final class HypixelStatsCache {
         }
     }
 
+    private func cacheKey(provider: StatsProvider, uuid: String) -> String {
+        provider.rawValue + ":" + normalizedUUID(uuid)
+    }
+
     private func normalizedUUID(_ value: String) -> String {
         value.replacingOccurrences(of: "-", with: "").lowercased()
     }
 
-    private func cacheKey(uuid: String, gameMode: StatsBridgeGameMode?) -> String {
-        normalizedUUID(uuid) + ":" + (gameMode?.rawValue ?? "unknown")
+    private func validCacheKey(_ value: String) -> Bool {
+        provider(forCacheKey: value) != nil
     }
 
-    private func validCacheKey(_ value: String) -> Bool {
+    private func provider(forCacheKey value: String) -> StatsProvider? {
         let components = value.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
         guard components.count == 2,
-              String(components[0]).range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil else {
-            return false
+              let provider = StatsProvider(rawValue: String(components[0])),
+              provider == .seraph || provider == .urchin,
+              String(components[1]).range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil else {
+            return nil
         }
-        return components[1] == "unknown" || StatsBridgeGameMode(rawValue: String(components[1])) != nil
+        return provider
     }
 }

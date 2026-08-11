@@ -24,6 +24,10 @@ enum CompanionPaths {
         applicationSupportDirectory.appendingPathComponent("hypixel-stats-cache.json")
     }
 
+    static var communityTagCacheURL: URL {
+        applicationSupportDirectory.appendingPathComponent("community-tag-cache.json")
+    }
+
     static var lunarBakeCacheFingerprintURL: URL {
         applicationSupportDirectory.appendingPathComponent("lunar-bake-cache-mod-fingerprint.txt")
     }

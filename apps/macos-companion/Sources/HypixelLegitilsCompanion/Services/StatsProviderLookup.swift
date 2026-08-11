@@ -33,6 +33,7 @@ final class StatsProviderLookup {
     private let keychainStore: StatsProviderKeyReading
     private let transport: StatsHTTPTransport
     private let hypixelCache: HypixelStatsCache
+    private let communityTagCache: CommunityTagCache
     private let queue = DispatchQueue(label: "com.snkisk.hypixellegitils.stats-provider")
     private var matchCache: [String: StatsBridgeRosterResponse] = [:]
     private var cacheOrder: [String] = []
@@ -40,11 +41,13 @@ final class StatsProviderLookup {
     init(
         keychainStore: StatsProviderKeyReading,
         transport: StatsHTTPTransport = URLSessionStatsHTTPTransport(),
-        hypixelCache: HypixelStatsCache = HypixelStatsCache()
+        hypixelCache: HypixelStatsCache = HypixelStatsCache(),
+        communityTagCache: CommunityTagCache = CommunityTagCache()
     ) {
         self.keychainStore = keychainStore
         self.transport = transport
         self.hypixelCache = hypixelCache
+        self.communityTagCache = communityTagCache
     }
 
     func lookup(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
@@ -60,7 +63,7 @@ final class StatsProviderLookup {
 
     private func fetch(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
         let manualLookup = roster.matchID.hasPrefix("manual_")
-        let forceProviderRefresh = manualLookup || roster.matchID.hasPrefix("who_")
+        let forceProviderRefresh = manualLookup
         let records = Dictionary(uniqueKeysWithValues: roster.players.map { player in
             (player.name.lowercased(), MutablePlayer(name: player.name, uuid: player.uuid))
         })
@@ -146,24 +149,32 @@ final class StatsProviderLookup {
         }
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.urchin.keychainAccount), !key.isEmpty {
-            group.enter()
-            transport.load(Self.urchinRequest(uuids: known.compactMap(\.uuid), apiKey: key)) { result in
-                self.queue.async {
-                    defer { group.leave() }
-                    guard case let .success((data, response)) = result, response.statusCode == 200 else {
-                        if manualLookup { diagnostics.append(Self.diagnostic("Urchin", result)) }
-                        return
-                    }
-                    let tagsByUUID = Self.parseUrchinTags(data)
-                    for (uuid, labels) in tagsByUUID {
-                        guard let member = known.first(where: { $0.uuid?.caseInsensitiveCompare(uuid) == .orderedSame }) else { continue }
-                        records[member.name.lowercased()]?.communityTags.append(contentsOf: labels.map {
-                            StatsBridgeCommunityTag(source: StatsProvider.urchin.rawValue, label: $0.label, tooltip: $0.tooltip)
-                        })
-                    }
-                    if manualLookup, let player = known.first {
-                        let labels = tagsByUUID[player.uuid!.lowercased()] ?? []
-                        diagnostics.append(Self.providerStatus("Urchin", detail: labels.isEmpty ? "no active tags" : labels.map(\.label).joined(separator: ", ")))
+            let uncached = known.filter { player in
+                guard !forceProviderRefresh, let uuid = player.uuid,
+                      let cached = communityTagCache.tags(for: .urchin, uuid: uuid) else { return true }
+                apply(cached, from: .urchin, to: player, records: records)
+                return false
+            }
+            if !uncached.isEmpty {
+                group.enter()
+                transport.load(Self.urchinRequest(uuids: uncached.compactMap(\.uuid), apiKey: key)) { result in
+                    self.queue.async {
+                        defer { group.leave() }
+                        guard case let .success((data, response)) = result, response.statusCode == 200 else {
+                            if manualLookup { diagnostics.append(Self.diagnostic("Urchin", result)) }
+                            return
+                        }
+                        let tagsByUUID = Self.parseUrchinTags(data)
+                        for member in uncached {
+                            guard let uuid = member.uuid else { continue }
+                            let labels = tagsByUUID[uuid.lowercased()] ?? []
+                            self.communityTagCache.store(labels, for: .urchin, uuid: uuid)
+                            self.apply(labels, from: .urchin, to: member, records: records)
+                        }
+                        if manualLookup, let player = known.first, let uuid = player.uuid {
+                            let labels = tagsByUUID[uuid.lowercased()] ?? []
+                            diagnostics.append(Self.providerStatus("Urchin", detail: labels.isEmpty ? "no active tags" : labels.map(\.label).joined(separator: ", ")))
+                        }
                     }
                 }
             }
@@ -172,6 +183,10 @@ final class StatsProviderLookup {
         }
 
         for player in known {
+            if !forceProviderRefresh, let cached = communityTagCache.tags(for: .seraph, uuid: player.uuid!) {
+                apply(cached, from: .seraph, to: player, records: records)
+                continue
+            }
             group.enter()
             transport.load(Self.seraphRequest(uuid: player.uuid!)) { result in
                 self.queue.async {
@@ -181,9 +196,8 @@ final class StatsProviderLookup {
                         return
                     }
                     let labels = Self.parseSeraphTags(data)
-                    records[player.name.lowercased()]?.communityTags.append(contentsOf: labels.map {
-                        StatsBridgeCommunityTag(source: StatsProvider.seraph.rawValue, label: $0.label, tooltip: $0.tooltip)
-                    })
+                    self.communityTagCache.store(labels, for: .seraph, uuid: player.uuid!)
+                    self.apply(labels, from: .seraph, to: player, records: records)
                     if manualLookup {
                         diagnostics.append(Self.providerStatus("Seraph", detail: labels.isEmpty ? "no active tags" : labels.map(\.label).joined(separator: ", ")))
                     }
@@ -199,6 +213,17 @@ final class StatsProviderLookup {
                 self.finish(matchID: roster.matchID, records: records, diagnostics: diagnostics, completion: completion)
             }
         }
+    }
+
+    private func apply(
+        _ tags: [ProviderTag],
+        from provider: StatsProvider,
+        to player: StatsBridgeRosterMember,
+        records: [String: MutablePlayer]
+    ) {
+        records[player.name.lowercased()]?.communityTags.append(contentsOf: tags.map {
+            StatsBridgeCommunityTag(source: provider.rawValue, label: $0.label, tooltip: $0.tooltip)
+        })
     }
 
     private func finish(
@@ -235,7 +260,7 @@ extension StatsProviderLookup {
         let modeWinStreak: Int?
     }
 
-    struct ProviderTag: Equatable {
+    struct ProviderTag: Codable, Equatable {
         let label: String
         let tooltip: String?
     }
@@ -564,6 +589,11 @@ extension StatsProviderLookup {
         if let value = value as? Int { return Double(value) }
         if let value = value as? NSNumber { return value.doubleValue }
         return nil
+    }
+
+    /// Revalidates a persisted display label before it can cross the local bridge again.
+    static func isCanonicalTagLabel(_ label: String, source: StatsProvider) -> Bool {
+        canonicalTagLabel(label, source: source) == label
     }
 
     static func integer(_ value: Any?) -> Int? {

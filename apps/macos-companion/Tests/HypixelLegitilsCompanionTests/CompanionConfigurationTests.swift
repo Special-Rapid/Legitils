@@ -226,7 +226,8 @@ final class CompanionConfigurationTests: XCTestCase {
                 StatsProvider.urchin.keychainAccount: "urchin-secret"
             ]),
             transport: transport,
-            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+            communityTagCache: temporaryCommunityTagCache()
         )
         let roster = StatsBridgeRosterRequest(
             schemaVersion: 2,
@@ -261,6 +262,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(CompanionPaths.configurationURL.lastPathComponent, "config.json")
         XCTAssertEqual(CompanionPaths.runtimeStatusURL.lastPathComponent, "runtime-status.json")
         XCTAssertEqual(CompanionPaths.hypixelStatsCacheURL.lastPathComponent, "hypixel-stats-cache.json")
+        XCTAssertEqual(CompanionPaths.communityTagCacheURL.lastPathComponent, "community-tag-cache.json")
         XCTAssertEqual(CompanionPaths.loaderRuntimeDirectory.lastPathComponent, "runtime")
     }
 
@@ -386,6 +388,43 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertNil(HypixelStatsCache(url: url, now: { current }).stats(for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", gameMode: .fours))
     }
 
+    func testCommunityTagCachePersistsNormalizedProviderTagsForTwentyFourHours() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("community-tag-cache.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var current = Date(timeIntervalSince1970: 1_700_000_000)
+        let seraph = [StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "safe reason")]
+        let urchin = [StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: nil)]
+
+        let cache = CommunityTagCache(url: url, now: { current })
+        cache.store(seraph, for: .seraph, uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        cache.store(urchin, for: .urchin, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        XCTAssertEqual(
+            CommunityTagCache(url: url, now: { current }).tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            seraph
+        )
+        XCTAssertEqual(
+            CommunityTagCache(url: url, now: { current }).tags(for: .urchin, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            urchin
+        )
+
+        current = current.addingTimeInterval(CommunityTagCache.lifetime + 1)
+        XCTAssertNil(CommunityTagCache(url: url, now: { current }).tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+    }
+
+    func testCommunityTagCacheIgnoresMalformedOrUnsafeStoredData() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("community-tag-cache.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("""
+        {"schemaVersion":1,"entries":{"seraph:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"fetchedAtMillis":1700000000000,"tags":[{"label":"arbitrary","tooltip":"unsafe"}]}}}
+        """.utf8).write(to: url)
+
+        XCTAssertNil(CommunityTagCache(url: url, now: { Date(timeIntervalSince1970: 1_700_000_001) })
+            .tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+    }
+
     func testProviderLookupUsesFreshPersistentHypixelCacheBeforeNetwork() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -403,7 +442,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
             transport: transport,
-            hypixelCache: cache
+            hypixelCache: cache,
+            communityTagCache: temporaryCommunityTagCache()
         )
         let response = expectation(description: "cached response")
         var result: StatsBridgeRosterResponse?
@@ -425,20 +465,41 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.modeWinStreak, 11)
     }
 
-    func testWhoRefreshBypassesThePersistentHypixelCacheWithoutManualDiagnostics() {
+    func testWhoRefreshUsesPersistentStatsAndCommunityTagCachesWithoutManualDiagnostics() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
+        let tagCache = CommunityTagCache(url: directory.appendingPathComponent("community-tag-cache.json"))
         cache.store(
             StatsProviderLookup.HypixelStats(stars: 130, finalKillDeathRatio: 6.5, modeWinStreak: 11),
             for: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             gameMode: .fours
         )
+        tagCache.store(
+            [StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "cached Seraph")],
+            for: .seraph,
+            uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        tagCache.store(
+            [StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: "cached Urchin")],
+            for: .urchin,
+            uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        XCTAssertEqual(tagCache.tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), [
+            StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "cached Seraph")
+        ])
+        XCTAssertEqual(tagCache.tags(for: .urchin, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), [
+            StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: "cached Urchin")
+        ])
         let transport = FakeStatsTransport()
         let lookup = StatsProviderLookup(
-            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            keychainStore: FakeStatsKeyStore([
+                StatsProvider.hypixel.keychainAccount: "hypixel-secret",
+                StatsProvider.urchin.keychainAccount: "urchin-secret"
+            ]),
             transport: transport,
-            hypixelCache: cache
+            hypixelCache: cache,
+            communityTagCache: tagCache
         )
         let response = expectation(description: "who refresh response")
         var result: StatsBridgeRosterResponse?
@@ -454,10 +515,11 @@ final class CompanionConfigurationTests: XCTestCase {
         }
         wait(for: [response], timeout: 2)
 
-        XCTAssertEqual(transport.requestCount, 2)
-        XCTAssertEqual(result?.players.first?.stars, 100)
+        XCTAssertEqual(transport.requestCount, 0)
+        XCTAssertEqual(result?.players.first?.stars, 130)
         XCTAssertEqual(result?.players.first?.communityTags, [
-            StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "vape v4 (legitscaff)\n- Added by @hexze 4 months ago")
+            StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "cached Seraph"),
+            StatsBridgeCommunityTag(source: "urchin", label: "Legit Sniper", tooltip: "cached Urchin")
         ])
     }
 
@@ -466,7 +528,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
             transport: transport,
-            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+            communityTagCache: temporaryCommunityTagCache()
         )
         let response = expectation(description: "pregame chatter response")
         var result: StatsBridgeRosterResponse?
@@ -500,7 +563,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
             transport: transport,
-            hypixelCache: cache
+            hypixelCache: cache,
+            communityTagCache: temporaryCommunityTagCache()
         )
         let response = expectation(description: "manual failure response")
         var result: StatsBridgeRosterResponse?
@@ -532,7 +596,8 @@ final class CompanionConfigurationTests: XCTestCase {
                 StatsProvider.urchin.keychainAccount: "urchin-secret"
             ]),
             transport: FakeStatsTransport(),
-            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+            communityTagCache: temporaryCommunityTagCache()
         )
         let response = expectation(description: "manual provider status response")
         var result: StatsBridgeRosterResponse?
@@ -662,6 +727,10 @@ private struct FakeStatsKeyStore: StatsProviderKeyReading {
     func readSecret(account: String) throws -> String? {
         values[account]
     }
+}
+
+private func temporaryCommunityTagCache() -> CommunityTagCache {
+    CommunityTagCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
 }
 
 private final class FakeStatsTransport: StatsHTTPTransport {
