@@ -31,7 +31,10 @@ public final class WhoStatsRefreshTest {
         assertEquals(null, requests.consumeDue(1000L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
         assertTrue(requests.observeRosterResponse("ONLINE: Alpha, Beta", 1400L));
         assertEquals(null, requests.consumeDue(1400L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
-        assertEquals("who_2_1", requests.consumeDue(1400L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
+        WhoStatsRefresh.Refresh refresh = requests.consumeDue(1400L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS);
+        assertEquals("who_2_1", refresh.matchId);
+        assertEquals("Alpha", refresh.rosterNames.get(0));
+        assertEquals("Beta", refresh.rosterNames.get(1));
         assertEquals(null, requests.consumeDue(3000L));
     }
 
@@ -58,7 +61,7 @@ public final class WhoStatsRefreshTest {
         assertTrue(requests.enqueue(action.refreshMatchId, 3500L));
         assertTrue(requests.observeRosterResponse("ONLINE: Alpha", 3600L));
         assertEquals(null, requests.consumeDue(3600L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
-        assertEquals(action.refreshMatchId, requests.consumeDue(3600L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
+        assertEquals(action.refreshMatchId, requests.consumeDue(3600L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS).matchId);
         assertEquals(null, WhoStatsRefresh.postStartAction(null, action.refreshMatchId));
     }
 
@@ -67,6 +70,19 @@ public final class WhoStatsRefreshTest {
         WhoStatsRefresh.PendingRequests requests = new WhoStatsRefresh.PendingRequests(1);
         assertEquals("who_1_1", requests.enqueue(WhoStatsRefresh.submissionFor("/who"), 1L, 1000L));
         assertEquals(null, requests.consumeDue(5999L));
-        assertEquals("who_1_1", requests.consumeDue(6000L));
+        assertEquals("who_1_1", requests.consumeDue(6000L).matchId);
+    }
+
+    @Test
+    public void fallsBackToTheServerRosterWhenReconnectSkippedTheGuiChatSubmitHook() {
+        assertEquals(2, WhoStatsRefresh.rosterNames("ONLINE: Alpha, Beta, alpha, !bad").size());
+        WhoStatsRefresh.PendingRequests requests = new WhoStatsRefresh.PendingRequests(2);
+        assertTrue(requests.scheduleRecoveryFromRosterResponse("ONLINE: Alpha, Beta", 4L, 1000L));
+        assertFalse(requests.scheduleRecoveryFromRosterResponse("ONLINE: Alpha, Beta", 4L, 1001L));
+        assertEquals(null, requests.consumeDue(2499L));
+        WhoStatsRefresh.Refresh refresh = requests.consumeDue(2500L);
+        assertEquals("who_4_1", refresh.matchId);
+        assertEquals("Alpha", refresh.rosterNames.get(0));
+        assertEquals("Beta", refresh.rosterNames.get(1));
     }
 }

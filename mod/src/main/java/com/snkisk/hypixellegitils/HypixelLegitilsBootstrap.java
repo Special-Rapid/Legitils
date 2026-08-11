@@ -387,16 +387,26 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /** The client-thread roster collector consumes each settled explicit or automatic `/who` refresh once. */
-    public static String consumeDueWhoStatsRefresh(long nowMillis) {
+    public static WhoStatsRefresh.Refresh consumeDueWhoStatsRefresh(long nowMillis) {
         return STARTED.get() ? PENDING_WHO_STATS_REFRESHES.consumeDue(nowMillis) : null;
     }
 
-    /** Uses a server-issued `/who` reply only to settle an already-authorized local refresh. */
+    /** Uses a server-issued `/who` reply to settle a submitted refresh or recover the just-reset roster once. */
     public static boolean onWhoRosterResponse(String message, long nowMillis) {
         if (!STARTED.get() || !statsSettings.enabled) return false;
         boolean matched = PENDING_WHO_STATS_REFRESHES.observeRosterResponse(message, nowMillis);
-        if (matched) traceStats("who roster response observed; full Stats republish waits for Tab settle");
-        return matched;
+        if (matched) {
+            traceStats("who roster response observed; full Stats republish uses the settled server roster");
+            return true;
+        }
+        if (latestStatsBridgeResult.status == StatsBridgeLookupResult.Status.UNAVAILABLE
+            && PENDING_WHO_STATS_REFRESHES.scheduleRecoveryFromRosterResponse(
+                message, STATS_BRIDGE_SESSION.currentGeneration(), nowMillis
+            )) {
+            traceStats("who roster response recovered a reset Stats roster without GuiChat submission state");
+            return true;
+        }
+        return false;
     }
 
     /** Post-start uses this opaque ID for the one automatic `/who` refresh, replacing the old parallel roster request. */

@@ -234,7 +234,7 @@ public abstract class MixinMinecraft {
             return;
         }
         BedwarsMode gameMode = HypixelLegitilsBootstrap.statsModeFor(BedwarsPreGameState.mode(theWorld));
-        String requestedWhoRefresh = HypixelLegitilsBootstrap.consumeDueWhoStatsRefresh(hypixelLegitils$frameNowMillis);
+        WhoStatsRefresh.Refresh requestedWhoRefresh = HypixelLegitilsBootstrap.consumeDueWhoStatsRefresh(hypixelLegitils$frameNowMillis);
         if (requestedWhoRefresh != null) {
             hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, requestedWhoRefresh, "who refresh");
         }
@@ -251,32 +251,51 @@ public abstract class MixinMinecraft {
     private void hypixelLegitils$collectAndRequestStatsRoster(
         NetHandlerPlayClient handler,
         BedwarsMode gameMode,
-        String matchId,
+        WhoStatsRefresh.Refresh refresh,
         String source
     ) {
-        if (handler == null || matchId == null) return;
+        if (handler == null || refresh == null || refresh.matchId == null) return;
+        Map<String, String> responseNames = new LinkedHashMap<String, String>();
+        for (String responseName : refresh.rosterNames) {
+            if (responseName == null) continue;
+            responseNames.put(responseName.toLowerCase(java.util.Locale.ROOT), responseName);
+        }
+        String localName = thePlayer == null ? null : thePlayer.getName();
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
         Map<String, String> teamFormattedNames = new LinkedHashMap<String, String>();
         for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
             GameProfile profile = info == null ? null : info.getGameProfile();
             if (profile == null || profile.getName() == null) continue;
+            String key = profile.getName().toLowerCase(java.util.Locale.ROOT);
+            if (!responseNames.isEmpty() && !responseNames.containsKey(key)) continue;
             UUID profileId = profile.getId();
             // Lunar can hide the pre-game roster but leaves the local profile in Tab.
             // The local player is never a useful automatic Stats target.
-            if (profileId != null && profileId.equals(hypixelLegitils$selfPlayerId)) continue;
+            if (profileId != null && profileId.equals(hypixelLegitils$selfPlayerId)
+                || localName != null && localName.equalsIgnoreCase(profile.getName())) continue;
             String uuid = profileId == null || profileId.version() == 1 ? null : profileId.toString();
             StatsBridgeRosterMember member = new StatsBridgeRosterMember(profile.getName(), uuid);
             if (!member.isValid()) continue;
-            String key = profile.getName().toLowerCase(java.util.Locale.ROOT);
             members.put(key, member);
             teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatDisplayName(
                 profile.getName(), hypixelLegitils$teamFormattedName(profileId, profile.getName())
             ));
         }
+        // A rejoin may deliver `ONLINE:` before Lunar rebuilds its NetworkPlayerInfo map.
+        // Preserve those current server names as UUID-free members so the normal Bridge path can recover Tab/Chat/Nametag.
+        for (Map.Entry<String, String> response : responseNames.entrySet()) {
+            if (members.containsKey(response.getKey())
+                || localName != null && localName.equalsIgnoreCase(response.getValue())) continue;
+            StatsBridgeRosterMember member = new StatsBridgeRosterMember(response.getValue(), null);
+            if (!member.isValid()) continue;
+            members.put(response.getKey(), member);
+            teamFormattedNames.put(response.getKey(), response.getValue());
+        }
         if (!members.isEmpty()) {
-            HypixelLegitilsBootstrap.traceStats(source + " collected players=" + members.size());
+            HypixelLegitilsBootstrap.traceStats(source + " collected players=" + members.size()
+                + " responseRoster=" + (!responseNames.isEmpty()));
             HypixelLegitilsBootstrap.requestStatsRoster(
-                matchId,
+                refresh.matchId,
                 gameMode,
                 new ArrayList<StatsBridgeRosterMember>(members.values()),
                 teamFormattedNames
