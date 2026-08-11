@@ -267,7 +267,6 @@ public abstract class MixinMinecraft {
             GameProfile profile = info == null ? null : info.getGameProfile();
             if (profile == null || profile.getName() == null) continue;
             String key = profile.getName().toLowerCase(java.util.Locale.ROOT);
-            if (!responseNames.isEmpty() && !responseNames.containsKey(key)) continue;
             UUID profileId = profile.getId();
             // Lunar can hide the pre-game roster but leaves the local profile in Tab.
             // The local player is never a useful automatic Stats target.

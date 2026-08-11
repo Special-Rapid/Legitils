@@ -29,6 +29,7 @@ import com.snkisk.hypixellegitils.stats.StatsDisplayNameColumns;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.snkisk.hypixellegitils.stats.BedwarsModeTracker;
 import com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult;
+import com.snkisk.hypixellegitils.stats.StatsMatchResultRetention;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
 import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
@@ -450,7 +451,7 @@ public final class HypixelLegitilsBootstrap {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
                 traceStats("roster bridge result=" + result.status + " players=" + result.players.size());
-                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames);
+                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames, matchId.startsWith("who_"));
             }
         });
     }
@@ -522,11 +523,14 @@ public final class HypixelLegitilsBootstrap {
     private static void publishStatsBridgeResult(
         long sessionGeneration,
         StatsBridgeLookupResult result,
-        Map<String, String> teamFormattedNames
+        Map<String, String> teamFormattedNames,
+        boolean retainEliminatedMatchMembers
     ) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
-            latestStatsBridgeResult = result;
+            latestStatsBridgeResult = retainEliminatedMatchMembers
+                ? StatsMatchResultRetention.mergeWhoRefresh(latestStatsBridgeResult, result)
+                : result;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
                 for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
