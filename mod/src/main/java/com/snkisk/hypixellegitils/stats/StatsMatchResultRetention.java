@@ -2,6 +2,7 @@ package com.snkisk.hypixellegitils.stats;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -22,13 +23,46 @@ public final class StatsMatchResultRetention {
         if (current == null || current.status != StatsBridgeLookupResult.Status.READY) return incoming;
         if (incoming.status != StatsBridgeLookupResult.Status.READY) return current;
         Map<String, StatsBridgePlayerResult> players = new LinkedHashMap<String, StatsBridgePlayerResult>();
-        for (StatsBridgePlayerResult player : current.players) put(players, player);
-        for (StatsBridgePlayerResult player : incoming.players) put(players, player);
+        for (StatsBridgePlayerResult player : current.players) put(players, player, false);
+        for (StatsBridgePlayerResult player : incoming.players) put(players, player, true);
         return StatsBridgeLookupResult.ready(new ArrayList<StatsBridgePlayerResult>(players.values()));
     }
 
-    private static void put(Map<String, StatsBridgePlayerResult> players, StatsBridgePlayerResult player) {
+    private static void put(Map<String, StatsBridgePlayerResult> players, StatsBridgePlayerResult player, boolean fresh) {
         if (player == null || player.name == null) return;
-        players.put(player.name.toLowerCase(Locale.ROOT), player);
+        String key = player.name.toLowerCase(Locale.ROOT);
+        StatsBridgePlayerResult existing = players.get(key);
+        players.put(key, fresh && existing != null ? mergePlayer(existing, player) : player);
+    }
+
+    /** Provider tags are advisory match context: a later empty reply must not erase a tag already shown in this match. */
+    private static StatsBridgePlayerResult mergePlayer(StatsBridgePlayerResult existing, StatsBridgePlayerResult fresh) {
+        return new StatsBridgePlayerResult(
+            fresh.name,
+            fresh.nickStatus,
+            fresh.stars == null ? existing.stars : fresh.stars,
+            fresh.finalKillDeathRatio == null ? existing.finalKillDeathRatio : fresh.finalKillDeathRatio,
+            fresh.modeWinStreak == null ? existing.modeWinStreak : fresh.modeWinStreak,
+            mergedTags(existing.communityTags, fresh.communityTags)
+        );
+    }
+
+    private static List<StatsBridgePlayerResult.CommunityTag> mergedTags(
+        List<StatsBridgePlayerResult.CommunityTag> existing,
+        List<StatsBridgePlayerResult.CommunityTag> fresh
+    ) {
+        Map<String, StatsBridgePlayerResult.CommunityTag> tags = new LinkedHashMap<String, StatsBridgePlayerResult.CommunityTag>();
+        addTags(tags, existing);
+        // A matching current tag replaces its prior tooltip, while a current empty tag list preserves known match context.
+        addTags(tags, fresh);
+        return new ArrayList<StatsBridgePlayerResult.CommunityTag>(tags.values());
+    }
+
+    private static void addTags(Map<String, StatsBridgePlayerResult.CommunityTag> target, List<StatsBridgePlayerResult.CommunityTag> source) {
+        if (source == null) return;
+        for (StatsBridgePlayerResult.CommunityTag tag : source) {
+            if (tag == null || tag.source == null || tag.label == null) continue;
+            target.put(tag.source.toLowerCase(Locale.ROOT) + "\u0000" + tag.label.toLowerCase(Locale.ROOT), tag);
+        }
     }
 }

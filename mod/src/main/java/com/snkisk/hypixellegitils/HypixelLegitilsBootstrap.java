@@ -454,8 +454,9 @@ public final class HypixelLegitilsBootstrap {
                 StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
                 traceStats("roster bridge result=" + result.status + " players=" + result.players.size());
                 boolean reconcile = matchId.startsWith("reconcile_");
+                boolean whoRefresh = matchId.startsWith("who_");
                 if (reconcile) STATS_ROSTER_RECONCILIATION.onResponse(matchId, result, System.currentTimeMillis());
-                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames, matchId.startsWith("who_") || reconcile);
+                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames, whoRefresh || reconcile, whoRefresh);
             }
         });
     }
@@ -539,7 +540,8 @@ public final class HypixelLegitilsBootstrap {
         long sessionGeneration,
         StatsBridgeLookupResult result,
         Map<String, String> teamFormattedNames,
-        boolean retainEliminatedMatchMembers
+        boolean retainEliminatedMatchMembers,
+        boolean includeRetainedTagsInChat
     ) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
@@ -549,7 +551,9 @@ public final class HypixelLegitilsBootstrap {
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
                 for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
-                    result, teamFormattedNames, statsChatStarPaddings(result)
+                    includeRetainedTagsInChat ? latestStatsBridgeResult : result,
+                    teamFormattedNames,
+                    statsChatStarPaddings(includeRetainedTagsInChat ? latestStatsBridgeResult : result)
                 )) {
                     PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
                 }

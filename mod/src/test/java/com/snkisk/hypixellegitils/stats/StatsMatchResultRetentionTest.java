@@ -20,7 +20,8 @@ public final class StatsMatchResultRetentionTest {
 
         assertEquals(2, merged.players.size());
         assertSame(eliminated, merged.players.get(0));
-        assertSame(activeAfter, merged.players.get(1));
+        assertEquals("Active", merged.players.get(1).name);
+        assertEquals(Integer.valueOf(21), merged.players.get(1).stars);
     }
 
     @Test
@@ -29,10 +30,34 @@ public final class StatsMatchResultRetentionTest {
         assertSame(current, StatsMatchResultRetention.mergeWhoRefresh(current, StatsBridgeLookupResult.unavailable()));
     }
 
+    @Test
+    public void emptyFollowupDoesNotEraseAnAlreadyShownCommunityTag() {
+        StatsBridgePlayerResult tagged = player("xoyf", 1250, new StatsBridgePlayerResult.CommunityTag(
+            "urchin", "Closet Cheater", "first observed tooltip"
+        ));
+        StatsBridgePlayerResult followup = player("xoyf", 1250);
+
+        StatsBridgeLookupResult merged = StatsMatchResultRetention.mergeWhoRefresh(
+            StatsBridgeLookupResult.ready(Collections.singletonList(tagged)),
+            StatsBridgeLookupResult.ready(Collections.singletonList(followup))
+        );
+
+        assertEquals(1, merged.players.get(0).communityTags.size());
+        assertEquals("Closet Cheater", merged.players.get(0).communityTags.get(0).label);
+    }
+
     private static StatsBridgePlayerResult player(String name, int stars) {
+        return player(name, stars, new StatsBridgePlayerResult.CommunityTag[0]);
+    }
+
+    private static StatsBridgePlayerResult player(
+        String name,
+        int stars,
+        StatsBridgePlayerResult.CommunityTag... tags
+    ) {
         return new StatsBridgePlayerResult(
             name, StatsBridgePlayerResult.NickStatus.KNOWN, Integer.valueOf(stars), Double.valueOf(1D), null,
-            Collections.<StatsBridgePlayerResult.CommunityTag>emptyList()
+            Arrays.asList(tags)
         );
     }
 }
