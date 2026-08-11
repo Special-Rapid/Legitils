@@ -37,10 +37,10 @@ public final class LunarTabIconWidthTest {
 
     @Test
     public void placesNewNickAndAlertMarkersInsideTheMeasuredStatsColumn() {
-        assertEquals("", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(false, false));
-        assertEquals(" §c[NICK]", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(true, false));
-        assertEquals(" §e⚠", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(false, true));
-        assertEquals(" §c[NICK] §e⚠", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(true, true));
+        assertEquals("", TabStatsMarkers.forPlayer(false, false));
+        assertEquals(" §c[NICK]", TabStatsMarkers.forPlayer(true, false));
+        assertEquals(" §e⚠", TabStatsMarkers.forPlayer(false, true));
+        assertEquals(" §c[NICK] §e⚠", TabStatsMarkers.forPlayer(true, true));
     }
 
     public static final class FakeEntry {

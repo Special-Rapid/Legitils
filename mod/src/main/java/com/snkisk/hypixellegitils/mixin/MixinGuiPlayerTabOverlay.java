@@ -47,7 +47,7 @@ public class MixinGuiPlayerTabOverlay {
         if (info == null || info.getGameProfile() == null) return;
         java.util.UUID playerId = info.getGameProfile().getId();
         String renderedName = callbackInfo.getReturnValue();
-        String markers = hypixelLegitils$statsColumnMarkers(
+        String markers = TabStatsMarkers.forPlayer(
             HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId),
             HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)
         );
@@ -73,13 +73,6 @@ public class MixinGuiPlayerTabOverlay {
         if (markers.isEmpty() && suffix.isEmpty()) return;
         callbackInfo.setReturnValue(statsColumnName + padding + suffix);
         HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, markers + suffix);
-    }
-
-    static String hypixelLegitils$statsColumnMarkers(boolean nicked, boolean acceptedAlert) {
-        String markers = "";
-        if (nicked) markers += " §c[NICK]";
-        if (acceptedAlert) markers += " §e⚠";
-        return markers;
     }
 
 }
