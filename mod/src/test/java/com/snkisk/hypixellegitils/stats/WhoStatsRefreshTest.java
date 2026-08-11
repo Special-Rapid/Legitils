@@ -69,8 +69,11 @@ public final class WhoStatsRefreshTest {
     public void fallsBackToTheLatestRosterWhenHypixelDoesNotReplyToWho() {
         WhoStatsRefresh.PendingRequests requests = new WhoStatsRefresh.PendingRequests(1);
         assertEquals("who_1_1", requests.enqueue(WhoStatsRefresh.submissionFor("/who"), 1L, 1000L));
+        assertTrue(requests.hasPendingRequest());
         assertEquals(null, requests.consumeDue(5999L));
+        assertTrue(requests.hasPendingRequest());
         assertEquals("who_1_1", requests.consumeDue(6000L).matchId);
+        assertFalse(requests.hasPendingRequest());
     }
 
     @Test

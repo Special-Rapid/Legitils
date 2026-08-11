@@ -33,6 +33,7 @@ import com.snkisk.hypixellegitils.stats.StatsMatchResultRetention;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
 import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
+import com.snkisk.hypixellegitils.stats.StatsMatchStartCarryover;
 import com.snkisk.hypixellegitils.stats.StatsRosterReconciliation;
 import com.snkisk.hypixellegitils.stats.StatsPresentation;
 import com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult;
@@ -365,6 +366,11 @@ public final class HypixelLegitilsBootstrap {
         return STARTED.get() && STATS_MATCH_REQUEST_GATE.isDue(nowMillis);
     }
 
+    /** Prevents an incremental reconciliation from racing the one deliberate post-start `/who`. */
+    public static boolean isStatsRosterPending() {
+        return STARTED.get() && STATS_MATCH_REQUEST_GATE.isPending();
+    }
+
     /** Runs outside the client thread; it never contacts remote providers or exposes their keys. */
     public static void requestStatsRoster(
         final String matchId,
@@ -392,6 +398,11 @@ public final class HypixelLegitilsBootstrap {
     /** The client-thread roster collector consumes each settled explicit or automatic `/who` refresh once. */
     public static WhoStatsRefresh.Refresh consumeDueWhoStatsRefresh(long nowMillis) {
         return STARTED.get() ? PENDING_WHO_STATS_REFRESHES.consumeDue(nowMillis) : null;
+    }
+
+    /** Keeps incremental reconciliation behind an explicit or automatic `/who` roster refresh. */
+    public static boolean isWhoStatsRefreshPending() {
+        return STARTED.get() && PENDING_WHO_STATS_REFRESHES.hasPendingRequest();
     }
 
     /** Uses a server-issued `/who` reply to settle a submitted refresh or recover the just-reset roster once. */
@@ -550,10 +561,13 @@ public final class HypixelLegitilsBootstrap {
                 : result;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (statsSettings.enabled && statsSettings.chatEnabled) {
+                StatsBridgeLookupResult chatResult = includeRetainedTagsInChat
+                    ? StatsMatchResultRetention.returnedMembersWithRetainedTags(latestStatsBridgeResult, result)
+                    : result;
                 for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
-                    includeRetainedTagsInChat ? latestStatsBridgeResult : result,
+                    chatResult,
                     teamFormattedNames,
-                    statsChatStarPaddings(includeRetainedTagsInChat ? latestStatsBridgeResult : result)
+                    statsChatStarPaddings(chatResult)
                 )) {
                     PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
                 }
@@ -1545,11 +1559,12 @@ public final class HypixelLegitilsBootstrap {
         developmentSelfPlayerId = null;
         resetPartyDetectors();
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
+            StatsBridgeLookupResult pregameResult = latestStatsBridgeResult;
             STATS_BRIDGE_SESSION.reset();
-            latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
+            latestStatsBridgeResult = StatsMatchStartCarryover.forConfirmedGameStart(postStartRosterScheduled, pregameResult);
         }
         traceStats(postStartRosterScheduled
-            ? "game-world transition scheduled post-start roster"
+            ? "game-world transition retained resolved pregame Stats and scheduled post-start roster"
             : "world reset clears pending automatic roster and latest result");
         PENDING_STATS_NOTICES.clear();
         PENDING_CONFIGURATION_NOTICES.clear();

@@ -243,7 +243,10 @@ public abstract class MixinMinecraft {
             return;
         }
         if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) {
-            hypixelLegitils$reconcileVisibleStatsRoster(handler, gameMode);
+            if (!HypixelLegitilsBootstrap.isStatsRosterPending()
+                && !HypixelLegitilsBootstrap.isWhoStatsRefreshPending()) {
+                hypixelLegitils$reconcileVisibleStatsRoster(handler, gameMode);
+            }
             return;
         }
         String postStartMatchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
@@ -304,10 +307,12 @@ public abstract class MixinMinecraft {
         String localName = thePlayer == null ? null : thePlayer.getName();
         Map<String, StatsBridgeRosterMember> members = new LinkedHashMap<String, StatsBridgeRosterMember>();
         Map<String, String> teamFormattedNames = new LinkedHashMap<String, String>();
+        boolean hasServerRoster = !responseNames.isEmpty();
         for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
             GameProfile profile = info == null ? null : info.getGameProfile();
             if (profile == null || profile.getName() == null) continue;
             String key = profile.getName().toLowerCase(java.util.Locale.ROOT);
+            if (hasServerRoster && !responseNames.containsKey(key)) continue;
             UUID profileId = profile.getId();
             // Lunar can hide the pre-game roster but leaves the local profile in Tab.
             // The local player is never a useful automatic Stats target.

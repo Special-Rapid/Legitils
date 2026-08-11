@@ -137,6 +137,11 @@ public final class WhoStatsRefresh {
             return new Refresh(next.matchId, next.rosterNames);
         }
 
+        /** True until the submitted `/who` has either settled or timed out into its one refresh. */
+        public synchronized boolean hasPendingRequest() {
+            return !requests.isEmpty();
+        }
+
         public synchronized void clear() {
             requests.clear();
             lastResponseRecoveryAtMillis = Long.MIN_VALUE;

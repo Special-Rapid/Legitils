@@ -57,6 +57,11 @@ public final class StatsMatchRequestGate {
         return pendingMatchId != null && nowMillis >= dueAtMillis;
     }
 
+    /** True while the one post-start `/who` is still deliberately waiting to run. */
+    public synchronized boolean isPending() {
+        return pendingMatchId != null;
+    }
+
     public synchronized void reset() {
         pendingMatchId = null;
         dueAtMillis = -1L;

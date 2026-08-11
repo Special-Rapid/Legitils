@@ -28,6 +28,29 @@ public final class StatsMatchResultRetention {
         return StatsBridgeLookupResult.ready(new ArrayList<StatsBridgePlayerResult>(players.values()));
     }
 
+    /**
+     * Produces a display result for exactly the players returned by the current server roster,
+     * while preserving advisory tags already known for those returned players.
+     */
+    public static StatsBridgeLookupResult returnedMembersWithRetainedTags(
+        StatsBridgeLookupResult current,
+        StatsBridgeLookupResult incoming
+    ) {
+        if (incoming == null || incoming.status != StatsBridgeLookupResult.Status.READY) {
+            return incoming == null ? StatsBridgeLookupResult.unavailable() : incoming;
+        }
+        if (current == null || current.status != StatsBridgeLookupResult.Status.READY) return incoming;
+        Map<String, StatsBridgePlayerResult> prior = new LinkedHashMap<String, StatsBridgePlayerResult>();
+        for (StatsBridgePlayerResult player : current.players) put(prior, player, false);
+        List<StatsBridgePlayerResult> returned = new ArrayList<StatsBridgePlayerResult>();
+        for (StatsBridgePlayerResult player : incoming.players) {
+            if (player == null || player.name == null) continue;
+            StatsBridgePlayerResult existing = prior.get(player.name.toLowerCase(Locale.ROOT));
+            returned.add(existing == null ? player : mergePlayer(existing, player));
+        }
+        return StatsBridgeLookupResult.ready(returned);
+    }
+
     private static void put(Map<String, StatsBridgePlayerResult> players, StatsBridgePlayerResult player, boolean fresh) {
         if (player == null || player.name == null) return;
         String key = player.name.toLowerCase(Locale.ROOT);

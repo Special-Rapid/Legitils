@@ -10,12 +10,15 @@ public final class StatsMatchRequestGateTest {
     @Test
     public void waitsForTheGameWorldThenDelaysAndConsumesOneEphemeralMatchId() {
         StatsMatchRequestGate gate = new StatsMatchRequestGate();
+        assertFalse(gate.isPending());
         gate.onBedwarsGameStart(1000L);
         assertNull(gate.consumeDueMatchId(3000L));
         assertTrue(gate.onWorldLoading(4000L));
+        assertTrue(gate.isPending());
         assertNull(gate.consumeDueMatchId(5499L));
         String matchId = gate.consumeDueMatchId(5500L);
         assertNotNull(matchId);
+        assertFalse(gate.isPending());
         assertNull(gate.consumeDueMatchId(5500L));
     }
 

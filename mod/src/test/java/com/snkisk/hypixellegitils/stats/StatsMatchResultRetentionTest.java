@@ -46,6 +46,27 @@ public final class StatsMatchResultRetentionTest {
         assertEquals("Closet Cheater", merged.players.get(0).communityTags.get(0).label);
     }
 
+    @Test
+    public void returnedMemberDisplayOmitsPregamePlayerMissingFromTheCurrentRoster() {
+        StatsBridgePlayerResult disconnected = player("Disconnected", 12, new StatsBridgePlayerResult.CommunityTag(
+            "seraph", "Closet Cheating", "pregame only"
+        ));
+        StatsBridgePlayerResult active = player("Active", 20, new StatsBridgePlayerResult.CommunityTag(
+            "urchin", "Caution", "known in pregame"
+        ));
+        StatsBridgePlayerResult activeFollowup = player("Active", 21);
+
+        StatsBridgeLookupResult displayed = StatsMatchResultRetention.returnedMembersWithRetainedTags(
+            StatsBridgeLookupResult.ready(Arrays.asList(disconnected, active)),
+            StatsBridgeLookupResult.ready(Collections.singletonList(activeFollowup))
+        );
+
+        assertEquals(1, displayed.players.size());
+        assertEquals("Active", displayed.players.get(0).name);
+        assertEquals(1, displayed.players.get(0).communityTags.size());
+        assertEquals("Caution", displayed.players.get(0).communityTags.get(0).label);
+    }
+
     private static StatsBridgePlayerResult player(String name, int stars) {
         return player(name, stars, new StatsBridgePlayerResult.CommunityTag[0]);
     }
