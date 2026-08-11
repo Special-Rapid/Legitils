@@ -13,6 +13,10 @@ public final class WhoStatsRefreshTest {
         assertFalse(WhoStatsRefresh.isWhoCommand("/whom"));
         assertFalse(WhoStatsRefresh.isWhoCommand("who"));
         assertFalse(WhoStatsRefresh.isWhoCommand(".l who"));
+        assertTrue(WhoStatsRefresh.isRosterResponse("ONLINE: Alpha, Beta"));
+        assertTrue(WhoStatsRefresh.isRosterResponse("  online: Alpha  "));
+        assertFalse(WhoStatsRefresh.isRosterResponse("ONLINE:"));
+        assertFalse(WhoStatsRefresh.isRosterResponse("Player is ONLINE: Alpha"));
     }
 
     @Test
@@ -24,8 +28,10 @@ public final class WhoStatsRefreshTest {
         WhoStatsRefresh.PendingRequests requests = new WhoStatsRefresh.PendingRequests(1);
         assertEquals("who_2_1", requests.enqueue(submission, 2L, 1000L));
         assertEquals(null, requests.enqueue(submission, 2L, 1000L));
-        assertEquals(null, requests.consumeDue(1000L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
-        assertEquals("who_2_1", requests.consumeDue(1000L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
+        assertEquals(null, requests.consumeDue(1000L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
+        assertTrue(requests.observeRosterResponse("ONLINE: Alpha, Beta", 1400L));
+        assertEquals(null, requests.consumeDue(1400L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
+        assertEquals("who_2_1", requests.consumeDue(1400L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
         assertEquals(null, requests.consumeDue(3000L));
     }
 
@@ -50,8 +56,17 @@ public final class WhoStatsRefreshTest {
         assertEquals("who_3_1", action.refreshMatchId);
         assertFalse(action.refreshMatchId.equals(postStart));
         assertTrue(requests.enqueue(action.refreshMatchId, 3500L));
-        assertEquals(null, requests.consumeDue(3500L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
-        assertEquals(action.refreshMatchId, requests.consumeDue(3500L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
+        assertTrue(requests.observeRosterResponse("ONLINE: Alpha", 3600L));
+        assertEquals(null, requests.consumeDue(3600L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
+        assertEquals(action.refreshMatchId, requests.consumeDue(3600L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
         assertEquals(null, WhoStatsRefresh.postStartAction(null, action.refreshMatchId));
+    }
+
+    @Test
+    public void fallsBackToTheLatestRosterWhenHypixelDoesNotReplyToWho() {
+        WhoStatsRefresh.PendingRequests requests = new WhoStatsRefresh.PendingRequests(1);
+        assertEquals("who_1_1", requests.enqueue(WhoStatsRefresh.submissionFor("/who"), 1L, 1000L));
+        assertEquals(null, requests.consumeDue(5999L));
+        assertEquals("who_1_1", requests.consumeDue(6000L));
     }
 }

@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 /** Pure parsing and opaque-ID policy for a player-requested or post-start `/who` refresh. */
 public final class WhoStatsRefresh {
     public static final long ROSTER_SETTLE_DELAY_MILLIS = 1500L;
+    private static final long ROSTER_RESPONSE_TIMEOUT_MILLIS = 5000L;
     private WhoStatsRefresh() {
     }
 
@@ -14,6 +15,14 @@ public final class WhoStatsRefresh {
         String trimmed = message.trim();
         if (trimmed.length() < 4 || !trimmed.regionMatches(true, 0, "/who", 0, 4)) return false;
         return trimmed.length() == 4 || Character.isWhitespace(trimmed.charAt(4));
+    }
+
+    /** Hypixel's ordinary `/who` reply. It is used only to settle an already user- or auto-requested refresh. */
+    public static boolean isRosterResponse(String message) {
+        if (message == null) return false;
+        String trimmed = message.trim();
+        return trimmed.regionMatches(true, 0, "ONLINE:", 0, "ONLINE:".length())
+            && trimmed.length() > "ONLINE:".length();
     }
 
     /** Keeps the user-entered outbound command byte-for-byte intact while identifying the local refresh side effect. */
@@ -33,7 +42,7 @@ public final class WhoStatsRefresh {
         return new PostStartAction("/who", whoRefreshMatchId);
     }
 
-    /** A bounded, single-consumer queue that waits for the server's `/who` roster update before collecting Tab. */
+    /** A bounded, single-consumer queue that waits for the server's `/who` reply before collecting Tab. */
     public static final class PendingRequests {
         private final int maximumPending;
         private final ArrayDeque<PendingRequest> requests = new ArrayDeque<PendingRequest>();
@@ -56,7 +65,17 @@ public final class WhoStatsRefresh {
         /** Adds the already-issued automatic `/who` refresh; it must not trigger a second server command. */
         public synchronized boolean enqueue(String matchId, long nowMillis) {
             if (matchId == null || !matchId.startsWith("who_") || nowMillis < 0L || requests.size() >= maximumPending) return false;
-            requests.addLast(new PendingRequest(matchId, nowMillis + ROSTER_SETTLE_DELAY_MILLIS));
+            requests.addLast(new PendingRequest(matchId, nowMillis + ROSTER_RESPONSE_TIMEOUT_MILLIS));
+            return true;
+        }
+
+        /** Arms the oldest outstanding `/who` only after its server roster reply was observed. */
+        public synchronized boolean observeRosterResponse(String message, long nowMillis) {
+            if (!isRosterResponse(message) || nowMillis < 0L) return false;
+            PendingRequest request = requests.peekFirst();
+            if (request == null || request.responseObserved) return false;
+            request.dueAtMillis = nowMillis + ROSTER_SETTLE_DELAY_MILLIS;
+            request.responseObserved = true;
             return true;
         }
 
@@ -72,7 +91,8 @@ public final class WhoStatsRefresh {
 
         private static final class PendingRequest {
             private final String matchId;
-            private final long dueAtMillis;
+            private long dueAtMillis;
+            private boolean responseObserved;
 
             private PendingRequest(String matchId, long dueAtMillis) {
                 this.matchId = matchId;

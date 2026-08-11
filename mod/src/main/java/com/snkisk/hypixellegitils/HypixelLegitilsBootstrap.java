@@ -391,6 +391,14 @@ public final class HypixelLegitilsBootstrap {
         return STARTED.get() ? PENDING_WHO_STATS_REFRESHES.consumeDue(nowMillis) : null;
     }
 
+    /** Uses a server-issued `/who` reply only to settle an already-authorized local refresh. */
+    public static boolean onWhoRosterResponse(String message, long nowMillis) {
+        if (!STARTED.get() || !statsSettings.enabled) return false;
+        boolean matched = PENDING_WHO_STATS_REFRESHES.observeRosterResponse(message, nowMillis);
+        if (matched) traceStats("who roster response observed; full Stats republish waits for Tab settle");
+        return matched;
+    }
+
     /** Post-start uses this opaque ID for the one automatic `/who` refresh, replacing the old parallel roster request. */
     public static String automaticWhoStatsRefreshMatchId(String postStartMatchId) {
         if (postStartMatchId == null || postStartMatchId.trim().isEmpty()
@@ -940,7 +948,7 @@ public final class HypixelLegitilsBootstrap {
             ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
             ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
             ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
-            ChatFormat.continuation("§7/who: §fserver command + settled full Stats republish §8| §7post-start auto /who: " + state(settings.autoWhoEnabled)),
+            ChatFormat.continuation("§7/who: §fserver response → settled full Stats republish §8| §7post-start auto /who: " + state(settings.autoWhoEnabled)),
             ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
         };
     }
@@ -1187,7 +1195,7 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
         lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
         lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));
-        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who sends normally, then republishes Tab/Chat/Nametag once §8| §7post-start auto /who: " + state(config.statsSettings.autoWhoEnabled)));
+        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who response, then republishes Tab/Chat/Nametag once §8| §7post-start auto /who: " + state(config.statsSettings.autoWhoEnabled)));
         lines.add(ChatFormat.continuation("§7Stats Bridge: " + statsBridgeState()
             + " §8| §7Trace: " + state(statsTraceEnabled)));
         lines.add(ChatFormat.continuation("§7Providers: §fHypixel/Urchin §7Companion Keychain §8| §fSeraph §apublic"));
