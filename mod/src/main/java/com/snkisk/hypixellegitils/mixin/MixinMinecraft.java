@@ -353,6 +353,7 @@ public abstract class MixinMinecraft {
             PotionEffect speed = player.getActivePotionEffect(Potion.moveSpeed);
             hypixelLegitils$SupportState support = hypixelLegitils$supportState(player);
             hypixelLegitils$NearbyMovement nearby = hypixelLegitils$nearbyMovement(frame, frames);
+            hypixelLegitils$NearbyMovement world = hypixelLegitils$worldMovement(frame, frames);
             samples.add(new PlayerSample(
                 frame.playerId,
                 nowMillis,
@@ -377,6 +378,8 @@ public abstract class MixinMinecraft {
                 true,
                 nearby.median,
                 nearby.count,
+                world.median,
+                world.count,
                 support.complete,
                 support.present,
                 player.isInWater() || player.isInLava(),
@@ -441,10 +444,26 @@ public abstract class MixinMinecraft {
         hypixelLegitils$PlayerFrame candidate,
         List<hypixelLegitils$PlayerFrame> frames
     ) {
+        return hypixelLegitils$comparisonMovement(candidate, frames, true);
+    }
+
+    /** Uses every other loaded visible player to distinguish a target-only stall from a global update freeze. */
+    private hypixelLegitils$NearbyMovement hypixelLegitils$worldMovement(
+        hypixelLegitils$PlayerFrame candidate,
+        List<hypixelLegitils$PlayerFrame> frames
+    ) {
+        return hypixelLegitils$comparisonMovement(candidate, frames, false);
+    }
+
+    private hypixelLegitils$NearbyMovement hypixelLegitils$comparisonMovement(
+        hypixelLegitils$PlayerFrame candidate,
+        List<hypixelLegitils$PlayerFrame> frames,
+        boolean nearbyOnly
+    ) {
         List<Double> movement = new ArrayList<Double>();
         for (hypixelLegitils$PlayerFrame other : frames) {
             if (other == candidate || !other.movementKnown) continue;
-            if (hypixelLegitils$distance(candidate.player.posX, candidate.player.posY, candidate.player.posZ,
+            if (!nearbyOnly || hypixelLegitils$distance(candidate.player.posX, candidate.player.posY, candidate.player.posZ,
                 other.player.posX, other.player.posY, other.player.posZ) <= 12.0D) {
                 movement.add(Double.valueOf(other.movement));
             }

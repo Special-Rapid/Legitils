@@ -87,6 +87,17 @@ public class Phase4SignalCheckTest {
     }
 
     @Test
+    public void airStallUsesTheWorldComparatorWhenNoNearPlayerIsMoving() {
+        AirStallSignalCheck check = new AirStallSignalCheck();
+        AirStallSignalCheck.State state = new AirStallSignalCheck.State();
+        for (long tick = 0L; tick < 40L; tick++) {
+            assertNull(check.observe(airWithComparisons(tick, 0.0D, 0.0D, 0, 0.10D, 1), state));
+        }
+        Evidence evidence = check.observe(airWithComparisons(40L, 0.0D, 0.0D, 0, 0.10D, 1), state);
+        assertEquals(DetectorId.AIR_STALL, evidence.detector);
+    }
+
+    @Test
     public void airStallResetsOnObservationDiscontinuity() {
         AirStallSignalCheck check = new AirStallSignalCheck();
         AirStallSignalCheck.State state = new AirStallSignalCheck.State();
@@ -136,7 +147,8 @@ public class Phase4SignalCheckTest {
     }
 
     private static PlayerSample combat(long tick, double x, boolean combat, double nearbyMedian, int nearbyCount) {
-        return sample(tick, x, 70.0D, combat, nearbyMedian, nearbyCount, false, false, false, false, false, false);
+        return sample(tick, x, 70.0D, combat, nearbyMedian, nearbyCount, nearbyMedian, nearbyCount,
+            false, false, false, false, false, false);
     }
 
     private static PlayerSample air(
@@ -164,7 +176,13 @@ public class Phase4SignalCheckTest {
         double nearbyMedian,
         int nearbyCount
     ) {
-        return sample(tick, x, 70.0D, false, nearbyMedian, nearbyCount, supportComplete, supportPresent, inLiquid, onClimbable, riding, onGround);
+        return sample(tick, x, 70.0D, false, nearbyMedian, nearbyCount, nearbyMedian, nearbyCount,
+            supportComplete, supportPresent, inLiquid, onClimbable, riding, onGround);
+    }
+
+    private static PlayerSample airWithComparisons(long tick, double x, double nearbyMedian, int nearbyCount, double worldMedian, int worldCount) {
+        return sample(tick, x, 70.0D, false, nearbyMedian, nearbyCount, worldMedian, worldCount,
+            true, false, false, false, false, false);
     }
 
     private static PlayerSample sample(
@@ -174,6 +192,8 @@ public class Phase4SignalCheckTest {
         boolean combat,
         double nearbyMedian,
         int nearbyCount,
+        double worldMedian,
+        int worldCount,
         boolean supportComplete,
         boolean supportPresent,
         boolean inLiquid,
@@ -185,7 +205,7 @@ public class Phase4SignalCheckTest {
             PLAYER, tick * 50L, tick, x, y, 0.0D,
             false, false, false, false, false, false, false, onGround, riding,
             -1, 0.0F, combat, false, false, true,
-            nearbyMedian, nearbyCount, supportComplete, supportPresent, inLiquid, onClimbable
+            nearbyMedian, nearbyCount, worldMedian, worldCount, supportComplete, supportPresent, inLiquid, onClimbable
         );
     }
 

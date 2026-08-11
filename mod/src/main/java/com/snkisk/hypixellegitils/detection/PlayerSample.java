@@ -36,6 +36,10 @@ public final class PlayerSample {
     public final double nearbyMovementMedian;
     /** Number of nearby visible players contributing to {@link #nearbyMovementMedian}. */
     public final int nearbyMovementCount;
+    /** Median one-tick movement of every other loaded visible player in this world, or zero when unavailable. */
+    public final double worldMovementMedian;
+    /** Number of loaded visible players contributing to {@link #worldMovementMedian}. */
+    public final int worldMovementCount;
     /** True only when the adapter fully loaded the conservative support probe. */
     public final boolean supportStateComplete;
     /** A loaded non-air block could support the visible player. */
@@ -92,6 +96,8 @@ public final class PlayerSample {
             reliable,
             0.0D,
             0,
+            0.0D,
+            0,
             false,
             false,
             false,
@@ -127,6 +133,8 @@ public final class PlayerSample {
         boolean reliable,
         double nearbyMovementMedian,
         int nearbyMovementCount,
+        double worldMovementMedian,
+        int worldMovementCount,
         boolean supportStateComplete,
         boolean supportPresent,
         boolean inLiquid,
@@ -134,6 +142,7 @@ public final class PlayerSample {
     ) {
         if (playerId == null || observedAtMillis < 0L || worldTick < 0L || !finite(x) || !finite(y) || !finite(z)
             || !finite(nearbyMovementMedian) || nearbyMovementMedian < 0.0D || nearbyMovementCount < 0
+            || !finite(worldMovementMedian) || worldMovementMedian < 0.0D || worldMovementCount < 0
             || Float.isNaN(pitch) || Float.isInfinite(pitch)) {
             throw new IllegalArgumentException("Player sample requires finite visible state");
         }
@@ -160,6 +169,8 @@ public final class PlayerSample {
         this.reliable = reliable;
         this.nearbyMovementMedian = nearbyMovementMedian;
         this.nearbyMovementCount = nearbyMovementCount;
+        this.worldMovementMedian = worldMovementMedian;
+        this.worldMovementCount = worldMovementCount;
         this.supportStateComplete = supportStateComplete;
         this.supportPresent = supportPresent;
         this.inLiquid = inLiquid;

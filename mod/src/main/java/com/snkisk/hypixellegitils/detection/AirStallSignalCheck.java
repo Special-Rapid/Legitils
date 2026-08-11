@@ -12,7 +12,7 @@ import com.snkisk.hypixellegitils.evidence.Evidence;
 final class AirStallSignalCheck {
     private static final int MIN_STATIONARY_TICKS = 40;
     private static final double STATIONARY_DISTANCE = 0.015D;
-    private static final double MIN_NEARBY_MEDIAN_MOVEMENT = 0.02D;
+    private static final double MIN_WORLD_MEDIAN_MOVEMENT = 0.02D;
 
     Evidence observe(PlayerSample sample, State state) {
         if (!isEligible(sample) || state.hasPrevious && sample.worldTick != state.previousWorldTick + 1L) {
@@ -41,11 +41,11 @@ final class AirStallSignalCheck {
             && !sample.riding
             && !sample.inLiquid
             && !sample.onClimbable
-            // A remote F3+T-like target remains eligible, but only when at
-            // least one nearby visible player is still updating normally.
-            // Otherwise a broad remote-update stall is indistinguishable.
-            && sample.nearbyMovementCount > 0
-            && sample.nearbyMovementMedian >= MIN_NEARBY_MEDIAN_MOVEMENT;
+            // Any other loaded visible player moving proves this client is
+            // still receiving world updates; no arbitrary distance cutoff is
+            // needed for that global-freeze guard.
+            && sample.worldMovementCount > 0
+            && sample.worldMovementMedian >= MIN_WORLD_MEDIAN_MOVEMENT;
     }
 
     private static double distance(double x, double y, double z, double otherX, double otherY, double otherZ) {

@@ -557,7 +557,7 @@ public class ObservationCoordinatorTest {
             player, worldTick * 50L, worldTick, 0.0D, 70.0D, 0.0D,
             false, false, false, false, false, false, false, false, false,
             -1, 0.0F, false, false, false, true,
-            0.10D, 1, true, false, false, false
+            0.10D, 1, 0.10D, 1, true, false, false, false
         );
     }
 
