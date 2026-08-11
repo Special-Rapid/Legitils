@@ -10,6 +10,7 @@ import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
+import com.snkisk.hypixellegitils.stats.StatsRosterReconciliation;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
@@ -237,14 +238,52 @@ public abstract class MixinMinecraft {
         WhoStatsRefresh.Refresh requestedWhoRefresh = HypixelLegitilsBootstrap.consumeDueWhoStatsRefresh(hypixelLegitils$frameNowMillis);
         if (requestedWhoRefresh != null) {
             hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, requestedWhoRefresh, "who refresh");
+            return;
         }
-        if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) return;
+        if (!HypixelLegitilsBootstrap.isStatsRosterDue(hypixelLegitils$frameNowMillis)) {
+            hypixelLegitils$reconcileVisibleStatsRoster(handler, gameMode);
+            return;
+        }
         String postStartMatchId = HypixelLegitilsBootstrap.consumeDueStatsMatchId(hypixelLegitils$frameNowMillis);
         String automaticWhoRefresh = HypixelLegitilsBootstrap.automaticWhoStatsRefreshMatchId(postStartMatchId);
         WhoStatsRefresh.PostStartAction action = WhoStatsRefresh.postStartAction(postStartMatchId, automaticWhoRefresh);
         if (action == null || thePlayer == null) return;
         thePlayer.sendChatMessage(action.outboundCommand);
         HypixelLegitilsBootstrap.scheduleAutomaticWhoStatsRefresh(action.refreshMatchId, hypixelLegitils$frameNowMillis);
+    }
+
+    /** Fills only current Tab rows that still lack Stats, independently of a manually typed `/who`. */
+    private void hypixelLegitils$reconcileVisibleStatsRoster(NetHandlerPlayClient handler, BedwarsMode gameMode) {
+        Map<String, StatsBridgeRosterMember> visibleMembers = new LinkedHashMap<String, StatsBridgeRosterMember>();
+        Map<String, String> teamFormattedNames = new LinkedHashMap<String, String>();
+        String localName = thePlayer == null ? null : thePlayer.getName();
+        for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
+            GameProfile profile = info == null ? null : info.getGameProfile();
+            if (profile == null || profile.getName() == null) continue;
+            UUID playerId = profile.getId();
+            if (playerId != null && playerId.equals(hypixelLegitils$selfPlayerId)
+                || localName != null && localName.equalsIgnoreCase(profile.getName())) continue;
+            StatsBridgeRosterMember member = new StatsBridgeRosterMember(
+                profile.getName(), playerId == null || playerId.version() == 1 ? null : playerId.toString()
+            );
+            if (!member.isValid()) continue;
+            String key = member.name.toLowerCase(java.util.Locale.ROOT);
+            visibleMembers.put(key, member);
+            teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatDisplayName(
+                member.name, hypixelLegitils$teamFormattedName(playerId, member.name)
+            ));
+        }
+        StatsRosterReconciliation.Request request = HypixelLegitilsBootstrap.dueStatsRosterReconciliation(
+            hypixelLegitils$frameNowMillis, new ArrayList<StatsBridgeRosterMember>(visibleMembers.values())
+        );
+        if (request == null) return;
+        Map<String, String> requestedNames = new LinkedHashMap<String, String>();
+        for (StatsBridgeRosterMember member : request.players) {
+            String key = member.name.toLowerCase(java.util.Locale.ROOT);
+            String formattedName = teamFormattedNames.get(key);
+            requestedNames.put(key, formattedName == null ? member.name : formattedName);
+        }
+        HypixelLegitilsBootstrap.requestStatsRoster(request.matchId, gameMode, request.players, requestedNames);
     }
 
     /** Client-thread Tab snapshot used by both manual and automatic `/who` refreshes. */

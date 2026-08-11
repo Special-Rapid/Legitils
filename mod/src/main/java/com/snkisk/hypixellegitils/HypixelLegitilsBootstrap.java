@@ -33,6 +33,7 @@ import com.snkisk.hypixellegitils.stats.StatsMatchResultRetention;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.StatsBridgeSession;
 import com.snkisk.hypixellegitils.stats.StatsMatchRequestGate;
+import com.snkisk.hypixellegitils.stats.StatsRosterReconciliation;
 import com.snkisk.hypixellegitils.stats.StatsPresentation;
 import com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult;
 import com.snkisk.hypixellegitils.stats.StatsTabSorter;
@@ -80,6 +81,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile StatsBridgeLookupResult latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
     private static volatile boolean statsTraceEnabled;
     private static final StatsMatchRequestGate STATS_MATCH_REQUEST_GATE = new StatsMatchRequestGate();
+    private static final StatsRosterReconciliation STATS_ROSTER_RECONCILIATION = new StatsRosterReconciliation();
     private static final BedwarsModeTracker BEDWARS_MODE_TRACKER = new BedwarsModeTracker();
     private static final StatsBridgeSession STATS_BRIDGE_SESSION = new StatsBridgeSession();
     private static final Object STATS_BRIDGE_RESULT_LOCK = new Object();
@@ -451,9 +453,22 @@ public final class HypixelLegitilsBootstrap {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
                 traceStats("roster bridge result=" + result.status + " players=" + result.players.size());
-                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames, matchId.startsWith("who_"));
+                boolean reconcile = matchId.startsWith("reconcile_");
+                if (reconcile) STATS_ROSTER_RECONCILIATION.onResponse(matchId, result, System.currentTimeMillis());
+                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames, matchId.startsWith("who_") || reconcile);
             }
         });
+    }
+
+    /** Schedules only currently visible Tab profiles that have no published normalized result yet. */
+    public static StatsRosterReconciliation.Request dueStatsRosterReconciliation(
+        long nowMillis,
+        List<StatsBridgeRosterMember> visiblePlayers
+    ) {
+        if (!STARTED.get() || !statsSettings.enabled) return null;
+        return STATS_ROSTER_RECONCILIATION.dueRequest(
+            nowMillis, STATS_BRIDGE_SESSION.currentGeneration(), visiblePlayers, latestStatsBridgeResult
+        );
     }
 
     /**
@@ -1538,6 +1553,7 @@ public final class HypixelLegitilsBootstrap {
         PREGAME_STATS_CHATTERS.clear();
         PREGAME_STATS_LOOKUP_ATTEMPTS.clear();
         BEDWARS_MODE_TRACKER.reset();
+        STATS_ROSTER_RECONCILIATION.reset();
         PENDING_WHO_STATS_REFRESHES.clear();
         StatsBridgeClient client = statsBridgeClient;
         if (client != null) client.resetForNewWorld();
