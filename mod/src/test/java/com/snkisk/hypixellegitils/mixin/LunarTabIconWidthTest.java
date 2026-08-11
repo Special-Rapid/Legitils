@@ -35,6 +35,14 @@ public final class LunarTabIconWidthTest {
         assertFalse(LunarTabIconWidth.matchesPlayerEntry(playerId, new FakeEntry(UUID.randomUUID())));
     }
 
+    @Test
+    public void placesNewNickAndAlertMarkersInsideTheMeasuredStatsColumn() {
+        assertEquals("", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(false, false));
+        assertEquals(" §c[NICK]", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(true, false));
+        assertEquals(" §e⚠", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(false, true));
+        assertEquals(" §c[NICK] §e⚠", MixinGuiPlayerTabOverlay.hypixelLegitils$statsColumnMarkers(true, true));
+    }
+
     public static final class FakeEntry {
         private final UUID playerId;
 

@@ -47,27 +47,39 @@ public class MixinGuiPlayerTabOverlay {
         if (info == null || info.getGameProfile() == null) return;
         java.util.UUID playerId = info.getGameProfile().getId();
         String renderedName = callbackInfo.getReturnValue();
+        String markers = hypixelLegitils$statsColumnMarkers(
+            HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId),
+            HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)
+        );
+        // Markers can appear after the prior roster snapshot (for example when
+        // a player is blacklisted). Include them before measuring this frame so
+        // the next complete snapshot re-aligns every Stats column immediately.
+        String statsColumnName = renderedName + markers;
         FontRenderer font = Minecraft.getMinecraft().fontRendererObj;
-        int plainRenderedPixelWidth = font == null ? 0 : font.getStringWidth(renderedName);
-        int renderedPixelWidth = LunarTabIconWidth.measuredWidth(this, playerId, font, renderedName, plainRenderedPixelWidth);
+        int plainRenderedPixelWidth = font == null ? 0 : font.getStringWidth(statsColumnName);
+        int renderedPixelWidth = LunarTabIconWidth.measuredWidth(this, playerId, font, statsColumnName, plainRenderedPixelWidth);
         int spacePixelWidth = font == null ? 4 : font.getStringWidth(" ");
         int boldSpacePixelWidth = font == null ? 5 : font.getStringWidth("§l ");
         String starText = HypixelLegitilsBootstrap.statsTabStar(info.getGameProfile().getName(), playerId);
         int starPixelWidth = font == null ? 0 : font.getStringWidth(starText);
         String padding = HypixelLegitilsBootstrap.observeTabStatsName(
-            info.getGameProfile().getName(), renderedName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth,
+            info.getGameProfile().getName(), statsColumnName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth,
             starText, starPixelWidth
         );
-        String suffix = "";
-        if (HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId)) suffix += " §c[NICK]";
-        if (HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
-        suffix += HypixelLegitilsBootstrap.statsTabSuffix(
+        String suffix = HypixelLegitilsBootstrap.statsTabSuffix(
             info.getGameProfile().getName(), playerId,
             HypixelLegitilsBootstrap.statsTabStarPadding(info.getGameProfile().getName(), starText, starPixelWidth)
         );
-        if (suffix.isEmpty()) return;
-        callbackInfo.setReturnValue(renderedName + padding + suffix);
-        HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, suffix);
+        if (markers.isEmpty() && suffix.isEmpty()) return;
+        callbackInfo.setReturnValue(statsColumnName + padding + suffix);
+        HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, markers + suffix);
+    }
+
+    static String hypixelLegitils$statsColumnMarkers(boolean nicked, boolean acceptedAlert) {
+        String markers = "";
+        if (nicked) markers += " §c[NICK]";
+        if (acceptedAlert) markers += " §e⚠";
+        return markers;
     }
 
 }
