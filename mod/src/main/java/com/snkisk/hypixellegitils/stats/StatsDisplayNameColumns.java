@@ -51,14 +51,18 @@ public final class StatsDisplayNameColumns {
         return spacesFor(activeColumnPixelWidth, renderedPixelWidth, activeSpacePixelWidth, activeBoldSpacePixelWidth);
     }
 
-    /** Publishes the complete current roster for the next Tab frame and for automatic Chat output. */
+    /** Publishes a common exactly-paddable width for the next Tab frame and automatic Chat output. */
     public synchronized void finishTabRender() {
         activeRenderedNames.clear();
         activeRenderedNames.putAll(nextRenderedNames);
-        activeColumnPixelWidth = nextColumnPixelWidth;
         activeSpacePixelWidth = nextSpacePixelWidth;
         activeBoldSpacePixelWidth = nextBoldSpacePixelWidth;
-        activeStarPixelWidth = nextStarPixelWidth;
+        activeColumnPixelWidth = alignedColumnWidth(
+            nextColumnPixelWidth, nextRenderedNames, false, activeSpacePixelWidth, activeBoldSpacePixelWidth
+        );
+        activeStarPixelWidth = alignedColumnWidth(
+            nextStarPixelWidth, nextRenderedNames, true, activeSpacePixelWidth, activeBoldSpacePixelWidth
+        );
     }
 
     /** Returns the latest complete Tab field and its dynamic roster padding for automatic Chat. */
@@ -107,6 +111,11 @@ public final class StatsDisplayNameColumns {
         if (missingPixels <= 0) return "";
         int usableSpaceWidth = spacePixelWidth > 0 ? spacePixelWidth : FALLBACK_SPACE_WIDTH;
         int usableBoldSpaceWidth = boldSpacePixelWidth > 0 ? boldSpacePixelWidth : FALLBACK_BOLD_SPACE_WIDTH;
+        String exact = exactSpacesFor(missingPixels, usableSpaceWidth, usableBoldSpaceWidth);
+        if (exact != null) return exact;
+        // A player may change their displayed field mid-frame. Keep the former
+        // non-overlap fallback for that one frame; the next complete roster
+        // chooses a new exactly-paddable shared column below.
         int maximumSpaces = (missingPixels + Math.min(usableSpaceWidth, usableBoldSpaceWidth) - 1)
             / Math.min(usableSpaceWidth, usableBoldSpaceWidth) + 1;
         int bestWidth = Integer.MAX_VALUE;
@@ -121,6 +130,49 @@ public final class StatsDisplayNameColumns {
             normalSpaces = normal;
             boldSpaces = bold;
         }
+        return spaces(normalSpaces, boldSpaces);
+    }
+
+    /** Finds the first common column end that every displayed field can reach exactly with visible spaces. */
+    private static int alignedColumnWidth(
+        int maximumWidth,
+        Map<String, RenderedName> renderedNames,
+        boolean starsOnly,
+        int spacePixelWidth,
+        int boldSpacePixelWidth
+    ) {
+        if (maximumWidth <= 0 || renderedNames.isEmpty()) return 0;
+        int normal = spacePixelWidth > 0 ? spacePixelWidth : FALLBACK_SPACE_WIDTH;
+        int bold = boldSpacePixelWidth > 0 ? boldSpacePixelWidth : FALLBACK_BOLD_SPACE_WIDTH;
+        // With the normal 4px and bold 5px Minecraft spaces every gap >= 12px
+        // is representable, so this bounded search always finds a shared end.
+        for (int candidate = maximumWidth; candidate <= maximumWidth + 12; candidate++) {
+            boolean aligned = true;
+            for (RenderedName rendered : renderedNames.values()) {
+                if (starsOnly && rendered.starText.isEmpty()) continue;
+                int width = starsOnly ? rendered.starPixelWidth : rendered.pixelWidth;
+                if (exactSpacesFor(candidate - width, normal, bold) == null) {
+                    aligned = false;
+                    break;
+                }
+            }
+            if (aligned) return candidate;
+        }
+        return maximumWidth;
+    }
+
+    private static String exactSpacesFor(int missingPixels, int normalSpaceWidth, int boldSpaceWidth) {
+        if (missingPixels < 0) return null;
+        if (missingPixels == 0) return "";
+        for (int normal = 0; normal <= missingPixels / normalSpaceWidth; normal++) {
+            int remainingPixels = missingPixels - normal * normalSpaceWidth;
+            if (remainingPixels < 0 || remainingPixels % boldSpaceWidth != 0) continue;
+            return spaces(normal, remainingPixels / boldSpaceWidth);
+        }
+        return null;
+    }
+
+    private static String spaces(int normalSpaces, int boldSpaces) {
         StringBuilder padding = new StringBuilder(normalSpaces + boldSpaces + 4).append("§r");
         for (int index = 0; index < normalSpaces; index++) padding.append(' ');
         if (boldSpaces > 0) {

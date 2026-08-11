@@ -117,8 +117,22 @@ public final class StatsPresentationTest {
         columns.observeTabName("Jo", "§cR Jo", 21, 4, 5, "", 0);
         columns.observeTabName("Ava", "§aG Ava", 24, 4, 5, "", 0);
         columns.finishTabRender();
-        assertEquals("§cR Jo§r" + spaces(1) + "§r", columns.nameForChat("Jo", "§cR Jo"));
-        assertEquals("§aG Ava", columns.nameForChat("Ava", "§aG Ava"));
+        assertEquals("§cR Jo§r" + spaces(2) + "§r", columns.nameForChat("Jo", "§cR Jo"));
+        assertEquals("§aG Ava§r§l " + "§r", columns.nameForChat("Ava", "§aG Ava"));
+    }
+
+    @Test
+    public void usesOneExactlyReachableEndForNamesAndStarsWithThreePixelDifferences() {
+        StatsDisplayNameColumns columns = new StatsDisplayNameColumns();
+        columns.beginTabRender();
+        columns.observeTabName("Wide", "§cR Wide", 30, 4, 5, "§f[100✫]", 30);
+        columns.observeTabName("Narrow", "§aG Narrow", 27, 4, 5, "§f[101✫]", 27);
+        columns.finishTabRender();
+
+        assertEquals("§cR Wide§r§l " + "§r", columns.nameForChat("Wide", "§cR Wide"));
+        assertEquals("§aG Narrow§r" + spaces(2) + "§r", columns.nameForChat("Narrow", "§aG Narrow"));
+        assertEquals("§r§l §r", columns.starPadding("Wide", "§f[100✫]"));
+        assertEquals("§r" + spaces(2) + "§r", columns.starPadding("Narrow", "§f[101✫]"));
     }
 
     @Test

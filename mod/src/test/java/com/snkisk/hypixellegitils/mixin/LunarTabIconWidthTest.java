@@ -26,4 +26,36 @@ public final class LunarTabIconWidthTest {
         assertFalse(LunarTabIconWidth.supportsBooleanReference(String.class));
         assertTrue(LunarTabIconWidth.supportsBooleanReference(Runnable.class));
     }
+
+    @Test
+    public void recognizesAProfileEntryAsWellAsTheLegacyUuidContext() {
+        UUID playerId = UUID.randomUUID();
+        assertTrue(LunarTabIconWidth.matchesPlayerEntry(playerId, playerId));
+        assertTrue(LunarTabIconWidth.matchesPlayerEntry(playerId, new FakeEntry(playerId)));
+        assertFalse(LunarTabIconWidth.matchesPlayerEntry(playerId, new FakeEntry(UUID.randomUUID())));
+    }
+
+    public static final class FakeEntry {
+        private final UUID playerId;
+
+        public FakeEntry(UUID playerId) {
+            this.playerId = playerId;
+        }
+
+        public FakeProfile getGameProfile() {
+            return new FakeProfile(playerId);
+        }
+    }
+
+    public static final class FakeProfile {
+        private final UUID playerId;
+
+        public FakeProfile(UUID playerId) {
+            this.playerId = playerId;
+        }
+
+        public UUID getId() {
+            return playerId;
+        }
+    }
 }

@@ -24,7 +24,7 @@ public final class LunarTabIconWidth {
             playerField.setAccessible(true);
             Object activePlayer = playerField.get(tabOverlay);
             // Lunar sets this field only while it is about to add the corresponding client-logo.
-            if (!playerId.equals(activePlayer)) return fallbackWidth;
+            if (!matchesPlayerEntry(playerId, activePlayer)) return fallbackWidth;
             Method widthMethod = lunarWidthMethod(tabOverlay.getClass());
             if (widthMethod == null) return fallbackWidth;
             Class<?> referenceType = widthMethod.getParameterTypes()[2];
@@ -44,6 +44,32 @@ public final class LunarTabIconWidth {
 
     static boolean supportsBooleanReference(Class<?> referenceType) {
         return referenceType != null && referenceType.isInterface();
+    }
+
+    /** Lunar versions have stored either a UUID or the current NetworkPlayerInfo entry in this transient field. */
+    static boolean matchesPlayerEntry(UUID playerId, Object activePlayer) {
+        if (playerId == null || activePlayer == null) return false;
+        if (playerId.equals(activePlayer)) return true;
+        UUID direct = identifierFrom(activePlayer, "getId");
+        if (playerId.equals(direct)) return true;
+        try {
+            Method profileMethod = activePlayer.getClass().getMethod("getGameProfile");
+            Object profile = profileMethod.invoke(activePlayer);
+            return playerId.equals(identifierFrom(profile, "getId"));
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static UUID identifierFrom(Object value, String methodName) {
+        if (value == null) return null;
+        try {
+            Method method = value.getClass().getMethod(methodName);
+            Object identifier = method.invoke(value);
+            return identifier instanceof UUID ? (UUID) identifier : null;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return null;
+        }
     }
 
     private static Method lunarWidthMethod(Class<?> type) {
