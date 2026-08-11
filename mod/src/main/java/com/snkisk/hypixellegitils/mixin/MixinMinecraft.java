@@ -234,7 +234,7 @@ public abstract class MixinMinecraft {
             return;
         }
         BedwarsMode gameMode = HypixelLegitilsBootstrap.statsModeFor(BedwarsPreGameState.mode(theWorld));
-        String requestedWhoRefresh = HypixelLegitilsBootstrap.consumePendingWhoStatsRefresh();
+        String requestedWhoRefresh = HypixelLegitilsBootstrap.consumeDueWhoStatsRefresh(hypixelLegitils$frameNowMillis);
         if (requestedWhoRefresh != null) {
             hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, requestedWhoRefresh, "who refresh");
         }
@@ -244,7 +244,7 @@ public abstract class MixinMinecraft {
         WhoStatsRefresh.PostStartAction action = WhoStatsRefresh.postStartAction(postStartMatchId, automaticWhoRefresh);
         if (action == null || thePlayer == null) return;
         thePlayer.sendChatMessage(action.outboundCommand);
-        hypixelLegitils$collectAndRequestStatsRoster(handler, gameMode, action.refreshMatchId, "post-start automatic who");
+        HypixelLegitilsBootstrap.scheduleAutomaticWhoStatsRefresh(action.refreshMatchId, hypixelLegitils$frameNowMillis);
     }
 
     /** Client-thread Tab snapshot used by both manual and automatic `/who` refreshes. */

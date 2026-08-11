@@ -5,6 +5,7 @@ import java.util.ArrayDeque;
 
 /** Pure parsing and opaque-ID policy for a player-requested or post-start `/who` refresh. */
 public final class WhoStatsRefresh {
+    public static final long ROSTER_SETTLE_DELAY_MILLIS = 1500L;
     private WhoStatsRefresh() {
     }
 
@@ -32,33 +33,51 @@ public final class WhoStatsRefresh {
         return new PostStartAction("/who", whoRefreshMatchId);
     }
 
-    /** A bounded, single-consumer local queue; server command delivery is intentionally outside this class. */
+    /** A bounded, single-consumer queue that waits for the server's `/who` roster update before collecting Tab. */
     public static final class PendingRequests {
         private final int maximumPending;
-        private final ArrayDeque<String> matchIds = new ArrayDeque<String>();
+        private final ArrayDeque<PendingRequest> requests = new ArrayDeque<PendingRequest>();
         private long nextSequence;
 
         public PendingRequests(int maximumPending) {
             this.maximumPending = maximumPending;
         }
 
-        public synchronized String enqueue(Submission submission, long sessionGeneration) {
-            if (submission == null || !submission.shouldRefresh || matchIds.size() >= maximumPending) return null;
+        public synchronized String enqueue(Submission submission, long sessionGeneration, long nowMillis) {
+            if (submission == null || !submission.shouldRefresh) return null;
             String matchId = matchId(sessionGeneration, ++nextSequence);
-            matchIds.addLast(matchId);
-            return matchId;
+            return enqueue(matchId, nowMillis) ? matchId : null;
         }
 
         public synchronized String nextAutomaticMatchId(long sessionGeneration) {
             return matchId(sessionGeneration, ++nextSequence);
         }
 
-        public synchronized String consume() {
-            return matchIds.pollFirst();
+        /** Adds the already-issued automatic `/who` refresh; it must not trigger a second server command. */
+        public synchronized boolean enqueue(String matchId, long nowMillis) {
+            if (matchId == null || !matchId.startsWith("who_") || nowMillis < 0L || requests.size() >= maximumPending) return false;
+            requests.addLast(new PendingRequest(matchId, nowMillis + ROSTER_SETTLE_DELAY_MILLIS));
+            return true;
+        }
+
+        public synchronized String consumeDue(long nowMillis) {
+            PendingRequest next = requests.peekFirst();
+            if (next == null || nowMillis < next.dueAtMillis) return null;
+            return requests.removeFirst().matchId;
         }
 
         public synchronized void clear() {
-            matchIds.clear();
+            requests.clear();
+        }
+
+        private static final class PendingRequest {
+            private final String matchId;
+            private final long dueAtMillis;
+
+            private PendingRequest(String matchId, long dueAtMillis) {
+                this.matchId = matchId;
+                this.dueAtMillis = dueAtMillis;
+            }
         }
     }
 

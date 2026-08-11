@@ -16,16 +16,17 @@ public final class WhoStatsRefreshTest {
     }
 
     @Test
-    public void preservesTheOutgoingServerCommandAndQueuesOneBoundedRefresh() {
+    public void preservesTheOutgoingServerCommandAndQueuesOneSettledFullRepublish() {
         WhoStatsRefresh.Submission submission = WhoStatsRefresh.submissionFor("  /WHO party  ");
         assertEquals("  /WHO party  ", submission.outboundMessage);
         assertTrue(submission.shouldRefresh);
 
         WhoStatsRefresh.PendingRequests requests = new WhoStatsRefresh.PendingRequests(1);
-        assertEquals("who_2_1", requests.enqueue(submission, 2L));
-        assertEquals(null, requests.enqueue(submission, 2L));
-        assertEquals("who_2_1", requests.consume());
-        assertEquals(null, requests.consume());
+        assertEquals("who_2_1", requests.enqueue(submission, 2L, 1000L));
+        assertEquals(null, requests.enqueue(submission, 2L, 1000L));
+        assertEquals(null, requests.consumeDue(1000L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
+        assertEquals("who_2_1", requests.consumeDue(1000L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
+        assertEquals(null, requests.consumeDue(3000L));
     }
 
     @Test
@@ -35,7 +36,7 @@ public final class WhoStatsRefreshTest {
     }
 
     @Test
-    public void postStartGateProducesOneAutomaticWhoRefreshRatherThanTwoRosterRequests() {
+    public void postStartGateProducesOneAutomaticWhoRefreshThenOneSettledFullRepublish() {
         StatsMatchRequestGate gate = new StatsMatchRequestGate();
         gate.onBedwarsGameStart(1000L);
         assertTrue(gate.onWorldLoading(2000L));
@@ -48,6 +49,9 @@ public final class WhoStatsRefreshTest {
         assertEquals("/who", action.outboundCommand);
         assertEquals("who_3_1", action.refreshMatchId);
         assertFalse(action.refreshMatchId.equals(postStart));
+        assertTrue(requests.enqueue(action.refreshMatchId, 3500L));
+        assertEquals(null, requests.consumeDue(3500L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS - 1L));
+        assertEquals(action.refreshMatchId, requests.consumeDue(3500L + WhoStatsRefresh.ROSTER_SETTLE_DELAY_MILLIS));
         assertEquals(null, WhoStatsRefresh.postStartAction(null, action.refreshMatchId));
     }
 }

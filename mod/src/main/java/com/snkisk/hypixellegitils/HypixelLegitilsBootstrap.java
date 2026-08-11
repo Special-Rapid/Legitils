@@ -378,17 +378,17 @@ public final class HypixelLegitilsBootstrap {
         StatsSettings settings = statsSettings;
         if (!STARTED.get() || !settings.enabled || statsBridgeClient == null) return false;
         long generation = STATS_BRIDGE_SESSION.currentGeneration();
-        if (PENDING_WHO_STATS_REFRESHES.enqueue(submission, generation) == null) {
+        if (PENDING_WHO_STATS_REFRESHES.enqueue(submission, generation, System.currentTimeMillis()) == null) {
             traceStats("who refresh skipped queue limit");
             return false;
         }
-        traceStats("who refresh queued");
+        traceStats("who refresh queued after roster settle");
         return true;
     }
 
-    /** The client-thread roster collector consumes each explicit or automatic `/who` refresh once. */
-    public static String consumePendingWhoStatsRefresh() {
-        return STARTED.get() ? PENDING_WHO_STATS_REFRESHES.consume() : null;
+    /** The client-thread roster collector consumes each settled explicit or automatic `/who` refresh once. */
+    public static String consumeDueWhoStatsRefresh(long nowMillis) {
+        return STARTED.get() ? PENDING_WHO_STATS_REFRESHES.consumeDue(nowMillis) : null;
     }
 
     /** Post-start uses this opaque ID for the one automatic `/who` refresh, replacing the old parallel roster request. */
@@ -396,6 +396,15 @@ public final class HypixelLegitilsBootstrap {
         if (postStartMatchId == null || postStartMatchId.trim().isEmpty()
             || !STARTED.get() || !statsSettings.enabled || !statsSettings.autoWhoEnabled || statsBridgeClient == null) return null;
         return PENDING_WHO_STATS_REFRESHES.nextAutomaticMatchId(STATS_BRIDGE_SESSION.currentGeneration());
+    }
+
+    /** Schedules the full post-start Stats publish flow after an already-sent automatic `/who`. */
+    public static boolean scheduleAutomaticWhoStatsRefresh(String matchId, long nowMillis) {
+        if (!STARTED.get() || !statsSettings.enabled) return false;
+        boolean scheduled = PENDING_WHO_STATS_REFRESHES.enqueue(matchId, nowMillis);
+        if (!scheduled) traceStats("post-start who refresh skipped queue limit");
+        else traceStats("post-start who refresh queued after roster settle");
+        return scheduled;
     }
 
     /** Carries the local visible team formatting only until the normalized Bridge result is presented. */
@@ -931,7 +940,7 @@ public final class HypixelLegitilsBootstrap {
             ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7in Chat, Tab, and Nametag; Chat hover shows the API explanation."),
             ChatFormat.continuation("§7BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"),
             ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"),
-            ChatFormat.continuation("§7/who: §fserver command + fresh local Stats refresh §8| §7post-start auto /who: " + state(settings.autoWhoEnabled)),
+            ChatFormat.continuation("§7/who: §fserver command + settled full Stats republish §8| §7post-start auto /who: " + state(settings.autoWhoEnabled)),
             ChatFormat.continuation("§7API keys stay in the Companion Keychain. §b.l stats <player> §7tests providers.")
         };
     }
@@ -1178,7 +1187,7 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Provider tags: §e[BC] [CC] [CF] [S] [PS] [LS] [A] [B] [AN] [CA] §7Chat/Tab/Nametag §8| §7Chat hover: §aexplanation"));
         lines.add(ChatFormat.continuation("§7Codes: BC Blatant §8| §7CC Closet §8| §7CF Confirmed §8| §7S Sniper §8| §7PS Possible §8| §7LS Legit Sniper"));
         lines.add(ChatFormat.continuation("§7A Account/Alt §8| §7B Bot §8| §7AN Annoying §8| §7CA Caution"));
-        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who sends normally and refreshes once §8| §7post-start auto /who: " + state(config.statsSettings.autoWhoEnabled)));
+        lines.add(ChatFormat.continuation("§7Stats refresh: §f/who sends normally, then republishes Tab/Chat/Nametag once §8| §7post-start auto /who: " + state(config.statsSettings.autoWhoEnabled)));
         lines.add(ChatFormat.continuation("§7Stats Bridge: " + statsBridgeState()
             + " §8| §7Trace: " + state(statsTraceEnabled)));
         lines.add(ChatFormat.continuation("§7Providers: §fHypixel/Urchin §7Companion Keychain §8| §fSeraph §apublic"));
