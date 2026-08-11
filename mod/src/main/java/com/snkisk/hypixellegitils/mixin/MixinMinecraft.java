@@ -5,6 +5,7 @@ import com.snkisk.hypixellegitils.alert.AlertPresentation;
 import com.snkisk.hypixellegitils.alert.FlagMessage;
 import com.snkisk.hypixellegitils.alert.LocalNotice;
 import com.snkisk.hypixellegitils.detection.PlayerSample;
+import com.snkisk.hypixellegitils.detection.PlayerObservationEligibility;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
@@ -39,6 +40,7 @@ import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.scoreboard.ScorePlayerTeam;
+import net.minecraft.world.WorldSettings;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -384,9 +386,11 @@ public abstract class MixinMinecraft {
         List<hypixelLegitils$PlayerFrame> frames = new ArrayList<hypixelLegitils$PlayerFrame>(players.size());
         Map<UUID, hypixelLegitils$VisiblePosition> currentPositions = new HashMap<UUID, hypixelLegitils$VisiblePosition>();
         for (EntityPlayer player : players) {
+            if (player == null) continue;
             UUID playerId = hypixelLegitils$profileId(player);
-            if (player == null || playerId == null
+            if (playerId == null
                 || player == thePlayer && !HypixelLegitilsBootstrap.shouldObserveLocalPlayerForDevelopment()) continue;
+            if (!PlayerObservationEligibility.shouldObserve(player.isSpectator(), hypixelLegitils$networkSpectator(playerId))) continue;
             if (player == thePlayer) HypixelLegitilsBootstrap.onDeveloperSelfPlayerObserved(playerId);
             HypixelLegitilsBootstrap.onObservedPlayerIdentity(
                 playerId,
@@ -452,6 +456,23 @@ public abstract class MixinMinecraft {
         return player instanceof PlayerIdentityAccess
             ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId()
             : null;
+    }
+
+    /** Lunar can expose spectator state only through Tab's NetworkPlayerInfo; use both client-visible sources. */
+    private boolean hypixelLegitils$networkSpectator(UUID playerId) {
+        if (playerId == null) return false;
+        NetHandlerPlayClient handler = ((Minecraft) (Object) this).getNetHandler();
+        NetworkPlayerInfo info = handler == null ? null : handler.getPlayerInfo(playerId);
+        if (info == null && handler != null) {
+            for (NetworkPlayerInfo candidate : handler.getPlayerInfoMap()) {
+                GameProfile profile = candidate == null ? null : candidate.getGameProfile();
+                if (profile != null && playerId.equals(profile.getId())) {
+                    info = candidate;
+                    break;
+                }
+            }
+        }
+        return info != null && info.getGameType() == WorldSettings.GameType.SPECTATOR;
     }
 
     /**

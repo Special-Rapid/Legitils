@@ -2,6 +2,7 @@ package com.snkisk.hypixellegitils.mixin;
 
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
+import com.snkisk.hypixellegitils.detection.PlayerObservationEligibility;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.nick.PregameChatSender;
@@ -24,6 +25,7 @@ import net.minecraft.util.BlockPos;
 import net.minecraft.util.IChatComponent;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.Vec3;
+import net.minecraft.world.WorldSettings;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -98,6 +100,7 @@ public abstract class MixinNetHandlerPlayClient {
             ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId()
             : null;
         if (playerId == null) return;
+        if (!PlayerObservationEligibility.shouldObserve(player.isSpectator(), hypixelLegitils$networkSpectator(playerId))) return;
         IBlockState state = world.getBlockState(position);
         if (state != null && state.getBlock() == Blocks.bed && player.getDistanceSq(position) <= 144.0D) {
             HypixelLegitilsBootstrap.onBedBreakAttempt(
@@ -129,6 +132,23 @@ public abstract class MixinNetHandlerPlayClient {
         Vec3 bedCenter = new Vec3(bedPosition.getX() + 0.5D, bedPosition.getY() + 0.5D, bedPosition.getZ() + 0.5D);
         MovingObjectPosition hit = world.rayTraceBlocks(eye, bedCenter, false, true, false);
         return hit != null && hit.getBlockPos() != null && world.getBlockState(hit.getBlockPos()).getBlock() != Blocks.bed;
+    }
+
+    /** Packet-side checks use the same spectator boundary as frame-based anti-cheat checks. */
+    private boolean hypixelLegitils$networkSpectator(java.util.UUID playerId) {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        NetHandlerPlayClient handler = minecraft == null ? null : minecraft.getNetHandler();
+        NetworkPlayerInfo info = handler == null || playerId == null ? null : handler.getPlayerInfo(playerId);
+        if (info == null && handler != null && playerId != null) {
+            for (NetworkPlayerInfo candidate : handler.getPlayerInfoMap()) {
+                GameProfile profile = candidate == null ? null : candidate.getGameProfile();
+                if (profile != null && playerId.equals(profile.getId())) {
+                    info = candidate;
+                    break;
+                }
+            }
+        }
+        return info != null && info.getGameType() == WorldSettings.GameType.SPECTATOR;
     }
 
     /** A stale remote rotation is ambiguity, not proof: require a broadly plausible Bed-facing direction. */
