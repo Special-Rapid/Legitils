@@ -26,6 +26,31 @@ import static org.junit.Assert.fail;
 
 public class ObservationCoordinatorTest {
     @Test
+    public void actorVisibilityBedNukeExperimentRequiresDeveloperModeAndResetsWhenDeveloperModeTurnsOff() {
+        LegitilsConfig defaults = LegitilsConfig.defaults();
+        ObservationCoordinator coordinator = new ObservationCoordinator(defaults, new LocalAlertSink(defaults.notifications));
+        assertFalse(coordinator.setDevelopmentBedNukeActorVisibilityMode(true));
+
+        LegitilsConfig developmentEnabled = new LegitilsConfig(
+            defaults.schemaVersion, defaults.revision + 1L, defaults.enabledDetectors, defaults.sensitivity,
+            defaults.notifications, defaults.normalCooldownMillis, defaults.airStallCooldownMillis, true,
+            defaults.markerSettings, defaults.nickDetectionSettings, defaults.partyDetectionSettings, defaults.statsSettings
+        );
+        coordinator.applyRuntimeDevelopmentConfig(developmentEnabled);
+        assertTrue(coordinator.setDevelopmentBedNukeActorVisibilityMode(true));
+        assertTrue(coordinator.developmentBedNukeActorVisibilityModeEnabled());
+
+        LegitilsConfig developmentDisabled = new LegitilsConfig(
+            developmentEnabled.schemaVersion, developmentEnabled.revision + 1L, developmentEnabled.enabledDetectors,
+            developmentEnabled.sensitivity, developmentEnabled.notifications, developmentEnabled.normalCooldownMillis,
+            developmentEnabled.airStallCooldownMillis, false, developmentEnabled.markerSettings,
+            developmentEnabled.nickDetectionSettings, developmentEnabled.partyDetectionSettings, developmentEnabled.statsSettings
+        );
+        coordinator.applyRuntimeDevelopmentConfig(developmentDisabled);
+        assertFalse(coordinator.developmentBedNukeActorVisibilityModeEnabled());
+    }
+
+    @Test
     public void suppressesEvidenceUntilAWorldTransitionHasAStableObservation() {
         LegitilsConfig config = noSlowEnabledConfig();
         ObservationCoordinator coordinator = new ObservationCoordinator(config, new LocalAlertSink(config.notifications));

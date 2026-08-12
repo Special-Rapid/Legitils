@@ -18,6 +18,7 @@ public final class BedNukeAttributionGate {
     private static final int MAXIMUM_PENDING = 16;
     private final List<Attempt> attempts = new ArrayList<Attempt>();
     private final List<Destruction> destructions = new ArrayList<Destruction>();
+    private final List<Long> observedBedRemovals = new ArrayList<Long>();
     private Evidence structuralAnomaly;
 
     /** Records a real remote Bed-targeting animation, never a nearby-player guess. */
@@ -34,6 +35,17 @@ public final class BedNukeAttributionGate {
         prune(nowMillis);
         if (destructions.size() >= MAXIMUM_PENDING) destructions.remove(0);
         destructions.add(new Destruction(normalized(serverName), nowMillis));
+    }
+
+    /**
+     * Records a completed Bed removal from server-applied world state. This has
+     * no actor identity by itself, so production never uses it for attribution.
+     */
+    public void observeBedRemoval(long nowMillis) {
+        if (nowMillis < 0L) return;
+        prune(nowMillis);
+        if (observedBedRemovals.size() >= MAXIMUM_PENDING) observedBedRemovals.remove(0);
+        observedBedRemovals.add(Long.valueOf(nowMillis));
     }
 
     /** Holds the one-shot geometry finding until its chat and break-animation evidence can be matched. */
@@ -53,7 +65,36 @@ public final class BedNukeAttributionGate {
      * Production still requires all three independently observed facts before identifying a player.
      */
     public Evidence evaluate(long nowMillis, boolean developmentMode) {
+        return evaluate(nowMillis, developmentMode, false);
+    }
+
+    /**
+     * The actor-visibility path is an explicitly opt-in development experiment.
+     * It confirms a real server Bed removal plus an obstructed, aimed remote
+     * attempt, but deliberately does not change the production three-signal rule.
+     */
+    public Evidence evaluate(long nowMillis, boolean developmentMode, boolean developmentActorVisibilityMode) {
         prune(nowMillis);
+        if (developmentMode && developmentActorVisibilityMode) {
+            for (Iterator<Long> removalIterator = observedBedRemovals.iterator(); removalIterator.hasNext();) {
+                long removalMillis = removalIterator.next().longValue();
+                for (Iterator<Attempt> attemptIterator = attempts.iterator(); attemptIterator.hasNext();) {
+                    Attempt attempt = attemptIterator.next();
+                    if (!attempt.obstructed || !closeInTime(removalMillis, attempt.observedAtMillis)) continue;
+                    removalIterator.remove();
+                    attemptIterator.remove();
+                    structuralAnomaly = null;
+                    return new Evidence(
+                        DetectorId.BED_NUKE,
+                        attempt.playerId,
+                        Confidence.HIGH,
+                        nowMillis,
+                        "development-confirmed wall-obstructed Bed break"
+                    );
+                }
+            }
+            return null;
+        }
         if (structuralAnomaly == null) return null;
         if (developmentMode) {
             for (Iterator<Attempt> attemptIterator = attempts.iterator(); attemptIterator.hasNext();) {
@@ -96,12 +137,14 @@ public final class BedNukeAttributionGate {
     public void reset() {
         attempts.clear();
         destructions.clear();
+        observedBedRemovals.clear();
         structuralAnomaly = null;
     }
 
     private void prune(long nowMillis) {
         pruneAttempts(nowMillis);
         pruneDestructions(nowMillis);
+        pruneBedRemovals(nowMillis);
         if (structuralAnomaly != null && isExpired(structuralAnomaly.observedAtMillis, nowMillis)) structuralAnomaly = null;
     }
 
@@ -114,6 +157,12 @@ public final class BedNukeAttributionGate {
     private void pruneDestructions(long nowMillis) {
         for (Iterator<Destruction> iterator = destructions.iterator(); iterator.hasNext();) {
             if (isExpired(iterator.next().observedAtMillis, nowMillis)) iterator.remove();
+        }
+    }
+
+    private void pruneBedRemovals(long nowMillis) {
+        for (Iterator<Long> iterator = observedBedRemovals.iterator(); iterator.hasNext();) {
+            if (isExpired(iterator.next().longValue(), nowMillis)) iterator.remove();
         }
     }
 

@@ -67,6 +67,28 @@ public class BedNukeAttributionGateTest {
         assertNull(gate.evaluate(201L, true));
     }
 
+    @Test
+    public void actorVisibilityDevelopmentModeRequiresARealBedRemovalInsteadOfTheSealedVolume() {
+        BedNukeAttributionGate gate = new BedNukeAttributionGate();
+        UUID playerId = UUID.randomUUID();
+        gate.observeBedAttempt(playerId, "Developer", true, 100L);
+        assertNull(gate.evaluate(101L, true, true));
+
+        gate.observeBedRemoval(200L);
+        Evidence evidence = gate.evaluate(201L, true, true);
+        assertEquals(DetectorId.BED_NUKE, evidence.detector);
+        assertEquals(playerId, evidence.playerId);
+        assertEquals("development-confirmed wall-obstructed Bed break", evidence.observation);
+    }
+
+    @Test
+    public void actorVisibilityDevelopmentModeStillRejectsAnUnobstructedBreak() {
+        BedNukeAttributionGate gate = new BedNukeAttributionGate();
+        gate.observeBedAttempt(UUID.randomUUID(), "Developer", false, 100L);
+        gate.observeBedRemoval(200L);
+        assertNull(gate.evaluate(201L, true, true));
+    }
+
     private static Evidence structuralAnomaly(long nowMillis) {
         return new Evidence(DetectorId.BED_NUKE, null, Confidence.HIGH, nowMillis, "sealed defense");
     }

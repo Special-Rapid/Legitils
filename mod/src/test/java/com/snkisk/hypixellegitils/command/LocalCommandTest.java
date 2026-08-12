@@ -50,6 +50,7 @@ public class LocalCommandTest {
         assertTrue(contains(lines, ".l nickdetect on/off"));
         assertTrue(contains(lines, ".l partydetect on/off"));
         assertTrue(contains(lines, ".l dev on/off"));
+        assertTrue(contains(lines, ".l dev bednuke actor on/off"));
         assertTrue(contains(lines, ".l notify"));
         assertTrue(contains(lines, ".l blacklist|marker add/remove"));
         assertTrue(contains(lines, "blacklist|marker status/list"));
@@ -129,6 +130,9 @@ public class LocalCommandTest {
         LocalCommand.Request dev = LocalCommand.requestForUserInput(".l dev on", true);
         assertEquals(LocalCommand.Kind.DEV_SET_ENABLED, dev.kind);
         assertTrue(dev.enabled);
+        LocalCommand.Request devBedNukeActor = LocalCommand.requestForUserInput(".l dev bednuke actor on", true);
+        assertEquals(LocalCommand.Kind.DEV_BED_NUKE_ACTOR_SET, devBedNukeActor.kind);
+        assertTrue(devBedNukeActor.enabled);
         assertEquals(LocalCommand.Kind.USAGE, LocalCommand.requestForUserInput(".l dev log on", true).kind);
         LocalCommand.Request notify = LocalCommand.requestForUserInput(".l notify actionbar on", true);
         assertEquals(LocalCommand.Kind.NOTIFICATION_SET_ENABLED, notify.kind);

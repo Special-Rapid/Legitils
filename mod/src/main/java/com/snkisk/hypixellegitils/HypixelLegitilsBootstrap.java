@@ -73,6 +73,7 @@ public final class HypixelLegitilsBootstrap {
     private static volatile StatsSettings statsSettings = StatsSettings.defaults();
     private static final StatsDisplayNameColumns STATS_DISPLAY_NAME_COLUMNS = new StatsDisplayNameColumns();
     private static volatile boolean developerSelfDetectionEnabled;
+    private static volatile boolean developmentBedNukeActorVisibilityMode;
     private static volatile UUID developmentSelfPlayerId;
     private static volatile boolean developmentFrameGlobalLag = true;
     private static final long EXTERNAL_CONFIG_POLL_INTERVAL_MILLIS = 500L;
@@ -201,6 +202,7 @@ public final class HypixelLegitilsBootstrap {
         partyDetectionEnabled = reload.config.partyDetectionSettings.enabled;
         statsSettings = reload.config.statsSettings;
         developerSelfDetectionEnabled = reload.config.debugEnabled;
+        if (!developerSelfDetectionEnabled) developmentBedNukeActorVisibilityMode = false;
         enqueueCompanionSettingsApplied(reload.config.revision);
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
@@ -876,6 +878,7 @@ public final class HypixelLegitilsBootstrap {
         if (request.kind == LocalCommand.Kind.NICK_DETECT_SET_ENABLED) return updateNickDetectionSetting(request);
         if (request.kind == LocalCommand.Kind.PARTY_DETECT_SET_ENABLED) return updatePartyDetectionSetting(request);
         if (request.kind == LocalCommand.Kind.DEV_SET_ENABLED) return updateDeveloperSetting(request);
+        if (request.kind == LocalCommand.Kind.DEV_BED_NUKE_ACTOR_SET) return updateDevelopmentBedNukeActorVisibilitySetting(request, active);
         if (request.kind == LocalCommand.Kind.NOTIFICATION_SET_ENABLED) return updateNotificationSetting(request);
         if (request.kind == LocalCommand.Kind.MARKER_STATUS) {
             return blacklistStatusLines(detectorSettings.savedConfig(), active);
@@ -1197,6 +1200,8 @@ public final class HypixelLegitilsBootstrap {
             developerSelfDetectionEnabled = update.config.debugEnabled;
             if (!developerSelfDetectionEnabled) {
                 developmentSelfPlayerId = null;
+                developmentBedNukeActorVisibilityMode = false;
+                active.setDevelopmentBedNukeActorVisibilityMode(false);
                 resetPartyDetectors();
             }
             return new String[] {
@@ -1211,6 +1216,20 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
+    private static String[] updateDevelopmentBedNukeActorVisibilitySetting(LocalCommand.Request request, ObservationCoordinator active) {
+        if (!developerSelfDetectionEnabled) {
+            return new String[] { ChatFormat.line("§cEnable developer mode first with §e.l dev on§c.") };
+        }
+        if (!active.setDevelopmentBedNukeActorVisibilityMode(request.enabled)) {
+            return new String[] { ChatFormat.line("§cDeveloper BedNuke mode unavailable.") };
+        }
+        developmentBedNukeActorVisibilityMode = active.developmentBedNukeActorVisibilityModeEnabled();
+        return new String[] {
+            ChatFormat.line("§fDeveloper BedNuke actor mode " + (developmentBedNukeActorVisibilityMode ? "§aenabled" : "§cdisabled")),
+            ChatFormat.continuation("§7Dev only: requires a server Bed removal plus a close, aimed, wall-obstructed remote break.")
+        };
+    }
+
     private static String[] overallStatusLines(LegitilsConfig config, ObservationCoordinator active) {
         String nickState = config.nickDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
         String partyState = config.partyDetectionSettings.enabled ? "§aenabled" : "§cdisabled";
@@ -1220,6 +1239,9 @@ public final class HypixelLegitilsBootstrap {
         lines.add(ChatFormat.continuation("§7Nick detect: " + nickState));
         lines.add(ChatFormat.continuation("§7Party detect: " + partyState));
         lines.add(ChatFormat.continuation("§7Developer self-detect: " + (config.debugEnabled ? "§aenabled" : "§cdisabled")));
+        lines.add(ChatFormat.continuation("§7Developer BedNuke actor mode: "
+            + (active.developmentBedNukeActorVisibilityModeEnabled() ? "§aenabled" : "§coff")
+            + " §8| §7server Bed removal + wall/aim attempt"));
         lines.add(ChatFormat.continuation("§7Auto blacklist: " + (config.markerSettings.enabled ? "§aenabled" : "§cdisabled")
             + " §8| §7threshold: §e" + config.markerSettings.threshold + " §7accepted flags"));
         lines.add(ChatFormat.continuation("§7Blacklist: §e" + active.blacklistedMarkerCount() + " §7active §8/ §e" + active.markerHistoryCount()
@@ -1472,6 +1494,12 @@ public final class HypixelLegitilsBootstrap {
     public static void onBedBlockState(BedNukeSignalCheck.BlockPosition position, BedNukeSignalCheck.BlockKind state, long nowMillis) {
         ObservationCoordinator active = coordinator;
         if (STARTED.get() && active != null) active.observeBedBlockState(position, state, nowMillis);
+    }
+
+    /** Records a completed Bed removal without assigning it to a player. */
+    public static void onBedRemoval(long nowMillis) {
+        ObservationCoordinator active = coordinator;
+        if (STARTED.get() && active != null) active.observeBedRemoval(nowMillis);
     }
 
     /** Receives a remote player animation aimed at a Bed, never an inferred nearby-player identity. */

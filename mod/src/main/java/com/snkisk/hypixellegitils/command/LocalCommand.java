@@ -40,6 +40,7 @@ public final class LocalCommand {
         ChatFormat.continuation("§c.l nickdetect on/off §8— §ftoggle Nick detection"),
         ChatFormat.continuation("§b.l partydetect on/off §8— §ftoggle Party Detector"),
         ChatFormat.continuation("§6.l dev on/off §8— §finclude yourself in anti-cheat checks"),
+        ChatFormat.continuation("§6.l dev bednuke actor on/off §8— §fdev-only wall/aim BedNuke mode"),
         ChatFormat.continuation("§d.l notify <chat|actionbar|sound> on/off §8— §falert delivery"),
         ChatFormat.continuation("§e.l blacklist|marker on/off §8— §fenable auto Blacklist"),
         ChatFormat.continuation("§e.l blacklist|marker threshold <2-10> §8— §fauto-add threshold"),
@@ -148,6 +149,10 @@ public final class LocalCommand {
             if (parts.length == 3 && ("on".equals(parts[2]) || "off".equals(parts[2]))) {
                 return new Request(Kind.DEV_SET_ENABLED, null, false, "on".equals(parts[2]));
             }
+            if (parts.length == 5 && "bednuke".equals(parts[2]) && "actor".equals(parts[3])
+                && ("on".equals(parts[4]) || "off".equals(parts[4]))) {
+                return new Request(Kind.DEV_BED_NUKE_ACTOR_SET, null, false, "on".equals(parts[4]));
+            }
         }
         if (input.startsWith(PREFIX + " notify ")) {
             String[] parts = input.split(" ");
@@ -232,6 +237,7 @@ public final class LocalCommand {
         NICK_DETECT_SET_ENABLED,
         PARTY_DETECT_SET_ENABLED,
         DEV_SET_ENABLED,
+        DEV_BED_NUKE_ACTOR_SET,
         NOTIFICATION_SET_ENABLED,
         MARKER_STATUS,
         MARKER_SET_ENABLED,

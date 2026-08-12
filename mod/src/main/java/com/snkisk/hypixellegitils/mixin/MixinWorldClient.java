@@ -24,6 +24,7 @@ public abstract class MixinWorldClient {
     private static final int HORIZONTAL_RADIUS = 3;
     private static final int VERTICAL_RADIUS = 2;
     private BlockPos hypixelLegitils$pendingOtherBedHalf;
+    private final Map<BlockPos, BlockPos> hypixelLegitils$pendingBedRemovalPairs = new HashMap<BlockPos, BlockPos>();
 
     @Inject(method = "invalidateRegionAndSetBlock", at = @At("HEAD"))
     private void hypixelLegitils$beforeServerBlockState(
@@ -36,9 +37,11 @@ public abstract class MixinWorldClient {
         if (currentState.getBlock() != Blocks.bed || nextState.getBlock() == Blocks.bed) return;
         BlockPos otherHalf = hypixelLegitils$otherBedHalf(position, currentState);
         if (otherHalf == null) return;
+        if (hypixelLegitils$pendingBedRemovalPairs.size() >= 32) hypixelLegitils$pendingBedRemovalPairs.clear();
+        hypixelLegitils$pendingBedRemovalPairs.put(position, otherHalf);
+        hypixelLegitils$pendingBedRemovalPairs.put(otherHalf, position);
         BedNukeSignalCheck.BedStructure structure = hypixelLegitils$snapshot(position, otherHalf);
-        if (structure == null) return;
-        HypixelLegitilsBootstrap.onBedStructure(structure, System.currentTimeMillis());
+        if (structure != null) HypixelLegitilsBootstrap.onBedStructure(structure, System.currentTimeMillis());
         hypixelLegitils$pendingOtherBedHalf = otherHalf;
     }
 
@@ -59,6 +62,13 @@ public abstract class MixinWorldClient {
             hypixelLegitils$pendingOtherBedHalf = null;
         }
         IBlockState appliedState = hypixelLegitils$world().getBlockState(position);
+        BlockPos pairedHalf = hypixelLegitils$pendingBedRemovalPairs.get(position);
+        if (pairedHalf != null && appliedState.getBlock() != Blocks.bed
+            && hypixelLegitils$world().getBlockState(pairedHalf).getBlock() != Blocks.bed) {
+            hypixelLegitils$pendingBedRemovalPairs.remove(position);
+            hypixelLegitils$pendingBedRemovalPairs.remove(pairedHalf);
+            HypixelLegitilsBootstrap.onBedRemoval(nowMillis);
+        }
         if (appliedState != null && appliedState.getBlock().getMaterial() == net.minecraft.block.material.Material.air) {
             HypixelLegitilsBootstrap.onNoBreakDelayBlockRemoval(
                 new NoBreakDelaySignalCheck.BlockPosition(position.getX(), position.getY(), position.getZ()),
@@ -71,6 +81,7 @@ public abstract class MixinWorldClient {
     /** Any chunk replacement invalidates a previously complete local cuboid. */
     @Inject(method = "doPreChunk", at = @At("HEAD"))
     private void hypixelLegitils$beforeChunkTransition(int chunkX, int chunkZ, boolean load, CallbackInfo callbackInfo) {
+        hypixelLegitils$pendingBedRemovalPairs.clear();
         HypixelLegitilsBootstrap.onChunkTransition();
     }
 
@@ -91,6 +102,7 @@ public abstract class MixinWorldClient {
         CallbackInfo callbackInfo
     ) {
         if (minimumX != maximumX || minimumY != maximumY || minimumZ != maximumZ) {
+            hypixelLegitils$pendingBedRemovalPairs.clear();
             HypixelLegitilsBootstrap.onChunkTransition();
         }
     }

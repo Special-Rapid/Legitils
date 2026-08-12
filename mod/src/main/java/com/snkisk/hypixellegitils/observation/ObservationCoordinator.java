@@ -37,6 +37,7 @@ public final class ObservationCoordinator {
     private final AlertSink alertSink;
     private final MarkerHistoryPersistence markerHistoryPersistence;
     private UUID developmentSelfPlayerId;
+    private boolean developmentBedNukeActorVisibilityMode;
     private boolean globalLag;
     private boolean worldTransition;
 
@@ -116,7 +117,10 @@ public final class ObservationCoordinator {
         }
         if (config.debugEnabled == updated.debugEnabled) return;
         config = updated;
-        if (!config.debugEnabled) developmentSelfPlayerId = null;
+        if (!config.debugEnabled) {
+            developmentSelfPlayerId = null;
+            disableDevelopmentBedNukeActorVisibilityMode();
+        }
     }
 
     private static boolean sameExceptDevelopment(LegitilsConfig left, LegitilsConfig right) {
@@ -192,7 +196,10 @@ public final class ObservationCoordinator {
             noBreakDelay.reset();
         }
         if (config.markerSettings.enabled) promoteAutoBlacklists(System.currentTimeMillis());
-        if (!config.debugEnabled) developmentSelfPlayerId = null;
+        if (!config.debugEnabled) {
+            developmentSelfPlayerId = null;
+            disableDevelopmentBedNukeActorVisibilityMode();
+        }
     }
 
     private static boolean sameExceptNotifications(LegitilsConfig left, LegitilsConfig right) {
@@ -241,6 +248,25 @@ public final class ObservationCoordinator {
     /** Development samples may alert locally but must never create persistent Blacklist history. */
     public synchronized void setDevelopmentSelfPlayerId(UUID playerId) {
         developmentSelfPlayerId = playerId;
+    }
+
+    /** Runtime-only experiment; it cannot be enabled outside explicit development mode. */
+    public synchronized boolean setDevelopmentBedNukeActorVisibilityMode(boolean enabled) {
+        if (enabled && !config.debugEnabled) return false;
+        if (developmentBedNukeActorVisibilityMode == enabled) return true;
+        developmentBedNukeActorVisibilityMode = enabled;
+        bedNukeAttribution.reset();
+        return true;
+    }
+
+    public synchronized boolean developmentBedNukeActorVisibilityModeEnabled() {
+        return config.debugEnabled && developmentBedNukeActorVisibilityMode;
+    }
+
+    private void disableDevelopmentBedNukeActorVisibilityMode() {
+        if (!developmentBedNukeActorVisibilityMode) return;
+        developmentBedNukeActorVisibilityMode = false;
+        bedNukeAttribution.reset();
     }
 
     private boolean isDevelopmentSelfPlayer(UUID playerId) {
@@ -310,7 +336,9 @@ public final class ObservationCoordinator {
         detectionEngine.pruneExpired(nowMillis);
         Evidence bedNukeEvidence = bedNuke.evaluate(nowMillis);
         if (bedNukeEvidence != null) bedNukeAttribution.observeStructuralAnomaly(bedNukeEvidence, nowMillis);
-        Evidence attributedBedNuke = bedNukeAttribution.evaluate(nowMillis, config.debugEnabled);
+        Evidence attributedBedNuke = bedNukeAttribution.evaluate(
+            nowMillis, config.debugEnabled, developmentBedNukeActorVisibilityMode
+        );
         if (attributedBedNuke != null) submit(attributedBedNuke, nowMillis, true);
         return alertSink.presentation(nowMillis);
     }
@@ -323,6 +351,11 @@ public final class ObservationCoordinator {
     /** Adapter entry point for a server-applied state in a registered bed volume. */
     public synchronized void observeBedBlockState(BedNukeSignalCheck.BlockPosition position, BedNukeSignalCheck.BlockKind state, long nowMillis) {
         bedNuke.observeBlockState(position, state, nowMillis);
+    }
+
+    /** Records a complete server-observed Bed removal for the opt-in development experiment. */
+    public synchronized void observeBedRemoval(long nowMillis) {
+        bedNukeAttribution.observeBedRemoval(nowMillis);
     }
 
     /** Records an actor-resolved Bed targeting animation and its physical line obstruction. */
