@@ -47,6 +47,26 @@ public class BedNukeAttributionGateTest {
         assertNull(gate.evaluate(2700L));
     }
 
+    @Test
+    public void developmentModeAttributesTheMatchedObstructedBreakWithoutDestructionChat() {
+        BedNukeAttributionGate gate = new BedNukeAttributionGate();
+        UUID playerId = UUID.randomUUID();
+        gate.observeBedAttempt(playerId, "Developer", true, 100L);
+        gate.observeStructuralAnomaly(structuralAnomaly(200L), 200L);
+
+        Evidence evidence = gate.evaluate(201L, true);
+        assertEquals(DetectorId.BED_NUKE, evidence.detector);
+        assertEquals(playerId, evidence.playerId);
+    }
+
+    @Test
+    public void developmentModeStillRejectsAnUnobstructedBreak() {
+        BedNukeAttributionGate gate = new BedNukeAttributionGate();
+        gate.observeBedAttempt(UUID.randomUUID(), "Developer", false, 100L);
+        gate.observeStructuralAnomaly(structuralAnomaly(200L), 200L);
+        assertNull(gate.evaluate(201L, true));
+    }
+
     private static Evidence structuralAnomaly(long nowMillis) {
         return new Evidence(DetectorId.BED_NUKE, null, Confidence.HIGH, nowMillis, "sealed defense");
     }

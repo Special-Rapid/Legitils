@@ -310,7 +310,7 @@ public final class ObservationCoordinator {
         detectionEngine.pruneExpired(nowMillis);
         Evidence bedNukeEvidence = bedNuke.evaluate(nowMillis);
         if (bedNukeEvidence != null) bedNukeAttribution.observeStructuralAnomaly(bedNukeEvidence, nowMillis);
-        Evidence attributedBedNuke = bedNukeAttribution.evaluate(nowMillis);
+        Evidence attributedBedNuke = bedNukeAttribution.evaluate(nowMillis, config.debugEnabled);
         if (attributedBedNuke != null) submit(attributedBedNuke, nowMillis, true);
         return alertSink.presentation(nowMillis);
     }

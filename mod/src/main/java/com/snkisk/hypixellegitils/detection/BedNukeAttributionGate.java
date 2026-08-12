@@ -45,8 +45,32 @@ public final class BedNukeAttributionGate {
 
     /** Returns attributed evidence only for a matched, physically obstructed break. */
     public Evidence evaluate(long nowMillis) {
+        return evaluate(nowMillis, false);
+    }
+
+    /**
+     * Development mode can verify the detector without waiting for Hypixel's destruction Chat.
+     * Production still requires all three independently observed facts before identifying a player.
+     */
+    public Evidence evaluate(long nowMillis, boolean developmentMode) {
         prune(nowMillis);
         if (structuralAnomaly == null) return null;
+        if (developmentMode) {
+            for (Iterator<Attempt> attemptIterator = attempts.iterator(); attemptIterator.hasNext();) {
+                Attempt attempt = attemptIterator.next();
+                if (!attempt.obstructed || !closeInTime(structuralAnomaly.observedAtMillis, attempt.observedAtMillis)) continue;
+                attemptIterator.remove();
+                structuralAnomaly = null;
+                return new Evidence(
+                    DetectorId.BED_NUKE,
+                    attempt.playerId,
+                    Confidence.HIGH,
+                    nowMillis,
+                    "development-confirmed obstructed Bed break"
+                );
+            }
+            return null;
+        }
         for (Iterator<Destruction> destructionIterator = destructions.iterator(); destructionIterator.hasNext();) {
             Destruction destruction = destructionIterator.next();
             if (!closeInTime(structuralAnomaly.observedAtMillis, destruction.observedAtMillis)) continue;
