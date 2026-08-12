@@ -63,7 +63,10 @@ final class StatsProviderLookup {
 
     private func fetch(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
         let manualLookup = roster.matchID.hasPrefix("manual_")
-        let forceProviderRefresh = manualLookup
+        // `/who` is the user's explicit recovery path after rotating a Hypixel key.
+        // Keep community advisory tags cache-first so a transient provider reply cannot clear them.
+        let forceHypixelRefresh = manualLookup || roster.matchID.hasPrefix("who_")
+        let forceCommunityTagRefresh = manualLookup
         let records = Dictionary(uniqueKeysWithValues: roster.players.map { player in
             (player.name.lowercased(), MutablePlayer(name: player.name, uuid: player.uuid))
         })
@@ -96,7 +99,8 @@ final class StatsProviderLookup {
                 records: records,
                 known: Array(knownByName.values),
                 manualLookup: manualLookup,
-                forceProviderRefresh: forceProviderRefresh,
+                forceHypixelRefresh: forceHypixelRefresh,
+                forceCommunityTagRefresh: forceCommunityTagRefresh,
                 diagnostics: diagnostics,
                 completion: completion
             )
@@ -110,7 +114,8 @@ final class StatsProviderLookup {
         records: [String: MutablePlayer],
         known: [StatsBridgeRosterMember],
         manualLookup: Bool,
-        forceProviderRefresh: Bool,
+        forceHypixelRefresh: Bool,
+        forceCommunityTagRefresh: Bool,
         diagnostics initialDiagnostics: [StatsBridgeCommunityTag],
         completion: @escaping (StatsBridgeRosterResponse) -> Void
     ) {
@@ -125,7 +130,7 @@ final class StatsProviderLookup {
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount), !key.isEmpty {
             for player in known {
-                if !forceProviderRefresh, let cached = hypixelCache.stats(for: player.uuid!, gameMode: roster.gameMode) {
+                if !forceHypixelRefresh, let cached = hypixelCache.stats(for: player.uuid!, gameMode: roster.gameMode) {
                     records[player.name.lowercased()]?.apply(cached)
                     continue
                 }
@@ -150,7 +155,7 @@ final class StatsProviderLookup {
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.urchin.keychainAccount), !key.isEmpty {
             let uncached = known.filter { player in
-                guard !forceProviderRefresh, let uuid = player.uuid,
+                guard !forceCommunityTagRefresh, let uuid = player.uuid,
                       let cached = communityTagCache.tags(for: .urchin, uuid: uuid) else { return true }
                 apply(cached, from: .urchin, to: player, records: records)
                 return false
@@ -183,7 +188,7 @@ final class StatsProviderLookup {
         }
 
         for player in known {
-            if !forceProviderRefresh, let cached = communityTagCache.tags(for: .seraph, uuid: player.uuid!) {
+            if !forceCommunityTagRefresh, let cached = communityTagCache.tags(for: .seraph, uuid: player.uuid!) {
                 apply(cached, from: .seraph, to: player, records: records)
                 continue
             }

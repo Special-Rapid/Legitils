@@ -465,7 +465,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.modeWinStreak, 11)
     }
 
-    func testWhoRefreshUsesPersistentStatsAndCommunityTagCachesWithoutManualDiagnostics() {
+    func testWhoRefreshRevalidatesHypixelWithTheCurrentKeyButKeepsCommunityTagCaches() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let cache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
@@ -515,8 +515,8 @@ final class CompanionConfigurationTests: XCTestCase {
         }
         wait(for: [response], timeout: 2)
 
-        XCTAssertEqual(transport.requestCount, 0)
-        XCTAssertEqual(result?.players.first?.stars, 130)
+        XCTAssertEqual(transport.requestCount, 1)
+        XCTAssertEqual(result?.players.first?.stars, 100)
         XCTAssertEqual(result?.players.first?.communityTags, [
             StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "cached Seraph"),
             StatsBridgeCommunityTag(source: "urchin", label: "Legit Sniper", tooltip: "cached Urchin")
