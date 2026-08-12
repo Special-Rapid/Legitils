@@ -3,6 +3,7 @@ package com.snkisk.hypixellegitils.mixin;
 import com.snkisk.hypixellegitils.HypixelLegitilsBootstrap;
 import com.snkisk.hypixellegitils.detection.NoBreakDelaySignalCheck;
 import com.snkisk.hypixellegitils.detection.PlayerObservationEligibility;
+import com.snkisk.hypixellegitils.detection.BedLineOfSight;
 import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.nick.NickChatSignal;
 import com.snkisk.hypixellegitils.nick.PregameChatSender;
@@ -126,12 +127,26 @@ public abstract class MixinNetHandlerPlayClient {
         ));
     }
 
-    /** Uses the Bed-targeted server animation as intent; this ray only checks physical obstruction. */
+    /** Uses the Bed-targeted server animation as intent; rays only check physical obstruction. */
     private boolean hypixelLegitils$isBedRayObstructed(WorldClient world, EntityPlayer player, BlockPos bedPosition) {
         Vec3 eye = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
-        Vec3 bedCenter = new Vec3(bedPosition.getX() + 0.5D, bedPosition.getY() + 0.5D, bedPosition.getZ() + 0.5D);
-        MovingObjectPosition hit = world.rayTraceBlocks(eye, bedCenter, false, true, false);
-        return hit != null && hit.getBlockPos() != null && world.getBlockState(hit.getBlockPos()).getBlock() != Blocks.bed;
+        return !BedLineOfSight.canSeeAnyBedPoint(
+            new BedLineOfSight.Point(eye.xCoord, eye.yCoord, eye.zCoord),
+            new BedLineOfSight.BlockPosition(bedPosition.getX(), bedPosition.getY(), bedPosition.getZ()),
+            new BedLineOfSight.RayTester() {
+                @Override
+                public boolean reachesBed(BedLineOfSight.Point eyePoint, BedLineOfSight.Point bedPoint) {
+                    MovingObjectPosition hit = world.rayTraceBlocks(
+                        new Vec3(eyePoint.x, eyePoint.y, eyePoint.z),
+                        new Vec3(bedPoint.x, bedPoint.y, bedPoint.z),
+                        false,
+                        true,
+                        false
+                    );
+                    return hit == null || (hit.getBlockPos() != null && world.getBlockState(hit.getBlockPos()).getBlock() == Blocks.bed);
+                }
+            }
+        );
     }
 
     /** Packet-side checks use the same spectator boundary as frame-based anti-cheat checks. */
