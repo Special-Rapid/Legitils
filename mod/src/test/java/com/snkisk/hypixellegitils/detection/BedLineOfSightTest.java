@@ -14,7 +14,7 @@ public final class BedLineOfSightTest {
             @Override
             public boolean reachesBed(BedLineOfSight.Point ignoredEye, BedLineOfSight.Point point) {
                 // Model the screenshot case: only one small exposed Bed edge is visible.
-                return point.x == 4.0625D && point.y == 64.5D && point.z == 6.9375D;
+                return point.x == 4.03125D && point.y == 64.53125D && point.z == 6.96875D;
             }
         }));
     }
@@ -42,7 +42,7 @@ public final class BedLineOfSightTest {
                 @Override
                 public boolean reachesBed(BedLineOfSight.Point eye, BedLineOfSight.Point point) {
                     return point.x > 4D && point.x < 5D
-                        && point.y > 64D && point.y <= 64.5D
+                        && point.y > 64D && point.y < 64.5625D
                         && point.z > 6D && point.z < 7D;
                 }
             }
