@@ -68,10 +68,53 @@ public final class BedLineOfSightTest {
     }
 
     @Test
-    public void nearEyeLatencyAndFinalBedEdgeBlockersAreAmbiguous() {
-        assertTrue(BedLineOfSight.isAmbiguousBlocker(5D, 1.49D));
+    public void finalBedEdgeBlockerIsAmbiguousButMidRayBlockerIsNot() {
         assertTrue(BedLineOfSight.isAmbiguousBlocker(5D, 4.76D));
-        assertFalse(BedLineOfSight.isAmbiguousBlocker(5D, 1.51D));
+        assertFalse(BedLineOfSight.isAmbiguousBlocker(5D, 1.49D));
         assertFalse(BedLineOfSight.isAmbiguousBlocker(5D, 4.74D));
+    }
+
+    @Test
+    public void plausibleMovingNearSideEyePositionCanSeeAGrazingBedEdge() {
+        assertTrue(BedLineOfSight.canSeeAnyBedPoint(
+            new BedLineOfSight.Point(0D, 65D, 0D),
+            new BedLineOfSight.BlockPosition(4, 64, 0),
+            new BedLineOfSight.RayTester() {
+                @Override
+                public boolean reachesBed(BedLineOfSight.Point eye, BedLineOfSight.Point point) {
+                    return eye.x > 1.48D && eye.x <= 1.50D
+                        && point.x == 4.015625D && point.z == 0.98046875D;
+                }
+            }
+        ));
+    }
+
+    @Test
+    public void oneOver128FinePassFindsASliverBetweenCoarseSamples() {
+        assertTrue(BedLineOfSight.canSeeAnyBedPoint(
+            new BedLineOfSight.Point(0D, 65D, 0D),
+            new BedLineOfSight.BlockPosition(4, 64, 6),
+            new BedLineOfSight.RayTester() {
+                @Override
+                public boolean reachesBed(BedLineOfSight.Point eye, BedLineOfSight.Point point) {
+                    // 1/256 + 16 / 128 lies between 1/32 coarse sample points.
+                    return point.x == 4.015625D && point.y == 64.12890625D && point.z == 6.12890625D;
+                }
+            }
+        ));
+    }
+
+    @Test
+    public void movementEnvelopeNeverSamplesBeyondTheBedsFarSide() {
+        assertFalse(BedLineOfSight.canSeeAnyBedPoint(
+            new BedLineOfSight.Point(0D, 65D, 0D),
+            new BedLineOfSight.BlockPosition(4, 64, 0),
+            new BedLineOfSight.RayTester() {
+                @Override
+                public boolean reachesBed(BedLineOfSight.Point eye, BedLineOfSight.Point point) {
+                    return eye.x > 4D;
+                }
+            }
+        ));
     }
 }
