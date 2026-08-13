@@ -143,7 +143,13 @@ public abstract class MixinNetHandlerPlayClient {
                         true,
                         false
                     );
-                    return hit == null || (hit.getBlockPos() != null && world.getBlockState(hit.getBlockPos()).getBlock() == Blocks.bed);
+                    if (hit != null && hit.getBlockPos() != null && world.getBlockState(hit.getBlockPos()).getBlock() == Blocks.bed) {
+                        return true;
+                    }
+                    if (hit == null || hit.hitVec == null) return false;
+                    Vec3 target = new Vec3(bedPoint.x, bedPoint.y, bedPoint.z);
+                    Vec3 rayStart = new Vec3(eyePoint.x, eyePoint.y, eyePoint.z);
+                    return BedLineOfSight.isAmbiguousBlocker(rayStart.distanceTo(target), rayStart.distanceTo(hit.hitVec));
                 }
             }
         );
