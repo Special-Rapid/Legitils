@@ -1,11 +1,13 @@
 package com.snkisk.hypixellegitils.loader;
 
 import java.io.File;
+import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Properties;
 import java.util.jar.JarFile;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -15,6 +17,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class HypixelLegitilsLoader {
     private static final String STATUS_PROPERTY = "hypixellegitils.loader.status";
+    private static final String BUILD_METADATA_ENTRY = "hypixellegitils-build.properties";
+    private static final String BUILD_VERSION_PROPERTY = "hypixellegitils.build.version";
+    private static final String BUILD_REVISION_PROPERTY = "hypixellegitils.build.revision";
     private static volatile JarFile systemSearchJar;
 
     private HypixelLegitilsLoader() {
@@ -58,6 +63,7 @@ public final class HypixelLegitilsLoader {
         JarFile jar = null;
         try {
             jar = new JarFile(config.modJar.toFile());
+            publishBuildIdentity(jar);
             instrumentation.appendToSystemClassLoaderSearch(jar);
             systemSearchJar = jar;
             diagnostic("MOD JAR appended to the system classloader search.");
@@ -72,6 +78,37 @@ public final class HypixelLegitilsLoader {
             diagnostic("Unable to append MOD JAR to the system classloader search: "
                 + exception.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * A Mixin child loader can load MOD classes while refusing resource lookup from
+     * the MOD JAR. Publish the already-packaged identity through the JVM boundary
+     * so the MOD and Companion report the same injected build.
+     */
+    static void publishBuildIdentity(JarFile jar) {
+        if (jar == null || jar.getJarEntry(BUILD_METADATA_ENTRY) == null) return;
+        InputStream input = null;
+        try {
+            input = jar.getInputStream(jar.getJarEntry(BUILD_METADATA_ENTRY));
+            Properties properties = new Properties();
+            properties.load(input);
+            setBuildProperty(BUILD_VERSION_PROPERTY, properties.getProperty("version"));
+            setBuildProperty(BUILD_REVISION_PROPERTY, properties.getProperty("revision"));
+        } catch (Exception exception) {
+            diagnostic("Unable to publish MOD build identity: " + exception.getClass().getSimpleName());
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (Exception ignored) {
+                    // The build identity is diagnostic only.
+                }
+            }
+        }
+    }
+
+    private static void setBuildProperty(String name, String value) {
+        if (value != null && !value.trim().isEmpty()) System.setProperty(name, value.trim());
     }
 
     private static final class MixinRegistrationProbe implements Runnable {
