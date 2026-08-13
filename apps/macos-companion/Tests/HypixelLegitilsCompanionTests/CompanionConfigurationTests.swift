@@ -335,7 +335,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertTrue(try service.scan().isEmpty)
     }
 
-    func testLunarBakeInvalidationRunsOnlyForANewModAndDefersWhileLunarRuns() throws {
+    func testLunarBakeInvalidationRunsOnlyForANewModAndDefersWhileMinecraftGameWindowExists() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let archive = root.appendingPathComponent("hash/bake.zip")
@@ -348,7 +348,7 @@ final class CompanionConfigurationTests: XCTestCase {
             moved.append(url)
             try FileManager.default.removeItem(at: url)
         }
-        let invalidator = LunarBakeCacheInvalidator(fingerprintURL: fingerprint, cache: cache, lunarIsRunning: { false })
+        let invalidator = LunarBakeCacheInvalidator(fingerprintURL: fingerprint, cache: cache, minecraftGameWindowExists: { false })
         XCTAssertEqual(try invalidator.invalidateIfNeeded(for: "mod-one"), .movedToTrash(1))
         XCTAssertEqual(moved.count, 1)
         XCTAssertEqual(moved.first?.lastPathComponent, "bake.zip")
@@ -363,10 +363,18 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
 
         let deferredFingerprint = root.appendingPathComponent("state/deferred.txt")
-        let deferred = LunarBakeCacheInvalidator(fingerprintURL: deferredFingerprint, cache: cache, lunarIsRunning: { true })
-        XCTAssertEqual(try deferred.invalidateIfNeeded(for: "mod-two"), .deferredWhileLunarRuns)
+        let deferred = LunarBakeCacheInvalidator(fingerprintURL: deferredFingerprint, cache: cache, minecraftGameWindowExists: { true })
+        XCTAssertEqual(try deferred.invalidateIfNeeded(for: "mod-two"), .deferredWhileMinecraftGameWindowExists)
         XCTAssertFalse(FileManager.default.fileExists(atPath: deferredFingerprint.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
+    }
+
+    func testMinecraftGameWindowClassifierIgnoresLunarLauncherHomeButProtectsGames() {
+        XCTAssertFalse(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Lunar Client", title: "Home - Lunar Client"))
+        XCTAssertTrue(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Lunar Client", title: "Lunar Client 1.8.9 (dev)"))
+        XCTAssertTrue(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Minecraft", title: ""))
+        XCTAssertTrue(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Badlion Client", title: ""))
+        XCTAssertFalse(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Safari", title: "Safari"))
     }
 
     func testHypixelStatsCachePersistsNormalizedValuesForTwentyFourHours() {

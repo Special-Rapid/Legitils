@@ -38,12 +38,7 @@ struct ContentView: View {
                 }
             }
             .padding(28)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("更新", systemImage: "arrow.clockwise") { store.refresh() }
-                }
-            }
         }
-        .task { store.refresh() }
+        .task { store.startAutomaticMaintenance() }
     }
 }

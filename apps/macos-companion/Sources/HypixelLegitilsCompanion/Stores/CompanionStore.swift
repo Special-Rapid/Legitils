@@ -22,6 +22,7 @@ final class CompanionStore: ObservableObject {
     private let statsBridgeServer: StatsBridgeServer
     private let runtimeInstaller: RuntimeInstaller
     private let lunarBakeCacheInvalidator: LunarBakeCacheInvalidator
+    private var bakeCacheRetryTimer: Timer?
 
     init() {
         let keychainStore = KeychainStore()
@@ -34,7 +35,17 @@ final class CompanionStore: ObservableObject {
         self.lunarBakeCacheInvalidator = LunarBakeCacheInvalidator()
     }
 
-    func refresh() {
+    deinit {
+        bakeCacheRetryTimer?.invalidate()
+    }
+
+    /// Starts maintenance at launch. Subsequent retries happen only when a MOD update
+    /// was safely deferred because a Minecraft game window still exists.
+    func startAutomaticMaintenance() {
+        refresh()
+    }
+
+    private func refresh() {
         prepareRuntime()
         runtimeStatus = configurationStore.loadRuntimeStatus()
         refreshProviderKeyStates()
@@ -56,19 +67,56 @@ final class CompanionStore: ObservableObject {
         do {
             installedRuntime = try runtimeInstaller.prepare()
             runtimeInstallStatus = "最新のLoaderとMODをローカルruntimeへ配置しました。"
-            switch try lunarBakeCacheInvalidator.invalidateIfNeeded(for: installedRuntime!.modFingerprint) {
-            case .unchanged:
-                bakeCacheInvalidationStatus = "bake.zip: MOD更新なし（自動削除なし）"
-            case .deferredWhileLunarRuns:
-                bakeCacheInvalidationStatus = "bake.zip: Lunar実行中のため、終了後の次回更新で自動削除します。"
-            case .movedToTrash(let count):
-                bakeCacheInvalidationStatus = "bake.zip: MOD更新を検出し、\(count) 件をゴミ箱へ移動しました。"
-            }
+            try updateBakeCacheInvalidationStatus(for: installedRuntime!.modFingerprint)
         } catch {
+            stopBakeCacheRetry()
             installedRuntime = nil
             runtimeInstallStatus = "JVM runtime を準備できませんでした: \(error.localizedDescription)"
             bakeCacheInvalidationStatus = "bake.zip: 自動確認できませんでした: \(error.localizedDescription)"
         }
+    }
+
+    private func retryBakeCacheInvalidation() {
+        guard let installedRuntime else {
+            stopBakeCacheRetry()
+            return
+        }
+        do {
+            try updateBakeCacheInvalidationStatus(for: installedRuntime.modFingerprint)
+        } catch {
+            stopBakeCacheRetry()
+            bakeCacheInvalidationStatus = "bake.zip: 自動確認できませんでした: \(error.localizedDescription)"
+        }
+    }
+
+    private func updateBakeCacheInvalidationStatus(for modFingerprint: String) throws {
+        switch try lunarBakeCacheInvalidator.invalidateIfNeeded(for: modFingerprint) {
+            case .unchanged:
+                stopBakeCacheRetry()
+                bakeCacheInvalidationStatus = "bake.zip: MOD更新なし（自動削除なし）"
+            case .deferredWhileMinecraftGameWindowExists:
+                scheduleBakeCacheRetry()
+                bakeCacheInvalidationStatus = "bake.zip: Minecraftゲームwindowを検出。終了後に自動削除します。"
+            case .movedToTrash(let count):
+                stopBakeCacheRetry()
+                bakeCacheInvalidationStatus = "bake.zip: MOD更新を検出し、\(count) 件をゴミ箱へ移動しました。"
+        }
+    }
+
+    private func scheduleBakeCacheRetry() {
+        guard bakeCacheRetryTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.retryBakeCacheInvalidation()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        bakeCacheRetryTimer = timer
+    }
+
+    private func stopBakeCacheRetry() {
+        bakeCacheRetryTimer?.invalidate()
+        bakeCacheRetryTimer = nil
     }
 
     func detectorBinding(_ detector: CompanionConfiguration.DetectorID) -> Binding<Bool> {

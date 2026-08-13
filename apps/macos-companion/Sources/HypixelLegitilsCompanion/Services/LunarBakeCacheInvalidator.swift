@@ -5,32 +5,32 @@ import Foundation
 final class LunarBakeCacheInvalidator {
     enum Outcome: Equatable {
         case unchanged
-        case deferredWhileLunarRuns
+        case deferredWhileMinecraftGameWindowExists
         case movedToTrash(Int)
     }
 
     private let fingerprintURL: URL
     private let cache: LunarBakeCacheService
     private let fileManager: FileManager
-    private let lunarIsRunning: () -> Bool
+    private let minecraftGameWindowExists: () -> Bool
 
     init(
         fingerprintURL: URL = CompanionPaths.lunarBakeCacheFingerprintURL,
         cache: LunarBakeCacheService = LunarBakeCacheService(),
         fileManager: FileManager = .default,
-        lunarIsRunning: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultLunarIsRunning
+        minecraftGameWindowExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftGameWindowExists
     ) {
         self.fingerprintURL = fingerprintURL
         self.cache = cache
         self.fileManager = fileManager
-        self.lunarIsRunning = lunarIsRunning
+        self.minecraftGameWindowExists = minecraftGameWindowExists
     }
 
     /// Records a fingerprint only after safe cleanup, including when no bake archive exists.
     func invalidateIfNeeded(for modFingerprint: String) throws -> Outcome {
         guard !modFingerprint.isEmpty else { throw InvalidatorError.emptyFingerprint }
         if completedFingerprint() == modFingerprint { return .unchanged }
-        if lunarIsRunning() { return .deferredWhileLunarRuns }
+        if minecraftGameWindowExists() { return .deferredWhileMinecraftGameWindowExists }
         let moved = try cache.moveToTrash(cache.scan())
         try fileManager.createDirectory(at: fingerprintURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = modFingerprint.data(using: .utf8) else { throw InvalidatorError.emptyFingerprint }
@@ -45,8 +45,32 @@ final class LunarBakeCacheInvalidator {
         return value
     }
 
-    private static func defaultLunarIsRunning() -> Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.moonsworth.client" }
+    /// Checks for an actual Minecraft game window, not merely the Lunar launcher home window.
+    static func defaultMinecraftGameWindowExists() -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            // Do not invalidate a cache if macOS cannot prove that no game window exists.
+            return true
+        }
+        return windows.contains { window in
+            guard (window[kCGWindowLayer as String] as? Int) == 0 else {
+                return false
+            }
+            let owner = window[kCGWindowOwnerName as String] as? String ?? ""
+            let title = window[kCGWindowName as String] as? String ?? ""
+            return isMinecraftGameWindow(ownerName: owner, title: title)
+        }
+    }
+
+    static func isMinecraftGameWindow(ownerName: String, title: String) -> Bool {
+        let owner = ownerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard normalized != "home - lunar client" else { return false }
+        return normalized.contains("minecraft")
+            || normalized.contains("lunar client")
+            || normalized.contains("badlion")
+            || owner.contains("minecraft")
+            || owner.contains("lunar")
+            || owner.contains("badlion")
     }
 
     enum InvalidatorError: LocalizedError, Equatable {
