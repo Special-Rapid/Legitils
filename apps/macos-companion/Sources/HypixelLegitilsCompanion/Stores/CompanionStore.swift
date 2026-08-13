@@ -23,6 +23,7 @@ final class CompanionStore: ObservableObject {
     private let runtimeInstaller: RuntimeInstaller
     private let lunarBakeCacheInvalidator: LunarBakeCacheInvalidator
     private var bakeCacheRetryTimer: Timer?
+    private var runtimeStatusRefreshTimer: Timer?
 
     init() {
         let keychainStore = KeychainStore()
@@ -37,17 +38,19 @@ final class CompanionStore: ObservableObject {
 
     deinit {
         bakeCacheRetryTimer?.invalidate()
+        runtimeStatusRefreshTimer?.invalidate()
     }
 
     /// Starts maintenance at launch. Subsequent retries happen only when a MOD update
     /// was safely deferred because a Minecraft game window still exists.
     func startAutomaticMaintenance() {
         refresh()
+        startRuntimeStatusRefresh()
     }
 
     private func refresh() {
         prepareRuntime()
-        runtimeStatus = configurationStore.loadRuntimeStatus()
+        refreshRuntimeStatus()
         refreshProviderKeyStates()
         syncStatsBridge()
         do {
@@ -60,6 +63,28 @@ final class CompanionStore: ObservableObject {
             configuration = nil
             settingsDraft = nil
             statusMessage = error.localizedDescription
+        }
+    }
+
+    /// The MOD atomically rewrites this status when it injects. Keep the Companion's
+    /// displayed build identifier synchronized without requiring a manual refresh.
+    private func startRuntimeStatusRefresh() {
+        guard runtimeStatusRefreshTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshRuntimeStatus()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        runtimeStatusRefreshTimer = timer
+    }
+
+    private func refreshRuntimeStatus() {
+        let updated = configurationStore.loadRuntimeStatus()
+        guard updated != runtimeStatus else { return }
+        runtimeStatus = updated
+        if updated != nil {
+            statusMessage = "MOD の設定と実行状態を読み込みました。"
         }
     }
 
