@@ -803,24 +803,33 @@ public final class HypixelLegitilsBootstrap {
         return "";
     }
 
-    /** Returns all local-only markers for the renderer's actual player-nametag text. */
+    /** Returns local markers beside the player name unless Lunar Level Head is actively rendering that player. */
     public static String playerNametagSuffix(String playerName, UUID playerId) {
+        if (lunarLevelHeadIsActive(playerId, System.currentTimeMillis())) return "";
+        return localPlayerMarkerSuffix(playerName, playerId, true);
+    }
+
+    /** Returns the marker content that belongs beside Lunar's compact level value. */
+    public static String lunarLevelHeadSuffix(String playerName, UUID playerId) {
+        // A Nick's level value is already replaced with [NICK], so do not duplicate it as a suffix.
+        return localPlayerMarkerSuffix(playerName, playerId, false);
+    }
+
+    private static String localPlayerMarkerSuffix(String playerName, UUID playerId, boolean includeNickMarker) {
         String suffix = "";
-        if (shouldShowNickedSessionMarker(playerId) && !lunarNickedLevelHeadIsActive(playerId, System.currentTimeMillis())) {
-            suffix += " §c[NICK]";
-        }
+        if (includeNickMarker && shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
         if (shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
         return suffix + statsNametagTagSuffix(playerName, playerId) + statsNametagSuffix(playerName, playerId);
     }
 
-    /** Called by the verified Lunar level-head hook only when it renders a Nicked profile. */
-    public static void onLunarNickedLevelHeadRendered(UUID playerId) {
-        if (shouldShowNickedSessionMarker(playerId)) {
+    /** Called by the verified Lunar level-head hook whenever Lunar builds a visible player level line. */
+    public static void onLunarLevelHeadRendered(UUID playerId) {
+        if (playerId != null) {
             LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.put(playerId, Long.valueOf(System.currentTimeMillis()));
         }
     }
 
-    private static boolean lunarNickedLevelHeadIsActive(UUID playerId, long nowMillis) {
+    private static boolean lunarLevelHeadIsActive(UUID playerId, long nowMillis) {
         Long renderedAt = playerId == null ? null : LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.get(playerId);
         if (renderedAt == null) return false;
         if (nowMillis >= renderedAt.longValue() && nowMillis - renderedAt.longValue() <= LUNAR_NICKED_LEVEL_HEAD_ACTIVE_MILLIS) {
@@ -847,7 +856,6 @@ public final class HypixelLegitilsBootstrap {
      * the server-provided component.
      */
     public static Object appendLunarNametagComponentSuffix(Object original, String playerName, UUID playerId) {
-        if (original == null) return null;
         String suffix = playerNametagSuffix(playerName, playerId);
         if (suffix.isEmpty()) {
             traceNameTagSuffixDecision(true, false);
@@ -855,6 +863,16 @@ public final class HypixelLegitilsBootstrap {
         }
         traceNameTagSuffixDecision(true, true);
         onMarkerRenderObserved(playerId, suffix);
+        return appendLunarComponentSuffix(original, suffix, "name-tag");
+    }
+
+    /** Adds local markers to Lunar's compact level component without changing the level value itself. */
+    public static Object appendLunarLevelHeadComponentSuffix(Object original, String playerName, UUID playerId) {
+        return appendLunarComponentSuffix(original, lunarLevelHeadSuffix(playerName, playerId), "level-head");
+    }
+
+    private static Object appendLunarComponentSuffix(Object original, String suffix, String surface) {
+        if (original == null || suffix == null || suffix.isEmpty()) return original;
         try {
             ClassLoader loader = original.getClass().getClassLoader();
             Class<?> componentClass = Class.forName("net.kyori.adventure.text.Component", false, loader);
@@ -870,7 +888,7 @@ public final class HypixelLegitilsBootstrap {
             children.add(suffixComponent);
             return componentClass.getMethod("children", List.class).invoke(original, children);
         } catch (ReflectiveOperationException e) {
-            traceStats("name-tag Adventure component unavailable");
+            traceStats(surface + " Adventure component unavailable");
             return original;
         }
     }
