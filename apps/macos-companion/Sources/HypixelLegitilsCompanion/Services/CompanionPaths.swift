@@ -28,6 +28,11 @@ enum CompanionPaths {
         applicationSupportDirectory.appendingPathComponent("community-tag-cache.json")
     }
 
+    /// Contains only a bounded sequence and provider identifier, never an API key.
+    static var providerKeyChangeEventsURL: URL {
+        applicationSupportDirectory.appendingPathComponent("provider-key-change-events.json")
+    }
+
     static var lunarBakeCacheFingerprintURL: URL {
         applicationSupportDirectory.appendingPathComponent("lunar-bake-cache-mod-fingerprint.txt")
     }

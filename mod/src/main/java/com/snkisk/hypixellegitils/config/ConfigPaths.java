@@ -28,4 +28,8 @@ public final class ConfigPaths {
     public static Path markerHistoryPath(String userHome) {
         return applicationSupportDirectory(userHome).resolve("marker-history.json");
     }
+
+    public static Path providerKeyChangeEventsPath(String userHome) {
+        return applicationSupportDirectory(userHome).resolve("provider-key-change-events.json");
+    }
 }

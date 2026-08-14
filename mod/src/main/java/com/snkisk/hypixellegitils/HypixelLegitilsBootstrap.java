@@ -12,6 +12,7 @@ import com.snkisk.hypixellegitils.config.LegitilsConfig;
 import com.snkisk.hypixellegitils.config.LegitilsConfigStore;
 import com.snkisk.hypixellegitils.config.MarkerHistoryEntry;
 import com.snkisk.hypixellegitils.config.MarkerHistoryStore;
+import com.snkisk.hypixellegitils.config.ProviderKeyChangeEventReader;
 import com.snkisk.hypixellegitils.config.RuntimeStatus;
 import com.snkisk.hypixellegitils.config.StatsSettings;
 import com.snkisk.hypixellegitils.command.LocalCommand;
@@ -79,6 +80,7 @@ public final class HypixelLegitilsBootstrap {
     private static final long EXTERNAL_CONFIG_POLL_INTERVAL_MILLIS = 500L;
     private static volatile long nextExternalConfigPollMillis;
     private static volatile String runtimeStatusUserHome;
+    private static volatile ProviderKeyChangeEventReader providerKeyChangeEventReader;
     private static volatile StatsBridgeClient statsBridgeClient;
     private static volatile StatsBridgeLookupResult latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
     private static volatile boolean statsTraceEnabled;
@@ -105,6 +107,7 @@ public final class HypixelLegitilsBootstrap {
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<PendingStatsNotice> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<PendingStatsNotice>();
     private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<String> PENDING_PROVIDER_KEY_CHANGE_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<StatsBridgeLookupResult> PENDING_MANUAL_STATS_RESULTS
         = new ConcurrentLinkedQueue<StatsBridgeLookupResult>();
     private static final AtomicLong MANUAL_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
@@ -164,6 +167,8 @@ public final class HypixelLegitilsBootstrap {
             );
             detectorSettings = new DetectorSettingsService(store, configPath, loaded.config);
             runtimeStatusUserHome = userHome;
+            providerKeyChangeEventReader = new ProviderKeyChangeEventReader(ConfigPaths.providerKeyChangeEventsPath(userHome));
+            providerKeyChangeEventReader.baseline();
             statsBridgeClient = new StatsBridgeClient(ConfigPaths.statsBridgeDescriptorPath(userHome));
             nickDetectionEnabled = loaded.config.nickDetectionSettings.enabled;
             partyDetectionEnabled = loaded.config.partyDetectionSettings.enabled;
@@ -193,6 +198,7 @@ public final class HypixelLegitilsBootstrap {
     private static void reloadExternalConfigIfNeeded(long nowMillis, ObservationCoordinator active) {
         if (nowMillis < nextExternalConfigPollMillis) return;
         nextExternalConfigPollMillis = nowMillis + EXTERNAL_CONFIG_POLL_INTERVAL_MILLIS;
+        pollProviderKeyChangeEvents();
         DetectorSettingsService settings = detectorSettings;
         if (settings == null) return;
         DetectorSettingsService.ExternalReload reload = settings.reloadFromDiskIfNewer();
@@ -217,6 +223,18 @@ public final class HypixelLegitilsBootstrap {
             );
         } catch (Exception exception) {
             System.err.println("[HypixelLegitils] Runtime status unavailable: " + exception.getClass().getSimpleName());
+        }
+    }
+
+    private static void pollProviderKeyChangeEvents() {
+        ProviderKeyChangeEventReader reader = providerKeyChangeEventReader;
+        if (reader == null) return;
+        for (String provider : reader.poll()) {
+            if ("hypixel".equals(provider)) {
+                PENDING_PROVIDER_KEY_CHANGE_NOTICES.add(ChatFormat.line("§aHypixel API key changed in Companion."));
+            } else if ("urchin".equals(provider)) {
+                PENDING_PROVIDER_KEY_CHANGE_NOTICES.add(ChatFormat.line("§aUrchin API key changed in Companion."));
+            }
         }
     }
 
@@ -815,6 +833,14 @@ public final class HypixelLegitilsBootstrap {
         List<String> notices = new ArrayList<String>();
         String notice;
         while ((notice = PENDING_CONFIGURATION_NOTICES.poll()) != null) notices.add(notice);
+        return notices.toArray(new String[notices.size()]);
+    }
+
+    /** Emits successful Hypixel/Urchin Keychain save notices without exposing a key value. */
+    public static String[] drainPendingProviderKeyChangeNotices() {
+        List<String> notices = new ArrayList<String>();
+        String notice;
+        while ((notice = PENDING_PROVIDER_KEY_CHANGE_NOTICES.poll()) != null) notices.add(notice);
         return notices.toArray(new String[notices.size()]);
     }
 

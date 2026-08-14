@@ -86,6 +86,27 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertFalse(StatsProvider.seraph.requiresAPIKey)
     }
 
+    func testProviderKeyChangeEventContainsOnlyBoundedProviderAndSequence() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("provider-key-change-events.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ProviderKeyChangeEventStore(url: url)
+        for index in 1...17 {
+            try store.recordSavedKey(for: index.isMultiple(of: 2) ? .urchin : .hypixel)
+        }
+        try store.recordSavedKey(for: .seraph)
+
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        let events = object?["events"] as? [[String: Any]]
+        XCTAssertEqual(object?["schemaVersion"] as? Int, 1)
+        XCTAssertEqual(events?.count, 16)
+        XCTAssertEqual(events?.map { $0["sequence"] as? Int }, Array(2...17))
+        XCTAssertEqual(events?.first?["provider"] as? String, "urchin")
+        XCTAssertEqual(events?.last?["provider"] as? String, "hypixel")
+        XCTAssertEqual(Set(object?.keys ?? Dictionary<String, Any>().keys), Set(["schemaVersion", "events"]))
+    }
+
     func testStatsBridgeRejectsInvalidOrOversizedRosterRequests() {
         let valid = StatsBridgeRosterRequest(
             schemaVersion: StatsBridgeRosterRequest.schemaVersion,

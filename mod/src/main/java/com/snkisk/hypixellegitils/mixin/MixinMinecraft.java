@@ -161,6 +161,9 @@ public abstract class MixinMinecraft {
             for (String notice : HypixelLegitilsBootstrap.drainPendingConfigurationNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
             }
+            for (String notice : HypixelLegitilsBootstrap.drainPendingProviderKeyChangeNotices()) {
+                if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
+            }
             for (HypixelLegitilsBootstrap.PendingStatsNotice response : HypixelLegitilsBootstrap.drainPendingManualStatsNotices()) {
                 if (response != null && response.text != null && !response.text.isEmpty()) {
                     thePlayer.addChatMessage(hypixelLegitils$statsChatComponent(response));

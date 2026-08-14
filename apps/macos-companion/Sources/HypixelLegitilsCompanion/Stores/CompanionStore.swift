@@ -18,6 +18,7 @@ final class CompanionStore: ObservableObject {
 
     private let configurationStore: ConfigurationStore
     private let keychainStore: KeychainStore
+    private let providerKeyChangeEventStore: ProviderKeyChangeEventStore
     private let statsProviderLookup: StatsProviderLookup
     private let statsBridgeServer: StatsBridgeServer
     private let runtimeInstaller: RuntimeInstaller
@@ -29,6 +30,7 @@ final class CompanionStore: ObservableObject {
         let keychainStore = KeychainStore()
         self.configurationStore = ConfigurationStore()
         self.keychainStore = keychainStore
+        self.providerKeyChangeEventStore = ProviderKeyChangeEventStore()
         let lookup = StatsProviderLookup(keychainStore: keychainStore)
         self.statsProviderLookup = lookup
         self.statsBridgeServer = StatsBridgeServer(lookup: lookup.lookup)
@@ -202,9 +204,17 @@ final class CompanionStore: ObservableObject {
         }
         do {
             try keychainStore.save(secret: key, account: provider.keychainAccount)
+            do {
+                try providerKeyChangeEventStore.recordSavedKey(for: provider)
+            } catch {
+                refreshProviderKeyStates()
+                syncStatsBridge()
+                statsStatusMessage = "\(provider.displayName) のAPIキーはKeychainに保存しましたが、Minecraftへの変更通知を準備できませんでした。"
+                return
+            }
             refreshProviderKeyStates()
             syncStatsBridge()
-            statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainに保存しました。"
+            statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainに保存しました。MinecraftのChatにも変更を通知します。"
         } catch {
             statsStatusMessage = error.localizedDescription
         }
