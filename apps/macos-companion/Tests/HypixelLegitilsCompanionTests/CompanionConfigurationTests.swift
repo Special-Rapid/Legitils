@@ -287,6 +287,12 @@ final class CompanionConfigurationTests: XCTestCase {
             StatsProviderLookup.ProviderTag(label: "Bot", tooltip: "automated account"),
             StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "vape v4 (legitscaff)\n- Added by @hexze 4 months ago")
         ])
+        let publicDeveloperEnvelope = Data("""
+        {"id":"opaque","type":"player","payload":{"blacklist":{"report_type":"cheating_blatant","tooltip":"autoblock"}}}
+        """.utf8)
+        XCTAssertEqual(StatsProviderLookup.parseSeraphTags(publicDeveloperEnvelope), [
+            StatsProviderLookup.ProviderTag(label: "Blatant Cheating", tooltip: "autoblock")
+        ])
         XCTAssertEqual(StatsProviderLookup.parseSeraphTags(Data("{\"player\":{\"blacklist\":null}}".utf8)), [])
     }
 
@@ -528,6 +534,25 @@ final class CompanionConfigurationTests: XCTestCase {
 
         XCTAssertNil(CommunityTagCache(url: url, now: { Date(timeIntervalSince1970: 1_700_000_001) })
             .tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+    }
+
+    func testCommunityTagCacheInvalidatesOnlyLegacySeraphEntriesAfterPublicEnvelopeRepair() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("community-tag-cache.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("""
+        {"schemaVersion":1,"entries":{
+          "seraph:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"fetchedAtMillis":1700000000000,"tags":[]},
+          "urchin:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"fetchedAtMillis":1700000000000,"tags":[{"label":"Legit Sniper"}]}
+        }}
+        """.utf8).write(to: url)
+
+        let cache = CommunityTagCache(url: url, now: { Date(timeIntervalSince1970: 1_700_000_001) })
+        XCTAssertNil(cache.tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+        XCTAssertEqual(cache.tags(for: .urchin, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), [
+            StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: nil)
+        ])
     }
 
     func testProviderLookupUsesFreshPersistentHypixelCacheBeforeNetwork() {

@@ -63,6 +63,15 @@ public final class StatsPresentationTest {
     }
 
     @Test
+    public void seraphTagSurvivesTheBridgePresentationPathIntoTab() {
+        StatsBridgePlayerResult player = new StatsBridgePlayerResult(
+            "SeraphTagged", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
+            Collections.singletonList(new StatsBridgePlayerResult.CommunityTag("seraph", "Closet Cheating", "legit scaffold"))
+        );
+        assertEquals(" §8| §6[CC]", StatsPresentation.tabSuffix(player));
+    }
+
+    @Test
     public void ranksTargetPlayersByFkdrThenStarsAndProvidesOnlyProfileSummaries() {
         assertEquals(Arrays.asList("HighStats", "HigherFKDR", "HigherStars"), names(StatsPresentation.rankedHighStats(Arrays.asList(
             player("HigherStars", 200, 1D, 0),

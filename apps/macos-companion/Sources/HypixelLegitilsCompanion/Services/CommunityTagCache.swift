@@ -4,7 +4,11 @@ import Foundation
 /// It never stores provider credentials or raw provider responses.
 final class CommunityTagCache {
     static let lifetime: TimeInterval = 24 * 60 * 60
-    private static let schemaVersion = 1
+    // Version 1 persisted empty Seraph results produced before the public
+    // Developer API's `payload` envelope was understood. Retain valid Urchin
+    // entries but force Seraph to refresh after this repair.
+    private static let schemaVersion = 2
+    private static let legacySchemaVersion = 1
     private static let maximumEntries = 1_024
 
     private struct StoredCache: Codable {
@@ -53,12 +57,13 @@ final class CommunityTagCache {
     private func load() {
         guard let data = try? Data(contentsOf: url),
               let stored = try? JSONDecoder().decode(StoredCache.self, from: data),
-              stored.schemaVersion == Self.schemaVersion else {
+              stored.schemaVersion == Self.schemaVersion || stored.schemaVersion == Self.legacySchemaVersion else {
             return
         }
         entries = stored.entries.filter {
             guard let provider = provider(forCacheKey: $0.key) else { return false }
-            return validEntry($0.value, provider: provider) && !isExpired($0.value)
+            guard validEntry($0.value, provider: provider), !isExpired($0.value) else { return false }
+            return stored.schemaVersion == Self.schemaVersion || provider != .seraph
         }
         prune()
     }

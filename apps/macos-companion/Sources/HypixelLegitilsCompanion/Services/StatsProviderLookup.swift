@@ -526,7 +526,10 @@ extension StatsProviderLookup {
     /// timestamps, and every other raw provider field are deliberately discarded at this boundary.
     static func parseSeraphTags(_ data: Data) -> [ProviderTag] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
-        let record = (root["player"] as? [String: Any])
+        // The public Developer API wraps the normalized player record in `payload`.
+        // Retain the older shapes as defensive compatibility for an in-flight response.
+        let record = (root["payload"] as? [String: Any])
+            ?? (root["player"] as? [String: Any])
             ?? (root["data"] as? [String: Any])
             ?? root
         var tags: [ProviderTag] = []
