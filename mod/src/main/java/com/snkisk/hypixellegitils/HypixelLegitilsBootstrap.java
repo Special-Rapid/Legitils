@@ -117,6 +117,9 @@ public final class HypixelLegitilsBootstrap {
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
         = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
+    private static final Map<UUID, Long> LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT
+        = new ConcurrentHashMap<UUID, Long>();
+    private static final long LUNAR_NICKED_LEVEL_HEAD_ACTIVE_MILLIS = 1500L;
     private static final AtomicBoolean NICK_OBSERVATION_LOGGED = new AtomicBoolean(false);
     private static final AtomicBoolean MARKER_RENDER_LOGGED = new AtomicBoolean(false);
     private static final AtomicBoolean TAB_RENDER_HOOK_LOGGED = new AtomicBoolean(false);
@@ -233,6 +236,7 @@ public final class HypixelLegitilsBootstrap {
         enqueueCompanionSettingsApplied(reload.config.revision);
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
+            LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.clear();
             PREGAME_NICK_CHATTERS.clear();
         }
         if (!partyDetectionEnabled) resetPartyDetectors();
@@ -802,9 +806,28 @@ public final class HypixelLegitilsBootstrap {
     /** Returns all local-only markers for the renderer's actual player-nametag text. */
     public static String playerNametagSuffix(String playerName, UUID playerId) {
         String suffix = "";
-        if (shouldShowNickedSessionMarker(playerId)) suffix += " §c[NICK]";
+        if (shouldShowNickedSessionMarker(playerId) && !lunarNickedLevelHeadIsActive(playerId, System.currentTimeMillis())) {
+            suffix += " §c[NICK]";
+        }
         if (shouldShowAcceptedAlertMarker(playerId)) suffix += " §e⚠";
         return suffix + statsNametagTagSuffix(playerName, playerId) + statsNametagSuffix(playerName, playerId);
+    }
+
+    /** Called by the verified Lunar level-head hook only when it renders a Nicked profile. */
+    public static void onLunarNickedLevelHeadRendered(UUID playerId) {
+        if (shouldShowNickedSessionMarker(playerId)) {
+            LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.put(playerId, Long.valueOf(System.currentTimeMillis()));
+        }
+    }
+
+    private static boolean lunarNickedLevelHeadIsActive(UUID playerId, long nowMillis) {
+        Long renderedAt = playerId == null ? null : LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.get(playerId);
+        if (renderedAt == null) return false;
+        if (nowMillis >= renderedAt.longValue() && nowMillis - renderedAt.longValue() <= LUNAR_NICKED_LEVEL_HEAD_ACTIVE_MILLIS) {
+            return true;
+        }
+        LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.remove(playerId, renderedAt);
+        return false;
     }
 
     /**

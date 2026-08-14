@@ -25,7 +25,9 @@ public abstract class MixinLunarHypixelLevelHead {
         require = 0
     )
     private String hypixelLegitils$replaceNickedLevel(String original, @Coerce Object event) {
-        return HypixelLegitilsBootstrap.lunarNickedLevelText(original, hypixelLegitils$playerId(event));
+        UUID playerId = hypixelLegitils$playerId(event);
+        HypixelLegitilsBootstrap.onLunarNickedLevelHeadRendered(playerId);
+        return HypixelLegitilsBootstrap.lunarNickedLevelText(original, playerId);
     }
 
     /** Uses Lunar's event bridge reflectively so the normal Forge build carries no Lunar classes. */

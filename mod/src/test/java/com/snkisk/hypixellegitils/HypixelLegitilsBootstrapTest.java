@@ -49,6 +49,15 @@ public final class HypixelLegitilsBootstrapTest {
     }
 
     @Test
+    public void nickMarkerMovesFromTheNameLineToAnActiveLunarLevelHead() {
+        java.util.UUID nick = java.util.UUID.fromString("223e4567-e89b-12d3-a456-426655440000");
+
+        assertEquals(" §c[NICK]", HypixelLegitilsBootstrap.playerNametagSuffix("Nick", nick));
+        HypixelLegitilsBootstrap.onLunarNickedLevelHeadRendered(nick);
+        assertEquals("", HypixelLegitilsBootstrap.playerNametagSuffix("Nick", nick));
+    }
+
+    @Test
     public void lunarNametagComponentKeepsExistingContentAndAppendsTheLegacySuffixAsAChild() {
         java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
         LegitilsTestTextComponent original = new LegitilsTestTextComponent("Nick", Collections.<Object>emptyList());
