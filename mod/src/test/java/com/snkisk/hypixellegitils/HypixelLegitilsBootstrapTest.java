@@ -36,6 +36,16 @@ public final class HypixelLegitilsBootstrapTest {
         java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
         assertTrue(HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(nick));
         assertEquals(" §c[NICK]", HypixelLegitilsBootstrap.playerNametagSuffix("Nick", nick));
+        assertEquals("[NICK]", HypixelLegitilsBootstrap.lunarNickedLevelText("37", nick));
+    }
+
+    @Test
+    public void lunarLevelHeadKeepsRealProfilesAndEmptyValuesUntouched() {
+        java.util.UUID real = java.util.UUID.fromString("123e4567-e89b-42d3-a456-426655440000");
+
+        assertEquals("37", HypixelLegitilsBootstrap.lunarNickedLevelText("37", real));
+        assertEquals("", HypixelLegitilsBootstrap.lunarNickedLevelText("", real));
+        assertEquals(null, HypixelLegitilsBootstrap.lunarNickedLevelText(null, real));
     }
 
     @Test

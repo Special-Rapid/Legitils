@@ -808,6 +808,16 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /**
+     * Lunar's Hypixel level-head module invents a level for its UUID-v1 Nick
+     * profiles. Keep that separate line truthful without changing the player
+     * name component or any real player's selected level source.
+     */
+    public static String lunarNickedLevelText(String original, UUID playerId) {
+        if (original == null || original.isEmpty() || !shouldShowNickedSessionMarker(playerId)) return original;
+        return "[NICK]";
+    }
+
+    /**
      * Extends Lunar's Adventure name component with a legacy-formatted local
      * suffix. Reflection keeps the ordinary Forge build independent from
      * Lunar's private runtime library while preserving every existing style on

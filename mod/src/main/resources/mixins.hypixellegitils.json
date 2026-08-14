@@ -12,7 +12,8 @@
     "MixinNetHandlerPlayClient",
     "MixinPlayerControllerMP",
     "MixinGuiPlayerTabOverlay",
-    "MixinEntityPlayer"
+    "MixinEntityPlayer",
+    "MixinLunarHypixelLevelHead"
   ],
   "injectors": {
     "defaultRequire": 1
