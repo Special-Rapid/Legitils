@@ -33,7 +33,10 @@ final class CompanionStore: ObservableObject {
         self.providerKeyChangeEventStore = ProviderKeyChangeEventStore()
         let lookup = StatsProviderLookup(keychainStore: keychainStore)
         self.statsProviderLookup = lookup
-        self.statsBridgeServer = StatsBridgeServer(lookup: lookup.lookup)
+        self.statsBridgeServer = StatsBridgeServer(
+            lookup: lookup.lookup,
+            hypixelKeyValidation: lookup.validateHypixelAPIKey
+        )
         self.runtimeInstaller = RuntimeInstaller()
         self.lunarBakeCacheInvalidator = LunarBakeCacheInvalidator()
     }

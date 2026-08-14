@@ -111,6 +111,7 @@ public abstract class MixinMinecraft {
             if (LocalNotice.shouldShowFor(hypixelLegitils$injectedNoticeShown, theWorld)) {
                 thePlayer.addChatMessage(new ChatComponentText(LocalNotice.injectedText()));
                 hypixelLegitils$injectedNoticeShown = true;
+                HypixelLegitilsBootstrap.requestInjectedHypixelKeyValidation();
             }
             long worldTick = theWorld.getTotalWorldTime();
             boolean discontinuity = worldChanged
@@ -163,6 +164,11 @@ public abstract class MixinMinecraft {
             }
             for (String notice : HypixelLegitilsBootstrap.drainPendingProviderKeyChangeNotices()) {
                 if (notice != null && !notice.isEmpty()) thePlayer.addChatMessage(new ChatComponentText(notice));
+            }
+            for (HypixelLegitilsBootstrap.PendingExternalLinkNotice notice : HypixelLegitilsBootstrap.drainPendingExternalLinkNotices()) {
+                if (notice != null && notice.text != null && !notice.text.isEmpty()) {
+                    thePlayer.addChatMessage(hypixelLegitils$externalLinkNoticeComponent(notice));
+                }
             }
             for (HypixelLegitilsBootstrap.PendingStatsNotice response : HypixelLegitilsBootstrap.drainPendingManualStatsNotices()) {
                 if (response != null && response.text != null && !response.text.isEmpty()) {
@@ -221,6 +227,17 @@ public abstract class MixinMinecraft {
             );
             root.appendSibling(wdr);
         }
+        return root;
+    }
+
+    private ChatComponentText hypixelLegitils$externalLinkNoticeComponent(HypixelLegitilsBootstrap.PendingExternalLinkNotice notice) {
+        ChatComponentText root = new ChatComponentText(notice.text);
+        ChatComponentText link = new ChatComponentText(" §b[↗]");
+        ChatStyle style = new ChatStyle();
+        style.setChatClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, notice.url));
+        style.setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentText("§bOpen Hypixel Developer Dashboard")));
+        link.setChatStyle(style);
+        root.appendSibling(link);
         return root;
     }
 

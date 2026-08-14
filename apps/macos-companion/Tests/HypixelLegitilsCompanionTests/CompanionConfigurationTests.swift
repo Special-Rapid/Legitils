@@ -170,6 +170,82 @@ final class CompanionConfigurationTests: XCTestCase {
         server.stop()
     }
 
+    func testHypixelKeyValidationUsesOneFixedRequestAndReturnsOnlySafeStatus() {
+        let valid = HypixelKeyValidationTransport(statusCode: 200, body: Data("{\"success\":true}".utf8))
+        let invalid = HypixelKeyValidationTransport(statusCode: 403, body: Data("{\"cause\":\"expired\"}".utf8))
+        let keyStore = FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"])
+        let validLookup = StatsProviderLookup(keychainStore: keyStore, transport: valid)
+        let invalidLookup = StatsProviderLookup(keychainStore: keyStore, transport: invalid)
+        let validResult = expectation(description: "valid result")
+        let invalidResult = expectation(description: "invalid result")
+
+        validLookup.validateHypixelAPIKey {
+            XCTAssertEqual($0, .valid)
+            validResult.fulfill()
+        }
+        invalidLookup.validateHypixelAPIKey {
+            XCTAssertEqual($0, .invalid)
+            invalidResult.fulfill()
+        }
+        wait(for: [validResult, invalidResult], timeout: 1)
+        XCTAssertEqual(valid.requests.count, 1)
+        XCTAssertEqual(valid.requests.first?.url?.absoluteString, "https://api.hypixel.net/v2/counts")
+        XCTAssertEqual(valid.requests.first?.value(forHTTPHeaderField: "API-Key"), "hypixel-secret")
+        XCTAssertFalse(valid.requests.first?.httpBody?.isEmpty == false)
+    }
+
+    func testStatsBridgeKeyValidationReturnsOnlySafeStatusBehindCapability() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let descriptorURL = directory.appendingPathComponent("stats-bridge.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let server = StatsBridgeServer(
+            descriptorURL: descriptorURL,
+            hypixelKeyValidation: { completion in completion(.invalid) }
+        )
+        let started = expectation(description: "bridge started")
+        var descriptor: StatsBridgeDescriptor?
+        server.start { result in
+            descriptor = try? result.get()
+            started.fulfill()
+        }
+        wait(for: [started], timeout: 2)
+        guard let descriptor else {
+            XCTFail("missing descriptor")
+            return
+        }
+
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(descriptor.port)/v1/hypixel-key-validation")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data("{\"schemaVersion\":1}".utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(descriptor.capability, forHTTPHeaderField: "X-Legitils-Capability")
+        let completed = expectation(description: "key validation response")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            XCTAssertNil(error)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+            XCTAssertEqual(
+                try? JSONDecoder().decode(HypixelAPIKeyValidationResponse.self, from: data ?? Data()),
+                HypixelAPIKeyValidationResponse(schemaVersion: 1, status: .invalid)
+            )
+            completed.fulfill()
+        }.resume()
+        wait(for: [completed], timeout: 2)
+        server.stop()
+    }
+
+    func testHypixelKeyValidationDoesNotRequestOrReportMissingKey() {
+        let transport = HypixelKeyValidationTransport(statusCode: 403, body: Data())
+        let lookup = StatsProviderLookup(keychainStore: FakeStatsKeyStore([:]), transport: transport)
+        let completed = expectation(description: "missing key")
+
+        lookup.validateHypixelAPIKey {
+            XCTAssertEqual($0, .unavailable)
+            completed.fulfill()
+        }
+        wait(for: [completed], timeout: 1)
+        XCTAssertTrue(transport.requests.isEmpty)
+    }
+
     func testProviderNormalizersReturnOnlyDisplaySafeStatsAndTags() throws {
         let hypixel = Data("""
         {"success":true,"player":{"achievements":{"bedwars_level":120},"stats":{"Bedwars":{"final_kills_bedwars":44,"final_deaths_bedwars":11}}}}
@@ -789,6 +865,27 @@ private final class FakeStatsTransport: StatsHTTPTransport {
         completion(.success((body, HTTPURLResponse(
             url: request.url!,
             statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!)))
+    }
+}
+
+private final class HypixelKeyValidationTransport: StatsHTTPTransport {
+    let statusCode: Int
+    let body: Data
+    private(set) var requests: [URLRequest] = []
+
+    init(statusCode: Int, body: Data) {
+        self.statusCode = statusCode
+        self.body = body
+    }
+
+    func load(_ request: URLRequest, completion: @escaping (Result<(Data, HTTPURLResponse), Error>) -> Void) {
+        requests.append(request)
+        completion(.success((body, HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )!)))

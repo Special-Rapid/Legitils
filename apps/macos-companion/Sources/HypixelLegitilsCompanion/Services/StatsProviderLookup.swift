@@ -61,6 +61,33 @@ final class StatsProviderLookup {
         }
     }
 
+    /// Uses one fixed authenticated endpoint and returns only a safe status to the loopback bridge.
+    func validateHypixelAPIKey(completion: @escaping (HypixelAPIKeyValidationStatus) -> Void) {
+        queue.async { [weak self] in
+            guard let self,
+                  let key = try? self.keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount),
+                  !key.isEmpty else {
+                completion(.unavailable)
+                return
+            }
+            self.transport.load(Self.hypixelKeyValidationRequest(apiKey: key)) { result in
+                self.queue.async {
+                    guard case let .success((data, response)) = result else {
+                        completion(.unavailable)
+                        return
+                    }
+                    if response.statusCode == 403 {
+                        completion(.invalid)
+                    } else if response.statusCode == 200 && Self.isSuccessfulHypixelResponse(data) {
+                        completion(.valid)
+                    } else {
+                        completion(.unavailable)
+                    }
+                }
+            }
+        }
+    }
+
     private func fetch(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
         let manualLookup = roster.matchID.hasPrefix("manual_")
         // `/who` is the user's explicit recovery path after rotating a Hypixel key.
@@ -321,6 +348,18 @@ extension StatsProviderLookup {
         request.timeoutInterval = responseTimeout
         request.setValue(apiKey, forHTTPHeaderField: "API-Key")
         return request
+    }
+
+    static func hypixelKeyValidationRequest(apiKey: String) -> URLRequest {
+        var request = URLRequest(url: URL(string: "https://api.hypixel.net/v2/counts")!)
+        request.timeoutInterval = responseTimeout
+        request.setValue(apiKey, forHTTPHeaderField: "API-Key")
+        return request
+    }
+
+    static func isSuccessfulHypixelResponse(_ data: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return root["success"] as? Bool == true
     }
 
     static func mojangProfileRequest(name: String) -> URLRequest {

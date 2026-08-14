@@ -66,6 +66,29 @@ struct StatsBridgeRosterResponse: Codable, Equatable {
     }
 }
 
+/// A fixed, capability-protected request that contains no player or key data.
+struct HypixelAPIKeyValidationRequest: Codable, Equatable {
+    static let schemaVersion = 1
+
+    let schemaVersion: Int
+
+    var isValid: Bool {
+        schemaVersion == Self.schemaVersion
+    }
+}
+
+/// The only Hypixel-key state exposed to the MOD. Raw responses and key metadata stay in the Companion.
+enum HypixelAPIKeyValidationStatus: String, Codable, Equatable {
+    case valid
+    case invalid
+    case unavailable
+}
+
+struct HypixelAPIKeyValidationResponse: Codable, Equatable {
+    let schemaVersion: Int
+    let status: HypixelAPIKeyValidationStatus
+}
+
 /// Deliberately normalized data returned to the MOD. Raw provider payloads and API keys never cross the bridge.
 struct StatsBridgePlayerResult: Codable, Equatable {
     let name: String

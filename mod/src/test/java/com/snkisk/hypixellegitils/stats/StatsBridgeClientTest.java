@@ -23,6 +23,48 @@ import static org.junit.Assert.assertTrue;
 
 public final class StatsBridgeClientTest {
     @Test
+    public void validatesTheHypixelKeyOnceWithoutSendingAnyKeyOrPlayerData() throws Exception {
+        final AtomicInteger requests = new AtomicInteger(0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
+        server.createContext("/v1/hypixel-key-validation", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws java.io.IOException {
+                requests.incrementAndGet();
+                assertEquals("POST", exchange.getRequestMethod());
+                assertEquals("capability0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", exchange.getRequestHeaders().getFirst("X-Legitils-Capability"));
+                assertEquals("{\"schemaVersion\":1}", new String(readAll(exchange), StandardCharsets.UTF_8));
+                byte[] body = "{\"schemaVersion\":1,\"status\":\"invalid\"}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+                OutputStream output = exchange.getResponseBody();
+                try {
+                    output.write(body);
+                } finally {
+                    output.close();
+                }
+            }
+        });
+        server.start();
+        Path directory = Files.createTempDirectory("legitils-hypixel-key-validation");
+        try {
+            writeDescriptor(
+                directory.resolve("stats-bridge.json"),
+                server.getAddress().getPort(),
+                "capability0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                System.currentTimeMillis() + 120000L
+            );
+            StatsBridgeClient client = new StatsBridgeClient(directory.resolve("stats-bridge.json"));
+            assertEquals(HypixelKeyValidationResult.INVALID, client.requestHypixelKeyValidationOnce(System.currentTimeMillis()));
+            client.resetForNewWorld();
+            assertEquals(HypixelKeyValidationResult.ALREADY_REQUESTED, client.requestHypixelKeyValidationOnce(System.currentTimeMillis()));
+            assertEquals(1, requests.get());
+        } finally {
+            server.stop(0);
+            deleteTree(directory);
+        }
+    }
+
+    @Test
     public void missingOrExpiredDescriptorLeavesStatsUnavailable() throws Exception {
         Path directory = Files.createTempDirectory("legitils-stats-bridge");
         try {

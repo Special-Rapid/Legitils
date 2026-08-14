@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 /** Bounded, capability-protected local client. It never contacts a remote stats provider itself. */
@@ -30,6 +31,7 @@ public final class StatsBridgeClient {
     private static final int MAXIMUM_TAG_LABEL_LENGTH = 64;
     private final Path descriptorPath;
     private final Set<String> requestedMatchIds = Collections.synchronizedSet(new LinkedHashSet<String>());
+    private final AtomicBoolean hypixelKeyValidationRequested = new AtomicBoolean(false);
 
     public StatsBridgeClient(Path descriptorPath) {
         this.descriptorPath = descriptorPath;
@@ -52,6 +54,16 @@ public final class StatsBridgeClient {
 
     public void resetForNewWorld() {
         requestedMatchIds.clear();
+    }
+
+    /** One per MOD injection, deliberately independent from world/session Stats reset. */
+    public HypixelKeyValidationResult requestHypixelKeyValidationOnce(long nowMillis) {
+        if (!hypixelKeyValidationRequested.compareAndSet(false, true)) {
+            return HypixelKeyValidationResult.ALREADY_REQUESTED;
+        }
+        Optional<StatsBridgeDescriptor> descriptor = StatsBridgeDescriptor.read(descriptorPath, nowMillis);
+        if (!descriptor.isPresent()) return HypixelKeyValidationResult.UNAVAILABLE;
+        return requestHypixelKeyValidation(descriptor.get());
     }
 
     private StatsBridgeLookupResult request(
@@ -82,6 +94,34 @@ public final class StatsBridgeClient {
             return parseResponse(readBounded(connection.getInputStream()));
         } catch (Exception exception) {
             return StatsBridgeLookupResult.unavailable();
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private HypixelKeyValidationResult requestHypixelKeyValidation(StatsBridgeDescriptor descriptor) {
+        HttpURLConnection connection = null;
+        try {
+            URL endpoint = new URL("http", "127.0.0.1", descriptor.port, "/v1/hypixel-key-validation");
+            connection = (HttpURLConnection) endpoint.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(750);
+            connection.setReadTimeout(READ_TIMEOUT_MILLIS);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            connection.setRequestProperty("X-Legitils-Capability", descriptor.capability);
+            byte[] body = "{\"schemaVersion\":1}".getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(body.length);
+            OutputStream output = connection.getOutputStream();
+            try {
+                output.write(body);
+            } finally {
+                output.close();
+            }
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) return HypixelKeyValidationResult.UNAVAILABLE;
+            return parseHypixelKeyValidationResponse(readBounded(connection.getInputStream()));
+        } catch (Exception exception) {
+            return HypixelKeyValidationResult.UNAVAILABLE;
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -155,6 +195,24 @@ public final class StatsBridgeClient {
             return StatsBridgeLookupResult.ready(players);
         } catch (RuntimeException exception) {
             return StatsBridgeLookupResult.unavailable();
+        }
+    }
+
+    private static HypixelKeyValidationResult parseHypixelKeyValidationResponse(byte[] raw) {
+        try {
+            Object parsed = SimpleJson.parse(new String(raw, StandardCharsets.UTF_8));
+            if (!(parsed instanceof Map)) return HypixelKeyValidationResult.UNAVAILABLE;
+            Map<?, ?> response = (Map<?, ?>) parsed;
+            if (response.size() != 2 || number(response.get("schemaVersion")) == null
+                || number(response.get("schemaVersion")).intValue() != 1 || !(response.get("status") instanceof String)) {
+                return HypixelKeyValidationResult.UNAVAILABLE;
+            }
+            String status = (String) response.get("status");
+            if ("valid".equals(status)) return HypixelKeyValidationResult.VALID;
+            if ("invalid".equals(status)) return HypixelKeyValidationResult.INVALID;
+            return HypixelKeyValidationResult.UNAVAILABLE;
+        } catch (RuntimeException exception) {
+            return HypixelKeyValidationResult.UNAVAILABLE;
         }
     }
 

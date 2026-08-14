@@ -26,6 +26,7 @@ import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import com.snkisk.hypixellegitils.stats.StatsBridgeClient;
+import com.snkisk.hypixellegitils.stats.HypixelKeyValidationResult;
 import com.snkisk.hypixellegitils.stats.StatsDisplayNameColumns;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
 import com.snkisk.hypixellegitils.stats.BedwarsModeTracker;
@@ -108,6 +109,8 @@ public final class HypixelLegitilsBootstrap {
     private static final Queue<PendingStatsNotice> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<PendingStatsNotice>();
     private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_PROVIDER_KEY_CHANGE_NOTICES = new ConcurrentLinkedQueue<String>();
+    private static final Queue<PendingExternalLinkNotice> PENDING_EXTERNAL_LINK_NOTICES
+        = new ConcurrentLinkedQueue<PendingExternalLinkNotice>();
     private static final Queue<StatsBridgeLookupResult> PENDING_MANUAL_STATS_RESULTS
         = new ConcurrentLinkedQueue<StatsBridgeLookupResult>();
     private static final AtomicLong MANUAL_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
@@ -193,6 +196,24 @@ public final class HypixelLegitilsBootstrap {
         AlertPresentation presentation = active.onClientTick(nowMillis);
         currentPresentation = presentation;
         return presentation;
+    }
+
+    /** Runs only from the first injected local notice; it is not tied to server/world changes. */
+    public static void requestInjectedHypixelKeyValidation() {
+        final StatsBridgeClient client = statsBridgeClient;
+        if (client == null) return;
+        STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
+            @Override
+            public void run() {
+                if (client.requestHypixelKeyValidationOnce(System.currentTimeMillis()) != HypixelKeyValidationResult.INVALID) {
+                    return;
+                }
+                PENDING_EXTERNAL_LINK_NOTICES.add(new PendingExternalLinkNotice(
+                    ChatFormat.line("§cHypixel API key expired or invalid. §eReissue it"),
+                    "https://developer.hypixel.net/dashboard"
+                ));
+            }
+        });
     }
 
     private static void reloadExternalConfigIfNeeded(long nowMillis, ObservationCoordinator active) {
@@ -844,6 +865,14 @@ public final class HypixelLegitilsBootstrap {
         return notices.toArray(new String[notices.size()]);
     }
 
+    /** Invalid-key notice whose URL is fixed in source and rendered as a clickable Chat icon. */
+    public static PendingExternalLinkNotice[] drainPendingExternalLinkNotices() {
+        List<PendingExternalLinkNotice> notices = new ArrayList<PendingExternalLinkNotice>();
+        PendingExternalLinkNotice notice;
+        while ((notice = PENDING_EXTERNAL_LINK_NOTICES.poll()) != null) notices.add(notice);
+        return notices.toArray(new PendingExternalLinkNotice[notices.size()]);
+    }
+
     static void enqueueCompanionSettingsApplied(long revision) {
         PENDING_CONFIGURATION_NOTICES.add(ChatFormat.line("§aCompanion settings applied. §7Revision §f" + revision));
     }
@@ -1428,6 +1457,17 @@ public final class HypixelLegitilsBootstrap {
             this.text = text;
             this.tooltip = tooltip;
             this.tagCode = tagCode;
+        }
+    }
+
+    /** Fixed local dashboard link; no user/provider-controlled URL crosses the bridge. */
+    public static final class PendingExternalLinkNotice {
+        public final String text;
+        public final String url;
+
+        private PendingExternalLinkNotice(String text, String url) {
+            this.text = text;
+            this.url = url;
         }
     }
 
