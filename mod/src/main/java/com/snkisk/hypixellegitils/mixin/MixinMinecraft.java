@@ -305,7 +305,7 @@ public abstract class MixinMinecraft {
             if (!member.isValid()) continue;
             String key = member.name.toLowerCase(java.util.Locale.ROOT);
             visibleMembers.put(key, member);
-            teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatDisplayName(
+            teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatRawDisplayName(
                 member.name, hypixelLegitils$teamFormattedName(playerId, member.name)
             ));
         }
@@ -353,7 +353,7 @@ public abstract class MixinMinecraft {
             StatsBridgeRosterMember member = new StatsBridgeRosterMember(profile.getName(), uuid);
             if (!member.isValid()) continue;
             members.put(key, member);
-            teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatDisplayName(
+            teamFormattedNames.put(key, HypixelLegitilsBootstrap.statsChatRawDisplayName(
                 profile.getName(), hypixelLegitils$teamFormattedName(profileId, profile.getName())
             ));
         }

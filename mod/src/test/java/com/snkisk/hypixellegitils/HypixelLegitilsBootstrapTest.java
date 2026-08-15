@@ -32,6 +32,37 @@ public final class HypixelLegitilsBootstrapTest {
     }
 
     @Test
+    public void pregameNickChatNoticeIsImmediateWithoutInventingATeamColour() {
+        assertEquals(
+            ChatFormat.line("§fPregameNick§5 is nicked."),
+            HypixelLegitilsBootstrap.pregameNickChatNotice("PregameNick")
+        );
+    }
+
+    @Test
+    public void currentNickAliasPromotesOnlyThatVisibleRosterEntryToNicked() {
+        com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult visible =
+            new com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult(
+                "PregameNick", com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult.NickStatus.UNAVAILABLE,
+                null, null, null, Collections.<com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult.CommunityTag>emptyList()
+            );
+        com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult result =
+            com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult.ready(Collections.singletonList(visible));
+
+        assertEquals(
+            com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult.NickStatus.NICKED,
+            HypixelLegitilsBootstrap.withSessionNickStatuses(result, Collections.singleton("pregamenick")).players.get(0).nickStatus
+        );
+    }
+
+    @Test
+    public void chatColumnsFindOneExactlyReachablePixelEndForVariableGlyphWidths() {
+        assertEquals(38, HypixelLegitilsBootstrap.alignedChatColumnEnd(33, java.util.Arrays.asList(33, 30), 4, 5));
+        assertEquals("§r§l §r", HypixelLegitilsBootstrap.chatPixelPadding(5, 4, 5));
+        assertEquals("§r  §r", HypixelLegitilsBootstrap.chatPixelPadding(8, 4, 5));
+    }
+
+    @Test
     public void versionOneNickProfilesKeepTheirSessionOnlyNametagMarker() {
         java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
         assertTrue(HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(nick));

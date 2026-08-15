@@ -21,6 +21,7 @@ public final class StatsDisplayNameColumns {
     private int nextBoldSpacePixelWidth = FALLBACK_BOLD_SPACE_WIDTH;
     private int nextStarPixelWidth;
     private int nextFkdrPixelWidth;
+    private long completedRenderGeneration;
 
     /** Starts a fresh Tab roster snapshot; the previous complete snapshot remains available to render it. */
     public synchronized void beginTabRender() {
@@ -90,15 +91,30 @@ public final class StatsDisplayNameColumns {
         activeFkdrPixelWidth = alignedColumnWidth(
             nextFkdrPixelWidth, nextRenderedNames, false, activeSpacePixelWidth, activeBoldSpacePixelWidth, true
         );
+        completedRenderGeneration++;
+    }
+
+    /** Monotonic client-render marker used to wait one complete Tab snapshot before automatic Chat is formatted. */
+    public synchronized long completedRenderGeneration() {
+        return completedRenderGeneration;
     }
 
     /** Returns the latest complete Tab field and its dynamic roster padding for automatic Chat. */
     public synchronized String nameForChat(String profileName, String fallbackName) {
+        return textForChat(profileName, fallbackName) + namePaddingForChat(profileName);
+    }
+
+    /** Returns the latest unpadded Tab field so a Chat batch can align itself even while Tab is closed. */
+    public synchronized String textForChat(String profileName, String fallbackName) {
         RenderedName rendered = profileName == null ? null : activeRenderedNames.get(key(profileName));
         if (rendered == null || !isUsable(profileName, rendered.text)) return fallbackName == null ? "" : fallbackName;
-        return rendered.text + spacesFor(
-            activeColumnPixelWidth, rendered.pixelWidth, activeSpacePixelWidth, activeBoldSpacePixelWidth
-        );
+        return rendered.text;
+    }
+
+    private String namePaddingForChat(String profileName) {
+        RenderedName rendered = profileName == null ? null : activeRenderedNames.get(key(profileName));
+        if (rendered == null || !isUsable(profileName, rendered.text)) return "";
+        return spacesFor(activeColumnPixelWidth, rendered.pixelWidth, activeSpacePixelWidth, activeBoldSpacePixelWidth);
     }
 
     /** Returns the matching current Star-column padding for Tab or Chat, never for a stale different value. */

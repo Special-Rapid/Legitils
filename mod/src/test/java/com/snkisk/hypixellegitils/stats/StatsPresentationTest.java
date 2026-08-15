@@ -181,6 +181,7 @@ public final class StatsPresentationTest {
         assertEquals("§aG Narrow§r" + spaces(2) + "§r", columns.nameForChat("Narrow", "§aG Narrow"));
         assertEquals("§r§l §r", columns.starPadding("Wide", "§f[100✫]"));
         assertEquals("§r" + spaces(2) + "§r", columns.starPadding("Narrow", "§f[101✫]"));
+        assertEquals(1L, columns.completedRenderGeneration());
     }
 
     @Test

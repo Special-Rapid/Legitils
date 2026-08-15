@@ -40,6 +40,8 @@ import com.snkisk.hypixellegitils.stats.StatsRosterReconciliation;
 import com.snkisk.hypixellegitils.stats.StatsPresentation;
 import com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult;
 import com.snkisk.hypixellegitils.stats.StatsTabSorter;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.scoreboard.ScorePlayerTeam;
 import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
@@ -96,7 +98,9 @@ public final class HypixelLegitilsBootstrap {
     private static final Queue<String> PENDING_NICK_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<PendingTeamNickNotice> PENDING_TEAM_NICK_NOTICES
         = new ConcurrentLinkedQueue<PendingTeamNickNotice>();
-    private static final Map<UUID, String> PREGAME_NICK_CHATTERS = new ConcurrentHashMap<UUID, String>();
+    /** Current displayed Nick aliases only; never persisted or resolved to a real identity. */
+    private static final Set<String> NICKED_SESSION_PLAYER_NAMES
+        = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Set<String> PREGAME_STATS_CHATTERS
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final int MAXIMUM_PREGAME_STATS_LOOKUP_ATTEMPTS = 2;
@@ -107,6 +111,9 @@ public final class HypixelLegitilsBootstrap {
         = new WhoStatsRefresh.PendingRequests(8);
     private static final Queue<String> PENDING_PARTY_DETECTOR_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<PendingStatsNotice> PENDING_STATS_NOTICES = new ConcurrentLinkedQueue<PendingStatsNotice>();
+    private static final Queue<PendingStatsPublication> PENDING_STATS_PUBLICATIONS
+        = new ConcurrentLinkedQueue<PendingStatsPublication>();
+    private static final long STATS_CHAT_TAB_SETTLE_MILLIS = 350L;
     private static final Queue<String> PENDING_CONFIGURATION_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<String> PENDING_PROVIDER_KEY_CHANGE_NOTICES = new ConcurrentLinkedQueue<String>();
     private static final Queue<PendingExternalLinkNotice> PENDING_EXTERNAL_LINK_NOTICES
@@ -236,8 +243,8 @@ public final class HypixelLegitilsBootstrap {
         enqueueCompanionSettingsApplied(reload.config.revision);
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
+            NICKED_SESSION_PLAYER_NAMES.clear();
             LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.clear();
-            PREGAME_NICK_CHATTERS.clear();
         }
         if (!partyDetectionEnabled) resetPartyDetectors();
         try {
@@ -378,39 +385,26 @@ public final class HypixelLegitilsBootstrap {
             return;
         }
         if (!nickDetectionEnabled) return;
-        // During pre-game, only a Nick who actually chats is announced at game
-        // start. The Tab marker remains available without creating chat noise.
+        // During pre-game, only a Nick who actually chats is announced. The
+        // packet chat hook supplies that immediate notification below.
         if (bedwarsPreGame) return;
-        if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
-        if (serverPresentedName != null && !serverPresentedName.trim().isEmpty()) {
-            if (!FlagMessage.hasBedWarsTeamPrefix(formattedDisplayName)) {
-                PENDING_TEAM_NICK_NOTICES.add(new PendingTeamNickNotice(playerId, serverPresentedName, System.currentTimeMillis() + 1500L));
-            } else {
-                PENDING_NICK_NOTICES.add(ChatFormat.line(
-                    FlagMessage.teamFormattedName(formattedDisplayName, serverPresentedName) + "§5 is nicked."
-                ));
-            }
-        }
+        if (!markNickedSession(playerId, serverPresentedName)) return;
         if (NICK_OBSERVATION_LOGGED.compareAndSet(false, true)) {
             System.out.println("[HypixelLegitils] Nick session marker observed for " + serverPresentedName + ".");
         }
     }
 
-    /** Queues a pre-game Nick until Bed Wars assigns their team at game start. */
+    /** A pre-game Nick who chats is useful immediately; team colour is unavailable until the game starts. */
     public static void onPregameNickChat(UUID playerId, String serverPresentedName) {
         if (!STARTED.get() || !nickDetectionEnabled || playerId == null || playerId.version() != 1
             || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
-        if (NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return;
-        PREGAME_NICK_CHATTERS.put(playerId, serverPresentedName);
+        if (!markNickedSession(playerId, serverPresentedName)) return;
+        PENDING_NICK_NOTICES.add(pregameNickChatNotice(serverPresentedName));
     }
 
-    /** Releases one pre-game Nick notice once Hypixel announces game start and the team is available. */
+    /** Pregame Nick chat is intentionally emitted immediately, so game start has no duplicate to release. */
     public static void onPregameGameStartChat(String rawMessage, long nowMillis) {
-        if (!NickChatSignal.isGameStart(rawMessage)) return;
-        for (Map.Entry<UUID, String> entry : PREGAME_NICK_CHATTERS.entrySet()) {
-            PENDING_TEAM_NICK_NOTICES.add(new PendingTeamNickNotice(entry.getKey(), entry.getValue(), nowMillis + 1000L));
-        }
-        PREGAME_NICK_CHATTERS.clear();
+        // Kept as the packet hook's stable entry point. Nick chat no longer waits for a team assignment.
     }
 
     /** Called only after a visible Bed Wars pre-game start message. */
@@ -642,25 +636,38 @@ public final class HypixelLegitilsBootstrap {
     ) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+            StatsBridgeLookupResult sessionAwareResult = withSessionNickStatuses(result, NICKED_SESSION_PLAYER_NAMES);
             latestStatsBridgeResult = retainEliminatedMatchMembers
-                ? StatsMatchResultRetention.mergeWhoRefresh(latestStatsBridgeResult, result)
-                : result;
+                ? StatsMatchResultRetention.mergeWhoRefresh(latestStatsBridgeResult, sessionAwareResult)
+                : sessionAwareResult;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
             if (publishChat && statsSettings.enabled && statsSettings.chatEnabled) {
                 StatsBridgeLookupResult chatResult = includeRetainedTagsInChat
-                    ? StatsMatchResultRetention.returnedMembersWithRetainedTags(latestStatsBridgeResult, result)
-                    : result;
-                for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
-                    chatResult,
-                    teamFormattedNames,
-                    statsChatStarPaddings(chatResult),
-                    statsChatFkdrPaddings(chatResult),
-                    statsSettings
-                )) {
-                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
-                }
+                    ? StatsMatchResultRetention.returnedMembersWithRetainedTags(latestStatsBridgeResult, sessionAwareResult)
+                    : sessionAwareResult;
+                PENDING_STATS_PUBLICATIONS.add(new PendingStatsPublication(
+                    chatResult, teamFormattedNames, STATS_DISPLAY_NAME_COLUMNS.completedRenderGeneration(), System.currentTimeMillis()
+                ));
             }
         }
+    }
+
+    /** Promotes only a current session Nick alias; no identity lookup or persistence is introduced. */
+    static StatsBridgeLookupResult withSessionNickStatuses(StatsBridgeLookupResult result, Set<String> nickedNames) {
+        if (result == null || result.status != StatsBridgeLookupResult.Status.READY || nickedNames == null || nickedNames.isEmpty()) return result;
+        List<StatsBridgePlayerResult> players = new ArrayList<StatsBridgePlayerResult>(result.players.size());
+        boolean changed = false;
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player != null && player.name != null && nickedNames.contains(player.name.toLowerCase(Locale.ROOT))
+                && player.nickStatus != StatsBridgePlayerResult.NickStatus.NICKED) {
+                players.add(new StatsBridgePlayerResult(
+                    player.name, StatsBridgePlayerResult.NickStatus.NICKED,
+                    player.stars, player.finalKillDeathRatio, player.modeWinStreak, player.communityTags
+                ));
+                changed = true;
+            } else players.add(player);
+        }
+        return changed ? StatsBridgeLookupResult.ready(players) : result;
     }
 
     /** Pregame chatter results merge only resolved chatters for display until the later complete match roster supersedes them. */
@@ -763,6 +770,11 @@ public final class HypixelLegitilsBootstrap {
         return STATS_DISPLAY_NAME_COLUMNS.nameForChat(playerName, fallbackName);
     }
 
+    /** Captures third-party Tab decorations without carrying an old Tab column's padding into a fresh Chat batch. */
+    public static String statsChatRawDisplayName(String playerName, String fallbackName) {
+        return STATS_DISPLAY_NAME_COLUMNS.textForChat(playerName, fallbackName);
+    }
+
     /** Reuses the matching current Tab Star column for Chat without accessing Minecraft rendering from a bridge thread. */
     public static String statsChatStarPadding(String playerName, String starText) {
         return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText);
@@ -790,13 +802,123 @@ public final class HypixelLegitilsBootstrap {
     }
 
     private static Map<String, String> statsChatDisplayNames(StatsBridgeLookupResult result) {
+        return statsChatDisplayNames(result, Collections.<String, String>emptyMap());
+    }
+
+    /** Applies the newest complete Tab snapshot on the client thread while retaining captured real team formatting. */
+    private static Map<String, String> statsChatDisplayNames(StatsBridgeLookupResult result, Map<String, String> capturedTeamNames) {
         if (result == null || result.players == null || result.players.isEmpty()) return Collections.emptyMap();
         Map<String, String> names = new LinkedHashMap<String, String>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player == null || player.name == null) continue;
-            names.put(player.name.toLowerCase(Locale.ROOT), statsChatDisplayName(player.name, "§f" + player.name));
+            String key = player.name.toLowerCase(Locale.ROOT);
+            String captured = capturedTeamNames == null ? null : capturedTeamNames.get(key);
+            names.put(key, statsChatDisplayName(player.name, captured == null ? "§f" + player.name : captured));
         }
         return names;
+    }
+
+    /** Uses current raw Tab names (when available) and fresh client-font measurements for one Chat batch. */
+    private static StatsChatColumns statsChatColumns(StatsBridgeLookupResult result, Map<String, String> capturedTeamNames) {
+        if (result == null || result.status != StatsBridgeLookupResult.Status.READY || result.players.isEmpty()) {
+            return StatsChatColumns.empty();
+        }
+        Map<String, String> names = new LinkedHashMap<String, String>();
+        FontRenderer font = Minecraft.getMinecraft() == null ? null : Minecraft.getMinecraft().fontRendererObj;
+        if (font == null) {
+            return new StatsChatColumns(statsChatDisplayNames(result, capturedTeamNames), Collections.<String, String>emptyMap(), Collections.<String, String>emptyMap());
+        }
+        Map<String, Integer> nameWidths = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> starWidths = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> fkdrWidths = new LinkedHashMap<String, Integer>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player == null || player.name == null || !isChatRosterCandidate(player)) continue;
+            String key = player.name.toLowerCase(Locale.ROOT);
+            String captured = capturedTeamNames == null ? null : capturedTeamNames.get(key);
+            String name = statsChatRawDisplayName(player.name, captured == null ? "§f" + player.name : captured);
+            names.put(key, name);
+            nameWidths.put(key, Integer.valueOf(font.getStringWidth(name)));
+            String star = StatsPresentation.chatStar(player);
+            if (!star.isEmpty()) starWidths.put(key, Integer.valueOf(font.getStringWidth(star)));
+            String fkdr = StatsPresentation.chatFkdr(player);
+            if (!fkdr.isEmpty()) fkdrWidths.put(key, Integer.valueOf(font.getStringWidth(fkdr)));
+        }
+        int normalSpaceWidth = Math.max(1, font.getStringWidth(" "));
+        int boldSpaceWidth = Math.max(1, font.getStringWidth("§l "));
+        return new StatsChatColumns(
+            applyChatColumnPadding(names, nameWidths, normalSpaceWidth, boldSpaceWidth),
+            chatColumnPaddings(starWidths, normalSpaceWidth, boldSpaceWidth),
+            chatColumnPaddings(fkdrWidths, normalSpaceWidth, boldSpaceWidth)
+        );
+    }
+
+    private static boolean isChatRosterCandidate(StatsBridgePlayerResult player) {
+        return player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED
+            || StatsPresentation.tierFor(player) != StatsPresentation.Tier.NONE
+            || StatsPresentation.hasCommunityAdvisoryTag(player);
+    }
+
+    private static Map<String, String> applyChatColumnPadding(
+        Map<String, String> names,
+        Map<String, Integer> widths,
+        int normalSpaceWidth,
+        int boldSpaceWidth
+    ) {
+        if (names.isEmpty()) return names;
+        Map<String, String> padded = new LinkedHashMap<String, String>();
+        Map<String, String> padding = chatColumnPaddings(widths, normalSpaceWidth, boldSpaceWidth);
+        for (Map.Entry<String, String> entry : names.entrySet()) {
+            String suffix = padding.get(entry.getKey());
+            padded.put(entry.getKey(), entry.getValue() + (suffix == null ? "" : suffix));
+        }
+        return padded;
+    }
+
+    private static Map<String, String> chatColumnPaddings(
+        Map<String, Integer> widths,
+        int normalSpaceWidth,
+        int boldSpaceWidth
+    ) {
+        if (widths == null || widths.isEmpty()) return Collections.emptyMap();
+        int maximum = 0;
+        for (Integer width : widths.values()) if (width != null && width.intValue() > maximum) maximum = width.intValue();
+        int columnEnd = alignedChatColumnEnd(maximum, widths.values(), normalSpaceWidth, boldSpaceWidth);
+        Map<String, String> padding = new LinkedHashMap<String, String>();
+        for (Map.Entry<String, Integer> entry : widths.entrySet()) {
+            padding.put(entry.getKey(), chatPixelPadding(columnEnd - entry.getValue().intValue(), normalSpaceWidth, boldSpaceWidth));
+        }
+        return padding;
+    }
+
+    static int alignedChatColumnEnd(int maximum, Iterable<Integer> widths, int normalSpaceWidth, int boldSpaceWidth) {
+        for (int candidate = maximum; candidate <= maximum + 12; candidate++) {
+            boolean aligned = true;
+            for (Integer width : widths) {
+                if (width == null || chatPixelPadding(candidate - width.intValue(), normalSpaceWidth, boldSpaceWidth) == null) {
+                    aligned = false;
+                    break;
+                }
+            }
+            if (aligned) return candidate;
+        }
+        return maximum;
+    }
+
+    static String chatPixelPadding(int missingPixels, int normalSpaceWidth, int boldSpaceWidth) {
+        if (missingPixels < 0) return null;
+        if (missingPixels == 0) return "";
+        for (int normalSpaces = 0; normalSpaces <= missingPixels / normalSpaceWidth; normalSpaces++) {
+            int remaining = missingPixels - normalSpaces * normalSpaceWidth;
+            if (remaining < 0 || remaining % boldSpaceWidth != 0) continue;
+            StringBuilder padding = new StringBuilder("§r");
+            for (int index = 0; index < normalSpaces; index++) padding.append(' ');
+            if (remaining > 0) {
+                padding.append("§l");
+                for (int index = 0; index < remaining / boldSpaceWidth; index++) padding.append(' ');
+            }
+            return padding.append("§r").toString();
+        }
+        return null;
     }
 
     private static Map<String, String> statsChatStarPaddings(StatsBridgeLookupResult result) {
@@ -980,6 +1102,25 @@ public final class HypixelLegitilsBootstrap {
     }
 
     public static PendingStatsNotice[] drainPendingStatsNotices() {
+        long nowMillis = System.currentTimeMillis();
+        while (true) {
+            PendingStatsPublication publication = PENDING_STATS_PUBLICATIONS.peek();
+            if (publication == null) break;
+            boolean hasNewTabSnapshot = STATS_DISPLAY_NAME_COLUMNS.completedRenderGeneration() > publication.tabRenderGeneration;
+            if (!hasNewTabSnapshot && nowMillis < publication.forceDisplayAfterMillis) break;
+            publication = PENDING_STATS_PUBLICATIONS.poll();
+            if (publication == null) continue;
+            StatsChatColumns columns = statsChatColumns(publication.result, publication.capturedTeamNames);
+            for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
+                publication.result,
+                columns.names,
+                columns.starPaddings,
+                columns.fkdrPaddings,
+                statsSettings
+            )) {
+                PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
+            }
+        }
         List<PendingStatsNotice> notices = new ArrayList<PendingStatsNotice>();
         PendingStatsNotice notice;
         while ((notice = PENDING_STATS_NOTICES.poll()) != null) notices.add(notice);
@@ -1268,6 +1409,19 @@ public final class HypixelLegitilsBootstrap {
         return ChatFormat.line(FlagMessage.teamFormattedName(formattedDisplayName, serverPresentedName) + "§5 is nicked.");
     }
 
+    /** Pregame has no trustworthy team prefix yet, so keep the visible current Nick alias white. */
+    public static String pregameNickChatNotice(String serverPresentedName) {
+        return ChatFormat.line("§f" + serverPresentedName + "§5 is nicked.");
+    }
+
+    private static boolean markNickedSession(UUID playerId, String serverPresentedName) {
+        if (playerId == null || NICKED_SESSION_PLAYER_IDS.size() >= 256 || !NICKED_SESSION_PLAYER_IDS.add(playerId)) return false;
+        if (serverPresentedName != null && !serverPresentedName.trim().isEmpty()) {
+            NICKED_SESSION_PLAYER_NAMES.add(serverPresentedName.toLowerCase(Locale.ROOT));
+        }
+        return true;
+    }
+
     private static String[] updateDetectorSetting(LocalCommand.Request request) {
         try {
             DetectorSettingsService.Update update = request.all
@@ -1333,6 +1487,7 @@ public final class HypixelLegitilsBootstrap {
             nickDetectionEnabled = update.config.nickDetectionSettings.enabled;
             if (!nickDetectionEnabled) {
                 NICKED_SESSION_PLAYER_IDS.clear();
+                NICKED_SESSION_PLAYER_NAMES.clear();
             }
             return new String[] {
                 ChatFormat.line("§fNick detect " + (nickDetectionEnabled ? "§aenabled" : "§cdisabled")
@@ -1596,6 +1751,51 @@ public final class HypixelLegitilsBootstrap {
         }
     }
 
+    /** Client-font-aligned fields for one automatic Chat roster batch. */
+    private static final class StatsChatColumns {
+        private final Map<String, String> names;
+        private final Map<String, String> starPaddings;
+        private final Map<String, String> fkdrPaddings;
+
+        private StatsChatColumns(
+            Map<String, String> names,
+            Map<String, String> starPaddings,
+            Map<String, String> fkdrPaddings
+        ) {
+            this.names = names == null ? Collections.<String, String>emptyMap() : names;
+            this.starPaddings = starPaddings == null ? Collections.<String, String>emptyMap() : starPaddings;
+            this.fkdrPaddings = fkdrPaddings == null ? Collections.<String, String>emptyMap() : fkdrPaddings;
+        }
+
+        private static StatsChatColumns empty() {
+            return new StatsChatColumns(
+                Collections.<String, String>emptyMap(), Collections.<String, String>emptyMap(), Collections.<String, String>emptyMap()
+            );
+        }
+    }
+
+    /** Normalized-only automatic Chat batch held until Tab has produced one complete alignment snapshot. */
+    private static final class PendingStatsPublication {
+        private final StatsBridgeLookupResult result;
+        private final Map<String, String> capturedTeamNames;
+        private final long tabRenderGeneration;
+        private final long forceDisplayAfterMillis;
+
+        private PendingStatsPublication(
+            StatsBridgeLookupResult result,
+            Map<String, String> capturedTeamNames,
+            long tabRenderGeneration,
+            long enqueuedAtMillis
+        ) {
+            this.result = result;
+            this.capturedTeamNames = Collections.unmodifiableMap(new LinkedHashMap<String, String>(
+                capturedTeamNames == null ? Collections.<String, String>emptyMap() : capturedTeamNames
+            ));
+            this.tabRenderGeneration = tabRenderGeneration;
+            this.forceDisplayAfterMillis = enqueuedAtMillis + STATS_CHAT_TAB_SETTLE_MILLIS;
+        }
+    }
+
     /** Fixed local dashboard link; no user/provider-controlled URL crosses the bridge. */
     public static final class PendingExternalLinkNotice {
         public final String text;
@@ -1797,6 +1997,7 @@ public final class HypixelLegitilsBootstrap {
             ? "game-world transition retained resolved pregame Stats and scheduled post-start roster"
             : "world reset clears pending automatic roster and latest result");
         PENDING_STATS_NOTICES.clear();
+        PENDING_STATS_PUBLICATIONS.clear();
         PENDING_CONFIGURATION_NOTICES.clear();
         PENDING_MANUAL_STATS_RESULTS.clear();
         PREGAME_STATS_CHATTERS.clear();
@@ -1810,10 +2011,16 @@ public final class HypixelLegitilsBootstrap {
             active.onWorldLoading();
             currentPresentation = null;
             VISIBLE_PLAYER_OBSERVATION_STARTED.set(false);
-            NICKED_SESSION_PLAYER_IDS.clear();
-            PENDING_NICK_NOTICES.clear();
-            PREGAME_NICK_CHATTERS.clear();
-            if (!postStartRosterScheduled) PENDING_TEAM_NICK_NOTICES.clear();
+            // The Bed Wars game world replaces the pregame world. Preserve only
+            // session Nick aliases across that confirmed transition so they can
+            // appear as the first row of their real team; clear them on every
+            // other world transition.
+            if (!postStartRosterScheduled) {
+                NICKED_SESSION_PLAYER_IDS.clear();
+                NICKED_SESSION_PLAYER_NAMES.clear();
+                PENDING_NICK_NOTICES.clear();
+                PENDING_TEAM_NICK_NOTICES.clear();
+            }
             NICK_OBSERVATION_LOGGED.set(false);
             MARKER_RENDER_LOGGED.set(false);
             TAB_RENDER_HOOK_LOGGED.set(false);
