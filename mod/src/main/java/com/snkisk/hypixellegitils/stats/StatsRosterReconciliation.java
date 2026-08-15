@@ -20,9 +20,13 @@ public final class StatsRosterReconciliation {
     private long nextScanAtMillis;
     private long nextSequence;
 
-    /** Automatic reconciliation belongs only to a current world with a confirmed Bed Wars mode. */
-    public static boolean supports(BedwarsMode gameMode) {
-        return gameMode != null && gameMode != BedwarsMode.UNKNOWN;
+    /**
+     * Automatic reconciliation needs either a visible Bed Wars mode or the
+     * confirmed post-start context. The latter is necessary because the game
+     * sidebar commonly stops exposing its mode line after the world changes.
+     */
+    public static boolean supports(BedwarsMode gameMode, boolean confirmedMatchContext) {
+        return confirmedMatchContext || (gameMode != null && gameMode != BedwarsMode.UNKNOWN);
     }
 
     /** Returns one missing-profile request at most once per scan and never while an earlier attempt is cooling down. */

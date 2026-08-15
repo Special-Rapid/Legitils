@@ -257,8 +257,8 @@ public abstract class MixinMinecraft {
             return;
         }
         BedwarsMode gameMode = HypixelLegitilsBootstrap.statsModeFor(BedwarsPreGameState.mode(theWorld));
-        if (!StatsRosterReconciliation.supports(gameMode)) {
-            HypixelLegitilsBootstrap.traceStats("roster due skipped without confirmed Bed Wars mode");
+        if (!HypixelLegitilsBootstrap.supportsAutomaticStatsRoster(gameMode)) {
+            HypixelLegitilsBootstrap.traceStats("roster due skipped outside a confirmed Bed Wars match");
             return;
         }
         WhoStatsRefresh.Refresh requestedWhoRefresh = HypixelLegitilsBootstrap.consumeDueWhoStatsRefresh(hypixelLegitils$frameNowMillis);

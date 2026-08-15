@@ -15,6 +15,7 @@ public final class StatsMatchRequestGateTest {
         assertNull(gate.consumeDueMatchId(3000L));
         assertTrue(gate.onWorldLoading(4000L));
         assertTrue(gate.isPending());
+        assertTrue(gate.hasConfirmedMatchContext());
         assertNull(gate.consumeDueMatchId(5499L));
         String matchId = gate.consumeDueMatchId(5500L);
         assertNotNull(matchId);
@@ -58,8 +59,10 @@ public final class StatsMatchRequestGateTest {
     public void ignoresUnrelatedOrLateWorldLoads() {
         StatsMatchRequestGate gate = new StatsMatchRequestGate();
         assertFalse(gate.onWorldLoading(1000L));
+        assertFalse(gate.hasConfirmedMatchContext());
         gate.onBedwarsGameStart(2000L);
         assertFalse(gate.onWorldLoading(17001L));
+        assertFalse(gate.hasConfirmedMatchContext());
         assertNull(gate.consumeDueMatchId(20000L));
     }
 

@@ -448,6 +448,12 @@ public final class HypixelLegitilsBootstrap {
         return STARTED.get() && STATS_MATCH_REQUEST_GATE.isPending();
     }
 
+    /** Allows automatic stats only in a visible Bed Wars context or a confirmed started match. */
+    public static boolean supportsAutomaticStatsRoster(BedwarsMode gameMode) {
+        return STARTED.get()
+            && StatsRosterReconciliation.supports(gameMode, STATS_MATCH_REQUEST_GATE.hasConfirmedMatchContext());
+    }
+
     /** Runs outside the client thread; it never contacts remote providers or exposes their keys. */
     public static void requestStatsRoster(
         final String matchId,

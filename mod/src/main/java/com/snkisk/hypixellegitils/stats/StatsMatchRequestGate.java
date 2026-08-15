@@ -62,6 +62,16 @@ public final class StatsMatchRequestGate {
         return pendingMatchId != null;
     }
 
+    /**
+     * A verified pre-game countdown has completed its transition into this world.
+     * Bed Wars' in-game sidebar may omit the mode line, so this carries the
+     * confirmation for the rest of the match without treating ordinary lobbies
+     * as eligible for automatic roster work.
+     */
+    public synchronized boolean hasConfirmedMatchContext() {
+        return postStartRequestScheduled;
+    }
+
     public synchronized void reset() {
         pendingMatchId = null;
         dueAtMillis = -1L;

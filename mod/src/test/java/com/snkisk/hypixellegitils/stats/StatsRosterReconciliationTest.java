@@ -9,10 +9,15 @@ import static org.junit.Assert.assertNull;
 public final class StatsRosterReconciliationTest {
     @Test
     public void rejectsAutomaticReconciliationWithoutAConfirmedBedWarsMode() {
-        assertEquals(false, StatsRosterReconciliation.supports(BedwarsMode.UNKNOWN));
-        assertEquals(false, StatsRosterReconciliation.supports(null));
-        assertEquals(true, StatsRosterReconciliation.supports(BedwarsMode.FOURS));
-        assertEquals(true, StatsRosterReconciliation.supports(BedwarsMode.SOLO));
+        assertEquals(false, StatsRosterReconciliation.supports(BedwarsMode.UNKNOWN, false));
+        assertEquals(false, StatsRosterReconciliation.supports(null, false));
+        assertEquals(true, StatsRosterReconciliation.supports(BedwarsMode.FOURS, false));
+        assertEquals(true, StatsRosterReconciliation.supports(BedwarsMode.SOLO, false));
+    }
+
+    @Test
+    public void acceptsAnInGameWorldAfterAConfirmedPregameTransitionWithoutAModeLine() {
+        assertEquals(true, StatsRosterReconciliation.supports(BedwarsMode.UNKNOWN, true));
     }
 
     @Test
