@@ -65,11 +65,15 @@ final class LunarBakeCacheInvalidator {
         let owner = ownerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard normalized != "home - lunar client" else { return false }
+        // Lunar leaves auxiliary launcher windows with an empty title alive after
+        // Minecraft exits. An owner-name match alone would block safe cache
+        // maintenance forever, so Lunar requires a game-shaped window title.
+        if owner.contains("lunar") {
+            return normalized.contains("minecraft") || normalized.contains("lunar client 1.")
+        }
         return normalized.contains("minecraft")
-            || normalized.contains("lunar client")
             || normalized.contains("badlion")
             || owner.contains("minecraft")
-            || owner.contains("lunar")
             || owner.contains("badlion")
     }
 

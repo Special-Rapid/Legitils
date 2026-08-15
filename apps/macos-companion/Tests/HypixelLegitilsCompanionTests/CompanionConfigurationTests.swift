@@ -474,6 +474,8 @@ final class CompanionConfigurationTests: XCTestCase {
 
     func testMinecraftGameWindowClassifierIgnoresLunarLauncherHomeButProtectsGames() {
         XCTAssertFalse(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Lunar Client", title: "Home - Lunar Client"))
+        XCTAssertFalse(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Lunar Client", title: ""))
+        XCTAssertFalse(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Lunar Client", title: "Lunar Client"))
         XCTAssertTrue(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Lunar Client", title: "Lunar Client 1.8.9 (dev)"))
         XCTAssertTrue(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Minecraft", title: ""))
         XCTAssertTrue(LunarBakeCacheInvalidator.isMinecraftGameWindow(ownerName: "Badlion Client", title: ""))

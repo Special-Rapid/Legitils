@@ -1,10 +1,8 @@
 package com.snkisk.hypixellegitils.loader;
 
-import java.io.File;
 import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Method;
-import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
@@ -37,10 +35,13 @@ public final class HypixelLegitilsLoader {
             System.setProperty(config.injectedProperty, "true");
             status("config-valid");
             appendModJarToSystemSearch(config, instrumentation);
+            // Lunar's current Genesis runtime creates its Ichor Mixin host after
+            // premain. Register only once that host loader exists: forcing the
+            // system-loader copy of MixinBootstrap earlier has no host service.
             new MixinRegistrationProbe(config, instrumentation).start();
-        } catch (Exception exception) {
+        } catch (Throwable exception) {
             status("config-error");
-            diagnostic("Loader disabled: " + exception.getMessage());
+            diagnostic("Loader disabled: " + exception.getClass().getSimpleName());
         }
     }
 
@@ -140,6 +141,11 @@ public final class HypixelLegitilsLoader {
                     register(mixins);
                     return;
                 }
+                ClassLoader ichorLoader = findIchorMixinClassLoader();
+                if (ichorLoader != null && MixinRuntimeRegistrar.register(config, ichorLoader)) {
+                    status("mixin-config-registered");
+                    return;
+                }
                 try {
                     Thread.sleep(25L);
                 } catch (InterruptedException interrupted) {
@@ -161,6 +167,33 @@ public final class HypixelLegitilsLoader {
             return null;
         }
 
+        /**
+         * Genesis creates an Ichor URLClassLoader between premain and its bake
+         * pass. The game thread exposes that loader as its context loader before
+         * Minecraft classes are loaded, which is the safe time to add our fixed
+         * config. Do not load Mixin through the system loader: that copy has no
+         * Ichor host service and fails JVM startup.
+         */
+        private ClassLoader findIchorMixinClassLoader() {
+            for (Thread thread : Thread.getAllStackTraces().keySet()) {
+                ClassLoader candidate = thread.getContextClassLoader();
+                if (!isIchorClassLoader(candidate)) continue;
+                try {
+                    Class<?> bootstrap = Class.forName(MixinRuntimeRegistrar.bootstrapClassName(), false, candidate);
+                    if (bootstrap.getClassLoader() == candidate) return candidate;
+                } catch (Throwable ignored) {
+                    // Genesis may expose the loader before its Mixin resources;
+                    // keep polling within the bounded compatibility window.
+                }
+            }
+            return null;
+        }
+
+        private boolean isIchorClassLoader(ClassLoader candidate) {
+            return candidate != null
+                && candidate.getClass().getName().startsWith("com.moonsworth.lunar.ichor.");
+        }
+
         private void register(Class<?> mixins) {
             try {
                 ClassLoader mixinLoader = mixins.getClassLoader();
@@ -169,7 +202,7 @@ public final class HypixelLegitilsLoader {
                     diagnostic("Mixin runtime uses the bootstrap loader; MOD JAR cannot be added safely.");
                     return;
                 }
-                if (addJarUrl(mixinLoader, config.modJar.toFile().toURI().toURL())) {
+                if (MixinRuntimeRegistrar.addJarUrl(mixinLoader, config.modJar.toFile().toURI().toURL())) {
                     diagnostic("MOD JAR added directly to the Mixin classloader.");
                 } else {
                     diagnostic("Mixin classloader has no compatible addURL method; using the system classloader search.");
@@ -177,28 +210,11 @@ public final class HypixelLegitilsLoader {
                 Method addConfiguration = mixins.getMethod("addConfiguration", String.class);
                 addConfiguration.invoke(null, config.mixinConfig);
                 status("mixin-config-registered");
-            } catch (Exception exception) {
+            } catch (Throwable exception) {
                 status("mixin-registration-error");
-                diagnostic("Mixin registration failed: " + exception.getClass().getSimpleName() + ": " + exception.getMessage());
+                diagnostic("Mixin registration failed: " + exception.getClass().getSimpleName());
             }
         }
 
-        private boolean addJarUrl(ClassLoader classLoader, URL url) {
-            Class<?> current = classLoader.getClass();
-            while (current != null) {
-                try {
-                    Method addUrl = current.getDeclaredMethod("addURL", URL.class);
-                    addUrl.setAccessible(true);
-                    addUrl.invoke(classLoader, url);
-                    return true;
-                } catch (NoSuchMethodException ignored) {
-                    current = current.getSuperclass();
-                } catch (Exception exception) {
-                    diagnostic("Unable to add MOD JAR to Mixin classloader: " + exception.getClass().getSimpleName());
-                    return false;
-                }
-            }
-            return false;
-        }
     }
 }

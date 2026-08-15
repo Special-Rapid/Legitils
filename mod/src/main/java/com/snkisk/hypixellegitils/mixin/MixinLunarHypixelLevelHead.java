@@ -18,6 +18,8 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 @Pseudo
 @Mixin(targets = "com.moonsworth.lunar.client.OOIHHOORHCOCHOOHHIHIHICOOOROII.IIHHORIHHIHCOCOIHIOICHRHOHROHC.HOHROIHRORCRHRRRCOCIHHIIHOHOCI.CIICOOHIOOHIHOCRRHRHOIIRIOIIOO", remap = false)
 public abstract class MixinLunarHypixelLevelHead {
+    private static final ThreadLocal<LevelHeadPlayer> hypixelLegitils$levelHeadPlayer = new ThreadLocal<LevelHeadPlayer>();
+
     @ModifyVariable(
         method = "IROIRHHRRCOCCHOOCOHHORCHHCHOCO(Lcom/moonsworth/lunar/client/ROHIRIOHCIROCRROIRHCIHOCIRORIR/IROIRHHRRCOCCHOOCOHHORCHHCHOCO/ROHIRIOHCIROCRROIRHCIHOCIRORIR/HROORHRRIOHOCROCRRORHORHRIOCCO;)V",
         at = @At("STORE"),
@@ -26,7 +28,9 @@ public abstract class MixinLunarHypixelLevelHead {
         require = 0
     )
     private String hypixelLegitils$replaceNickedLevel(String original, @Coerce Object event) {
-        UUID playerId = hypixelLegitils$playerId(event);
+        Object player = hypixelLegitils$player(event);
+        UUID playerId = hypixelLegitils$entityPlayerId(player);
+        hypixelLegitils$levelHeadPlayer.set(new LevelHeadPlayer(playerId, hypixelLegitils$playerName(player)));
         HypixelLegitilsBootstrap.onLunarLevelHeadRendered(playerId);
         return HypixelLegitilsBootstrap.lunarNickedLevelText(original, playerId);
     }
@@ -50,8 +54,8 @@ public abstract class MixinLunarHypixelLevelHead {
         remap = false,
         require = 0
     )
-    private Object hypixelLegitils$appendLevelHeadMarkersAbove(Object original, @Coerce Object event) {
-        return hypixelLegitils$appendLevelHeadMarkers(original, event);
+    private Object hypixelLegitils$appendLevelHeadMarkersAbove(Object original) {
+        return hypixelLegitils$appendLevelHeadMarkers(original, false);
     }
 
     @ModifyArg(
@@ -61,24 +65,34 @@ public abstract class MixinLunarHypixelLevelHead {
         remap = false,
         require = 0
     )
-    private Object hypixelLegitils$appendLevelHeadMarkersBelow(Object original, @Coerce Object event) {
-        return hypixelLegitils$appendLevelHeadMarkers(original, event);
+    private Object hypixelLegitils$appendLevelHeadMarkersBelow(Object original) {
+        return hypixelLegitils$appendLevelHeadMarkers(original, true);
     }
 
-    private Object hypixelLegitils$appendLevelHeadMarkers(Object original, Object event) {
-        Object entity = hypixelLegitils$player(event);
-        UUID playerId = hypixelLegitils$entityPlayerId(entity);
-        HypixelLegitilsBootstrap.onLunarLevelHeadRendered(playerId);
-        return HypixelLegitilsBootstrap.appendLunarLevelHeadComponentSuffix(
-            original,
-            hypixelLegitils$playerName(entity),
-            playerId
-        );
+    /**
+     * ModifyArg may receive only the invoked method's arguments. Lunar's current
+     * List.add calls have no event argument, so use the context captured by the
+     * preceding String STORE rather than declaring an invalid second parameter.
+     */
+    private Object hypixelLegitils$appendLevelHeadMarkers(Object original, boolean clearAfterUse) {
+        LevelHeadPlayer player = hypixelLegitils$levelHeadPlayer.get();
+        if (player == null) return original;
+        try {
+            HypixelLegitilsBootstrap.onLunarLevelHeadRendered(player.id);
+            return HypixelLegitilsBootstrap.appendLunarLevelHeadComponentSuffix(original, player.name, player.id);
+        } finally {
+            if (clearAfterUse) hypixelLegitils$levelHeadPlayer.remove();
+        }
     }
 
-    /** Uses Lunar's event bridge reflectively so the normal Forge build carries no Lunar classes. */
-    private UUID hypixelLegitils$playerId(Object event) {
-        return hypixelLegitils$entityPlayerId(hypixelLegitils$player(event));
+    private static final class LevelHeadPlayer {
+        private final UUID id;
+        private final String name;
+
+        private LevelHeadPlayer(UUID id, String name) {
+            this.id = id;
+            this.name = name;
+        }
     }
 
     private UUID hypixelLegitils$entityPlayerId(Object entity) {
