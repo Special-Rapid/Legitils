@@ -15,10 +15,12 @@ public final class StatsDisplayNameColumns {
     private int activeSpacePixelWidth = FALLBACK_SPACE_WIDTH;
     private int activeBoldSpacePixelWidth = FALLBACK_BOLD_SPACE_WIDTH;
     private int activeStarPixelWidth;
+    private int activeFkdrPixelWidth;
     private int nextColumnPixelWidth;
     private int nextSpacePixelWidth = FALLBACK_SPACE_WIDTH;
     private int nextBoldSpacePixelWidth = FALLBACK_BOLD_SPACE_WIDTH;
     private int nextStarPixelWidth;
+    private int nextFkdrPixelWidth;
 
     /** Starts a fresh Tab roster snapshot; the previous complete snapshot remains available to render it. */
     public synchronized void beginTabRender() {
@@ -27,6 +29,7 @@ public final class StatsDisplayNameColumns {
         nextSpacePixelWidth = FALLBACK_SPACE_WIDTH;
         nextBoldSpacePixelWidth = FALLBACK_BOLD_SPACE_WIDTH;
         nextStarPixelWidth = 0;
+        nextFkdrPixelWidth = 0;
     }
 
     /** Records this render's actual FontRenderer width and pads to the previous complete roster width. */
@@ -39,14 +42,35 @@ public final class StatsDisplayNameColumns {
         String starText,
         int starPixelWidth
     ) {
+        return observeTabName(
+            profileName, renderedName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth,
+            starText, starPixelWidth, "", 0
+        );
+    }
+
+    /** Records the measured Chat FKDR field alongside the Tab name and Star fields. */
+    public synchronized String observeTabName(
+        String profileName,
+        String renderedName,
+        int renderedPixelWidth,
+        int spacePixelWidth,
+        int boldSpacePixelWidth,
+        String starText,
+        int starPixelWidth,
+        String fkdrText,
+        int fkdrPixelWidth
+    ) {
         if (isUsable(profileName, renderedName)) {
             if (nextRenderedNames.size() < MAXIMUM_TRACKED_NAMES || nextRenderedNames.containsKey(key(profileName))) {
-                nextRenderedNames.put(key(profileName), new RenderedName(renderedName, renderedPixelWidth, starText, starPixelWidth));
+                nextRenderedNames.put(key(profileName), new RenderedName(
+                    renderedName, renderedPixelWidth, starText, starPixelWidth, fkdrText, fkdrPixelWidth
+                ));
             }
             if (renderedPixelWidth > nextColumnPixelWidth) nextColumnPixelWidth = renderedPixelWidth;
             if (spacePixelWidth > 0) nextSpacePixelWidth = spacePixelWidth;
             if (boldSpacePixelWidth > 0) nextBoldSpacePixelWidth = boldSpacePixelWidth;
             if (starPixelWidth > nextStarPixelWidth) nextStarPixelWidth = starPixelWidth;
+            if (fkdrPixelWidth > nextFkdrPixelWidth) nextFkdrPixelWidth = fkdrPixelWidth;
         }
         return spacesFor(activeColumnPixelWidth, renderedPixelWidth, activeSpacePixelWidth, activeBoldSpacePixelWidth);
     }
@@ -62,6 +86,9 @@ public final class StatsDisplayNameColumns {
         );
         activeStarPixelWidth = alignedColumnWidth(
             nextStarPixelWidth, nextRenderedNames, true, activeSpacePixelWidth, activeBoldSpacePixelWidth
+        );
+        activeFkdrPixelWidth = alignedColumnWidth(
+            nextFkdrPixelWidth, nextRenderedNames, false, activeSpacePixelWidth, activeBoldSpacePixelWidth, true
         );
     }
 
@@ -88,6 +115,14 @@ public final class StatsDisplayNameColumns {
         return spacesFor(activeStarPixelWidth, Math.max(0, starPixelWidth), activeSpacePixelWidth, activeBoldSpacePixelWidth);
     }
 
+    /** Returns matching current FKDR-column padding for Chat, never for a stale different value. */
+    public synchronized String fkdrPadding(String profileName, String fkdrText) {
+        if (profileName == null || fkdrText == null || fkdrText.isEmpty()) return "";
+        RenderedName rendered = activeRenderedNames.get(key(profileName));
+        if (rendered == null || !fkdrText.equals(rendered.fkdrText)) return "";
+        return spacesFor(activeFkdrPixelWidth, rendered.fkdrPixelWidth, activeSpacePixelWidth, activeBoldSpacePixelWidth);
+    }
+
     public synchronized void clear() {
         activeRenderedNames.clear();
         nextRenderedNames.clear();
@@ -95,10 +130,12 @@ public final class StatsDisplayNameColumns {
         activeSpacePixelWidth = FALLBACK_SPACE_WIDTH;
         activeBoldSpacePixelWidth = FALLBACK_BOLD_SPACE_WIDTH;
         activeStarPixelWidth = 0;
+        activeFkdrPixelWidth = 0;
         nextColumnPixelWidth = 0;
         nextSpacePixelWidth = FALLBACK_SPACE_WIDTH;
         nextBoldSpacePixelWidth = FALLBACK_BOLD_SPACE_WIDTH;
         nextStarPixelWidth = 0;
+        nextFkdrPixelWidth = 0;
     }
 
     private static String spacesFor(
@@ -141,6 +178,17 @@ public final class StatsDisplayNameColumns {
         int spacePixelWidth,
         int boldSpacePixelWidth
     ) {
+        return alignedColumnWidth(maximumWidth, renderedNames, starsOnly, spacePixelWidth, boldSpacePixelWidth, false);
+    }
+
+    private static int alignedColumnWidth(
+        int maximumWidth,
+        Map<String, RenderedName> renderedNames,
+        boolean starsOnly,
+        int spacePixelWidth,
+        int boldSpacePixelWidth,
+        boolean fkdrOnly
+    ) {
         if (maximumWidth <= 0 || renderedNames.isEmpty()) return 0;
         int normal = spacePixelWidth > 0 ? spacePixelWidth : FALLBACK_SPACE_WIDTH;
         int bold = boldSpacePixelWidth > 0 ? boldSpacePixelWidth : FALLBACK_BOLD_SPACE_WIDTH;
@@ -150,7 +198,8 @@ public final class StatsDisplayNameColumns {
             boolean aligned = true;
             for (RenderedName rendered : renderedNames.values()) {
                 if (starsOnly && rendered.starText.isEmpty()) continue;
-                int width = starsOnly ? rendered.starPixelWidth : rendered.pixelWidth;
+                if (fkdrOnly && rendered.fkdrText.isEmpty()) continue;
+                int width = starsOnly ? rendered.starPixelWidth : fkdrOnly ? rendered.fkdrPixelWidth : rendered.pixelWidth;
                 if (exactSpacesFor(candidate - width, normal, bold) == null) {
                     aligned = false;
                     break;
@@ -207,12 +256,16 @@ public final class StatsDisplayNameColumns {
         private final int pixelWidth;
         private final String starText;
         private final int starPixelWidth;
+        private final String fkdrText;
+        private final int fkdrPixelWidth;
 
-        private RenderedName(String text, int pixelWidth, String starText, int starPixelWidth) {
+        private RenderedName(String text, int pixelWidth, String starText, int starPixelWidth, String fkdrText, int fkdrPixelWidth) {
             this.text = text;
             this.pixelWidth = Math.max(0, pixelWidth);
             this.starText = starText == null ? "" : starText;
             this.starPixelWidth = Math.max(0, starPixelWidth);
+            this.fkdrText = fkdrText == null ? "" : fkdrText;
+            this.fkdrPixelWidth = Math.max(0, fkdrPixelWidth);
         }
     }
 }

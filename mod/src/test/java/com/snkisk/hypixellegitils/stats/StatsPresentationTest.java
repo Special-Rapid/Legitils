@@ -84,18 +84,54 @@ public final class StatsPresentationTest {
     }
 
     @Test
-    public void chatLinesUseCapturedTeamFormattingWithoutGenericHeadersOrTargetLabels() {
+    public void chatRosterUsesCapturedTeamFormattingAndCombinesStatsWithTags() {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "HighStats", StatsBridgePlayerResult.NickStatus.KNOWN, 100, 5D, 0,
             Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper"))
         );
-        assertEquals(Arrays.asList(
-            "§cR HighStats §8— §f[100✫] §eFKDR 5.0 §aWS 0",
-            "§c[LS] §8— §cR HighStats"
-        ), StatsPresentation.chatLines(
+        java.util.List<StatsPresentation.ChatNotice> notices = StatsPresentation.chatNotices(
             StatsBridgeLookupResult.ready(Arrays.asList(player)),
             Collections.singletonMap("highstats", "§cR HighStats")
-        ));
+        );
+        assertEquals(Arrays.asList(
+            "§c§lR §cRed",
+            "§cR HighStats §8— §f[100✫] §8— §e5.0 FKDR §8— §aWS 0 §8| §c[LS]"
+        ), noticeTexts(notices));
+        assertEquals(1, notices.get(1).tagHovers.size());
+        assertEquals("§c[LS]", notices.get(1).tagHovers.get(0).code);
+    }
+
+    @Test
+    public void chatRosterGroupsTeamsAndAlwaysPlacesNickBeforeTeamStats() {
+        StatsBridgePlayerResult greenLow = player("GreenLow", 100, 1D, null);
+        StatsBridgePlayerResult greenHigh = player("GreenHigh", 100, 4D, null);
+        StatsBridgePlayerResult greenNick = new StatsBridgePlayerResult(
+            "GreenNick", StatsBridgePlayerResult.NickStatus.NICKED, null, null, null,
+            Collections.<StatsBridgePlayerResult.CommunityTag>emptyList()
+        );
+        StatsBridgePlayerResult red = player("Red", 100, 2D, null);
+        java.util.Map<String, String> names = new java.util.LinkedHashMap<String, String>();
+        names.put("greenlow", "§aG GreenLow");
+        names.put("greenhigh", "§aG GreenHigh");
+        names.put("greennick", "§aG GreenNick");
+        names.put("red", "§cR Red");
+        StatsSettings settings = new StatsSettings(true, true, true, true, true, true, false, 1D, false, true);
+
+        assertEquals(Arrays.asList(
+            "§a§lG §aGreen",
+            "§aG GreenNick §c[NICK]",
+            "§aG GreenHigh §8— §f[100✫] §8— §e4.0 FKDR",
+            "§aG GreenLow §8— §f[100✫] §8— §71.0 FKDR",
+            "§c§lR §cRed",
+            "§cR Red §8— §f[100✫] §8— §a2.0 FKDR"
+        ), noticeTexts(StatsPresentation.chatNotices(
+            StatsBridgeLookupResult.ready(Arrays.asList(greenLow, red, greenHigh, greenNick)), names,
+            Collections.<String, String>emptyMap(), Collections.<String, String>emptyMap(), settings
+        )));
+        assertEquals("§aG GreenNick §c[NICK]", StatsPresentation.chatNotices(
+            StatsBridgeLookupResult.ready(Arrays.asList(greenLow, red, greenHigh, greenNick)), names,
+            Collections.<String, String>emptyMap(), Collections.<String, String>emptyMap(), settings
+        ).get(1).text);
     }
 
     @Test
@@ -103,8 +139,8 @@ public final class StatsPresentationTest {
         StatsDisplayNameColumns columns = new StatsDisplayNameColumns();
         String beeStar = "§f[100✫]";
         columns.beginTabRender();
-        assertEquals("", columns.observeTabName("Short", "§cR Short [190]", 64, 4, 5, "§c[12345✭]", 40));
-        assertEquals("", columns.observeTabName("Bee", "§aG Bee", 33, 4, 5, beeStar, 28));
+        assertEquals("", columns.observeTabName("Short", "§cR Short [190]", 64, 4, 5, "§c[12345✭]", 40, "§c15.5 FKDR", 40));
+        assertEquals("", columns.observeTabName("Bee", "§aG Bee", 33, 4, 5, beeStar, 28, "§a2.0 FKDR", 28));
         columns.finishTabRender();
 
         String paddedBee = "§aG Bee§r" + spaces(4) + "§l" + spaces(3) + "§r";
@@ -114,13 +150,16 @@ public final class StatsPresentationTest {
         assertEquals("", columns.starPadding("Short", "§c[12345✭]"));
         assertEquals("§r" + spaces(3) + "§r", columns.starPadding("Bee", beeStar));
         assertEquals("§r" + spaces(3) + "§r", columns.starPadding("Bee", "§f[101✫]", 28));
+        assertEquals("§r" + spaces(3) + "§r", columns.fkdrPadding("Bee", "§a2.0 FKDR"));
 
         StatsBridgePlayerResult player = player("Bee", 100, 2D, null);
-        assertEquals(paddedBee + " §8— " + paddedBeeStar + " §aFKDR 2.0", StatsPresentation.chatNotices(
+        assertEquals(paddedBee + " §8— " + paddedBeeStar + " §8— §a2.0 FKDR§r" + spaces(3) + "§r", StatsPresentation.chatNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player)),
             Collections.singletonMap("bee", paddedBee),
-            Collections.singletonMap("bee", columns.starPadding("Bee", beeStar))
-        ).get(0).text);
+            Collections.singletonMap("bee", columns.starPadding("Bee", beeStar)),
+            Collections.singletonMap("bee", columns.fkdrPadding("Bee", "§a2.0 FKDR")),
+            StatsSettings.defaults()
+        ).get(1).text);
 
         columns.beginTabRender();
         columns.observeTabName("Jo", "§cR Jo", 21, 4, 5, "", 0);
@@ -153,7 +192,7 @@ public final class StatsPresentationTest {
         StatsPresentation.ChatNotice notice = StatsPresentation.chatNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player)), Collections.<String, String>emptyMap()
         ).get(0);
-        assertEquals("§6[CC] §8— §fTagged", notice.text);
+        assertEquals("§fTagged §8| §6[CC]", notice.text);
         assertEquals("§6§lCloset Cheater\n§7vape v4\n§7- Added by @hexze", notice.tooltip);
     }
 
@@ -164,8 +203,7 @@ public final class StatsPresentationTest {
             Arrays.asList(new StatsBridgePlayerResult.CommunityTag("urchin", "Legit Sniper"))
         );
         assertEquals(Arrays.asList(
-            "Quiet §8— §7[12✫] §7FKDR 0.4 §aWS 0",
-            "§c[LS] §8— §fQuiet"
+            "§fQuiet §8— §7[12✫] §8— §70.4 FKDR §8— §aWS 0 §8| §c[LS]"
         ), StatsPresentation.pregameChatLines(StatsBridgeLookupResult.ready(Arrays.asList(player))));
     }
 
@@ -180,8 +218,7 @@ public final class StatsPresentationTest {
             StatsBridgeLookupResult.ready(Collections.singletonList(player)),
             Collections.singletonMap("quiet", rendered)
         );
-        assertEquals(rendered + " §8— §7[12✫] §7FKDR 0.4", notices.get(0).text);
-        assertEquals("§c[LS] §8— " + rendered, notices.get(1).text);
+        assertEquals(rendered + " §8— §7[12✫] §8— §70.4 FKDR §8| §c[LS]", notices.get(0).text);
     }
 
     @Test
@@ -195,7 +232,7 @@ public final class StatsPresentationTest {
             )
         );
         assertEquals(Arrays.asList(
-            "§bStats§7: §fPlayer §8— §7[12✫] §7FKDR 0.4 §aWS 0",
+            "§bStats§7: §fPlayer §8— §7[12✫] §8— §70.4 FKDR §8— §aWS 0",
             "§aAPI§7: §fHypixel: OK",
             "§aAPI§7: §fUrchin: no active tags",
             "§cAPI§7: §fSeraph: authorization failed"
@@ -210,8 +247,8 @@ public final class StatsPresentationTest {
         );
         StatsPresentation.ChatNotice notice = StatsPresentation.manualLookupNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player))
-        ).get(1);
-        assertEquals("§6[BC] §8— §fPlayer", notice.text);
+        ).get(0);
+        assertEquals("§bStats§7: §fPlayer §8| §6[BC]", notice.text);
         assertEquals("§6[BC]", notice.tagCode);
         assertEquals("§6§lBlatant Cheating\n§7vape v4", notice.tooltip);
     }
@@ -227,8 +264,7 @@ public final class StatsPresentationTest {
             StatsBridgeLookupResult.ready(Collections.singletonList(player)),
             Collections.singletonMap("player", rendered)
         );
-        assertEquals("§bStats§7: " + rendered + " §8— §7[12✫] §7FKDR 0.4", notices.get(0).text);
-        assertEquals("§6[BC] §8— " + rendered, notices.get(1).text);
+        assertEquals("§bStats§7: " + rendered + " §8— §7[12✫] §8— §70.4 FKDR §8| §6[BC]", notices.get(0).text);
     }
 
     @Test
@@ -242,8 +278,8 @@ public final class StatsPresentationTest {
         );
         StatsPresentation.ChatNotice notice = StatsPresentation.manualLookupNotices(
             StatsBridgeLookupResult.ready(Collections.singletonList(player))
-        ).get(1);
-        assertEquals("§5[CF] §8— §fPlayer", notice.text);
+        ).get(0);
+        assertEquals("§bStats§7: §fPlayer §8| §5[CF]", notice.text);
         assertEquals("§5§lConfirmed Closet Cheating\n§7vape v4 (legitscaff, aa + ac, hitselect,\n§7autoblockhit, visuals)", notice.tooltip);
     }
 
@@ -264,5 +300,11 @@ public final class StatsPresentationTest {
         java.util.List<String> names = new java.util.ArrayList<String>();
         for (StatsPresentation.Profile profile : profiles) names.add(profile.player.name);
         return names;
+    }
+
+    private static java.util.List<String> noticeTexts(java.util.List<StatsPresentation.ChatNotice> notices) {
+        java.util.List<String> texts = new java.util.ArrayList<String>();
+        for (StatsPresentation.ChatNotice notice : notices) texts.add(notice.text);
+        return texts;
     }
 }

@@ -62,9 +62,11 @@ public class MixinGuiPlayerTabOverlay {
         int boldSpacePixelWidth = font == null ? 5 : font.getStringWidth("§l ");
         String starText = HypixelLegitilsBootstrap.statsTabStar(info.getGameProfile().getName(), playerId);
         int starPixelWidth = font == null ? 0 : font.getStringWidth(starText);
+        String fkdrText = HypixelLegitilsBootstrap.statsChatFkdr(info.getGameProfile().getName(), playerId);
+        int fkdrPixelWidth = font == null ? 0 : font.getStringWidth(fkdrText);
         String padding = HypixelLegitilsBootstrap.observeTabStatsName(
             info.getGameProfile().getName(), statsColumnName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth,
-            starText, starPixelWidth
+            starText, starPixelWidth, fkdrText, fkdrPixelWidth
         );
         String suffix = HypixelLegitilsBootstrap.statsTabSuffix(
             info.getGameProfile().getName(), playerId,

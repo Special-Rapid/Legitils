@@ -20,15 +20,30 @@ public final class StatsTabSorter {
         List<Group<T>> groups = groups(original);
         if (settings.tabPlayerSortingEnabled) for (Group<T> group : groups) sortEntries(group.entries, PLAYER_ORDER);
         if (settings.tabTeamSortingEnabled) sortTeamSegments(groups);
-        List<T> ordered = new ArrayList<T>(original.size());
-        for (Group<T> group : groups) for (Entry<T> entry : group.entries) ordered.add(entry.value);
-        return ordered;
+        return values(groups, original.size());
+    }
+
+    /** Chat always puts a Nick at the top of its team, while retaining the two existing optional sort controls. */
+    public static <T> List<T> sortForChat(List<Entry<T>> original, StatsSettings settings) {
+        if (original == null || original.isEmpty() || settings == null || !settings.enabled) return values(original);
+        List<Group<T>> groups = groups(original);
+        for (Group<T> group : groups) {
+            sortEntries(group.entries, settings.tabPlayerSortingEnabled ? PLAYER_ORDER : NICK_FIRST_ORDER);
+        }
+        if (settings.tabTeamSortingEnabled) sortTeamSegments(groups);
+        return values(groups, original.size());
     }
 
     private static <T> List<T> values(List<Entry<T>> entries) {
         if (entries == null || entries.isEmpty()) return Collections.emptyList();
         List<T> values = new ArrayList<T>(entries.size());
         for (Entry<T> entry : entries) if (entry != null) values.add(entry.value);
+        return values;
+    }
+
+    private static <T> List<T> values(List<Group<T>> groups, int capacity) {
+        List<T> values = new ArrayList<T>(Math.max(0, capacity));
+        for (Group<T> group : groups) for (Entry<T> entry : group.entries) values.add(entry.value);
         return values;
     }
 
@@ -57,6 +72,14 @@ public final class StatsTabSorter {
             double leftFkdr = usableFkdr(left.fkdr);
             double rightFkdr = usableFkdr(right.fkdr);
             if (leftFkdr != rightFkdr) return leftFkdr > rightFkdr ? -1 : 1;
+            return left.originalIndex - right.originalIndex;
+        }
+    };
+
+    private static final Comparator<Entry<?>> NICK_FIRST_ORDER = new Comparator<Entry<?>>() {
+        @Override
+        public int compare(Entry<?> left, Entry<?> right) {
+            if (left.nicked != right.nicked) return left.nicked ? -1 : 1;
             return left.originalIndex - right.originalIndex;
         }
     };

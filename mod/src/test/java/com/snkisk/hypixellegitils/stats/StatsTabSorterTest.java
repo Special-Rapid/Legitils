@@ -20,6 +20,14 @@ public final class StatsTabSorterTest {
     }
 
     @Test
+    public void chatAlwaysPlacesNickFirstButUsesPlayerFkdrSortOnlyWhenEnabled() {
+        assertEquals(Arrays.asList("BlueNick", "BlueLow", "BlueHigh", "RedNick", "RedFive", "RedUnknown"),
+            StatsTabSorter.sortForChat(entries(), settings(false, false)));
+        assertEquals(Arrays.asList("BlueNick", "BlueHigh", "BlueLow", "RedNick", "RedFive", "RedUnknown"),
+            StatsTabSorter.sortForChat(entries(), settings(false, true)));
+    }
+
+    @Test
     public void teamSortingUsesFkdrSumPlusFiveForEveryNick() {
         List<String> actual = StatsTabSorter.sort(entries(), settings(true, false));
         // Red = 10.0 + 5.0; Blue = 3.0 + 5.0, so Red moves ahead without changing either team internally.

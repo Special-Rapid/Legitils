@@ -653,9 +653,11 @@ public final class HypixelLegitilsBootstrap {
                 for (StatsPresentation.ChatNotice notice : StatsPresentation.chatNotices(
                     chatResult,
                     teamFormattedNames,
-                    statsChatStarPaddings(chatResult)
+                    statsChatStarPaddings(chatResult),
+                    statsChatFkdrPaddings(chatResult),
+                    statsSettings
                 )) {
-                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
+                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
                 }
             }
         }
@@ -671,9 +673,9 @@ public final class HypixelLegitilsBootstrap {
             traceStats("pregame chat result published");
             if (statsSettings.chatEnabled) {
                 for (StatsPresentation.ChatNotice notice : StatsPresentation.pregameChatNotices(
-                    result, statsChatDisplayNames(result), statsChatStarPaddings(result)
+                    result, statsChatDisplayNames(result), statsChatStarPaddings(result), statsChatFkdrPaddings(result)
                 )) {
-                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
+                    PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
                 }
             }
         }
@@ -736,10 +738,13 @@ public final class HypixelLegitilsBootstrap {
         int spacePixelWidth,
         int boldSpacePixelWidth,
         String starText,
-        int starPixelWidth
+        int starPixelWidth,
+        String fkdrText,
+        int fkdrPixelWidth
     ) {
         return STATS_DISPLAY_NAME_COLUMNS.observeTabName(
-            playerName, renderedName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth, starText, starPixelWidth
+            playerName, renderedName, renderedPixelWidth, spacePixelWidth, boldSpacePixelWidth,
+            starText, starPixelWidth, fkdrText, fkdrPixelWidth
         );
     }
 
@@ -763,6 +768,22 @@ public final class HypixelLegitilsBootstrap {
         return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText);
     }
 
+    /** Reuses the matching current Tab FKDR column for automatic Chat without accessing FontRenderer off-thread. */
+    public static String statsChatFkdrPadding(String playerName, String fkdrText) {
+        return STATS_DISPLAY_NAME_COLUMNS.fkdrPadding(playerName, fkdrText);
+    }
+
+    /** Reads Chat's FKDR text before the Tab renderer records its actual pixel width. */
+    public static String statsChatFkdr(String playerName, UUID playerId) {
+        if (playerName == null || playerId == null || playerId.version() == 1) return "";
+        StatsBridgeLookupResult result = latestStatsBridgeResult;
+        if (result.status != StatsBridgeLookupResult.Status.READY) return "";
+        for (StatsBridgePlayerResult player : result.players) {
+            if (playerName.equalsIgnoreCase(player.name)) return StatsPresentation.chatFkdr(player);
+        }
+        return "";
+    }
+
     /** Reuses the matching current Tab Star column for a Tab suffix after the active snapshot has been read. */
     public static String statsTabStarPadding(String playerName, String starText, int starPixelWidth) {
         return STATS_DISPLAY_NAME_COLUMNS.starPadding(playerName, starText, starPixelWidth);
@@ -784,6 +805,17 @@ public final class HypixelLegitilsBootstrap {
         for (StatsBridgePlayerResult player : result.players) {
             if (player == null || player.name == null) continue;
             paddings.put(player.name.toLowerCase(Locale.ROOT), statsChatStarPadding(player.name, StatsPresentation.chatStar(player)));
+        }
+        return paddings;
+    }
+
+    private static Map<String, String> statsChatFkdrPaddings(StatsBridgeLookupResult result) {
+        if (result == null || result.players == null || result.players.isEmpty()) return Collections.emptyMap();
+        Map<String, String> paddings = new LinkedHashMap<String, String>();
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player == null || player.name == null) continue;
+            String fkdr = StatsPresentation.chatFkdr(player);
+            paddings.put(player.name.toLowerCase(Locale.ROOT), statsChatFkdrPadding(player.name, fkdr));
         }
         return paddings;
     }
@@ -988,9 +1020,9 @@ public final class HypixelLegitilsBootstrap {
         StatsBridgeLookupResult result;
         while ((result = PENDING_MANUAL_STATS_RESULTS.poll()) != null) {
             for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(
-                result, statsChatDisplayNames(result), statsChatStarPaddings(result)
+                result, statsChatDisplayNames(result), statsChatStarPaddings(result), statsChatFkdrPaddings(result)
             )) {
-                responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tooltip, notice.tagCode));
+                responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
             }
         }
         return responses.toArray(new PendingStatsNotice[responses.size()]);
@@ -1555,13 +1587,12 @@ public final class HypixelLegitilsBootstrap {
     /** Local-only Chat payload; tooltip text is already bounded and sanitised by the Companion and bridge parser. */
     public static final class PendingStatsNotice {
         public final String text;
-        public final String tooltip;
-        public final String tagCode;
+        public final List<StatsPresentation.TagHover> tagHovers;
 
-        private PendingStatsNotice(String text, String tooltip, String tagCode) {
+        private PendingStatsNotice(String text, List<StatsPresentation.TagHover> tagHovers) {
             this.text = text;
-            this.tooltip = tooltip;
-            this.tagCode = tagCode;
+            this.tagHovers = tagHovers == null || tagHovers.isEmpty() ? Collections.<StatsPresentation.TagHover>emptyList()
+                : Collections.unmodifiableList(new ArrayList<StatsPresentation.TagHover>(tagHovers));
         }
     }
 

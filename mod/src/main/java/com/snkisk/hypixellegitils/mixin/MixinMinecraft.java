@@ -10,6 +10,7 @@ import com.snkisk.hypixellegitils.mixin.accessor.PlayerIdentityAccess;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.stats.StatsBridgeRosterMember;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
+import com.snkisk.hypixellegitils.stats.StatsPresentation;
 import com.snkisk.hypixellegitils.stats.WhoStatsRefresh;
 import com.snkisk.hypixellegitils.stats.StatsRosterReconciliation;
 import com.mojang.authlib.GameProfile;
@@ -193,18 +194,24 @@ public abstract class MixinMinecraft {
     }
 
     private ChatComponentText hypixelLegitils$statsChatComponent(HypixelLegitilsBootstrap.PendingStatsNotice notice) {
-        ChatComponentText component = new ChatComponentText(notice.text);
-        String styledCode = notice.tagCode;
-        int codeStart = styledCode == null ? -1 : notice.text.indexOf(styledCode);
-        if (notice.tooltip != null && !notice.tooltip.isEmpty() && codeStart >= 0) {
-            component = new ChatComponentText(notice.text.substring(0, codeStart));
-            ChatComponentText code = new ChatComponentText(styledCode);
+        if (notice.tagHovers == null || notice.tagHovers.isEmpty()) return new ChatComponentText(notice.text);
+        int cursor = 0;
+        ChatComponentText component = null;
+        for (StatsPresentation.TagHover hover : notice.tagHovers) {
+            if (hover == null || hover.code == null || hover.code.isEmpty() || hover.tooltip == null || hover.tooltip.isEmpty()) continue;
+            int codeStart = notice.text.indexOf(hover.code, cursor);
+            if (codeStart < 0) continue;
+            if (component == null) component = new ChatComponentText(notice.text.substring(0, codeStart));
+            else component.appendText(notice.text.substring(cursor, codeStart));
+            ChatComponentText code = new ChatComponentText(hover.code);
             code.setChatStyle(new ChatStyle().setChatHoverEvent(new HoverEvent(
-                HoverEvent.Action.SHOW_TEXT, new ChatComponentText(notice.tooltip)
+                HoverEvent.Action.SHOW_TEXT, new ChatComponentText(hover.tooltip)
             )));
             component.appendSibling(code);
-            component.appendText(notice.text.substring(codeStart + styledCode.length()));
+            cursor = codeStart + hover.code.length();
         }
+        if (component == null) return new ChatComponentText(notice.text);
+        component.appendText(notice.text.substring(cursor));
         return component;
     }
 

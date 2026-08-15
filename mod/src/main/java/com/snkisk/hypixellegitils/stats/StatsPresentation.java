@@ -1,6 +1,7 @@
 package com.snkisk.hypixellegitils.stats;
 
 import com.snkisk.hypixellegitils.config.StatsSettings;
+import com.snkisk.hypixellegitils.alert.FlagMessage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -45,15 +46,35 @@ public final class StatsPresentation {
         public final String text;
         public final String tooltip;
         public final String tagCode;
+        public final List<TagHover> tagHovers;
 
         public ChatNotice(String text, String tooltip) {
             this(text, tooltip, null);
         }
 
         public ChatNotice(String text, String tooltip, String tagCode) {
+            this(text, tagCode == null || tooltip == null ? Collections.<TagHover>emptyList()
+                : Collections.singletonList(new TagHover(tagCode, tooltip)));
+        }
+
+        public ChatNotice(String text, List<TagHover> tagHovers) {
             this.text = text;
+            this.tagHovers = tagHovers == null || tagHovers.isEmpty() ? Collections.<TagHover>emptyList()
+                : Collections.unmodifiableList(new ArrayList<TagHover>(tagHovers));
+            TagHover first = this.tagHovers.isEmpty() ? null : this.tagHovers.get(0);
+            this.tooltip = first == null ? null : first.tooltip;
+            this.tagCode = first == null ? null : first.code;
+        }
+    }
+
+    /** One bounded provider tag code and its independently hoverable local explanation. */
+    public static final class TagHover {
+        public final String code;
+        public final String tooltip;
+
+        private TagHover(String code, String tooltip) {
+            this.code = code;
             this.tooltip = tooltip;
-            this.tagCode = tagCode;
         }
     }
 
@@ -166,16 +187,46 @@ public final class StatsPresentation {
         Map<String, String> teamFormattedNames,
         Map<String, String> starPaddings
     ) {
+        return chatNotices(
+            result, teamFormattedNames, starPaddings, Collections.<String, String>emptyMap(), StatsSettings.defaults()
+        );
+    }
+
+    /** Post-start and /who Chat use the same team order as Tab, with Nick rows first and one line per player. */
+    public static List<ChatNotice> chatNotices(
+        StatsBridgeLookupResult result,
+        Map<String, String> teamFormattedNames,
+        Map<String, String> starPaddings,
+        Map<String, String> fkdrPaddings,
+        StatsSettings settings
+    ) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
-        List<ChatNotice> lines = new ArrayList<ChatNotice>();
-        for (Profile profile : rankedHighStats(result.players)) {
-            lines.add(new ChatNotice(teamFormattedName(profile.player.name, teamFormattedNames) + " §8— "
-                + profile.statsSummary(starPadding(profile.player.name, starPaddings)), null));
-        }
+        List<StatsTabSorter.Entry<ChatEntry>> entries = new ArrayList<StatsTabSorter.Entry<ChatEntry>>();
+        int originalIndex = 0;
         for (StatsBridgePlayerResult player : result.players) {
-            for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
-                if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, teamFormattedName(player.name, teamFormattedNames)));
+            if (player == null || !visibleInRosterCard(player)) {
+                originalIndex++;
+                continue;
             }
+            String formattedName = teamFormattedName(player.name, teamFormattedNames);
+            String teamKey = FlagMessage.bedWarsTeamKey(formattedName);
+            boolean nicked = player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED;
+            Double fkdr = nicked ? null : player.finalKillDeathRatio;
+            entries.add(new StatsTabSorter.Entry<ChatEntry>(
+                new ChatEntry(player, formattedName, teamKey), teamKey, nicked, fkdr, originalIndex
+            ));
+            originalIndex++;
+        }
+        List<ChatNotice> lines = new ArrayList<ChatNotice>();
+        String currentTeam = null;
+        for (ChatEntry entry : StatsTabSorter.sortForChat(entries, settings)) {
+            if (entry.teamKey != null && !entry.teamKey.equals(currentTeam)) {
+                lines.add(new ChatNotice(teamHeader(entry.teamKey), (String) null));
+                currentTeam = entry.teamKey;
+            } else if (entry.teamKey == null) {
+                currentTeam = null;
+            }
+            lines.add(rosterCardNotice(entry, starPadding(entry.player.name, starPaddings), fkdrPadding(entry.player.name, fkdrPaddings)));
         }
         return Collections.unmodifiableList(lines);
     }
@@ -201,17 +252,26 @@ public final class StatsPresentation {
         Map<String, String> renderedNames,
         Map<String, String> starPaddings
     ) {
+        return pregameChatNotices(result, renderedNames, starPaddings, Collections.<String, String>emptyMap());
+    }
+
+    /** Pregame remains compact: one resolved chatter line combines local stats and provider tags. */
+    public static List<ChatNotice> pregameChatNotices(
+        StatsBridgeLookupResult result,
+        Map<String, String> renderedNames,
+        Map<String, String> starPaddings,
+        Map<String, String> fkdrPaddings
+    ) {
         if (result == null || result.status != StatsBridgeLookupResult.Status.READY) return Collections.emptyList();
         List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) continue;
-            if (player.stars != null || player.finalKillDeathRatio != null || player.modeWinStreak != null) {
-                lines.add(new ChatNotice(displayedName(player.name, renderedNames, player.name) + " §8— "
-                    + new Profile(player, Tier.NONE).statsSummary(starPadding(player.name, starPaddings)), null));
-            }
-            for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
-                if (isAdvisoryTag(tag)) lines.add(tagChatNotice(tag, displayedName(player.name, renderedNames, "§f" + player.name)));
-            }
+            if (player.stars == null && player.finalKillDeathRatio == null && player.modeWinStreak == null
+                && !hasCommunityAdvisoryTag(player)) continue;
+            lines.add(rosterCardNotice(
+                new ChatEntry(player, displayedName(player.name, renderedNames, "§f" + player.name), null),
+                starPadding(player.name, starPaddings), fkdrPadding(player.name, fkdrPaddings)
+            ));
         }
         return Collections.unmodifiableList(lines);
     }
@@ -237,28 +297,39 @@ public final class StatsPresentation {
         Map<String, String> renderedNames,
         Map<String, String> starPaddings
     ) {
+        return manualLookupNotices(result, renderedNames, starPaddings, Collections.<String, String>emptyMap());
+    }
+
+    /** Explicit lookup keeps diagnostics separate but combines Stats and advisory tags for each returned profile. */
+    public static List<ChatNotice> manualLookupNotices(
+        StatsBridgeLookupResult result,
+        Map<String, String> renderedNames,
+        Map<String, String> starPaddings,
+        Map<String, String> fkdrPaddings
+    ) {
         if (result == null || result.status == StatsBridgeLookupResult.Status.UNAVAILABLE) {
-            return Collections.singletonList(new ChatNotice("§cStats Bridge unavailable. §7Start Companion and check API keys.", null));
+            return Collections.singletonList(new ChatNotice("§cStats Bridge unavailable. §7Start Companion and check API keys.", (String) null));
         }
         if (result.status != StatsBridgeLookupResult.Status.READY || result.players.isEmpty()) {
-            return Collections.singletonList(new ChatNotice("§eStats lookup did not return a profile.", null));
+            return Collections.singletonList(new ChatNotice("§eStats lookup did not return a profile.", (String) null));
         }
         List<ChatNotice> lines = new ArrayList<ChatNotice>();
         for (StatsBridgePlayerResult player : result.players) {
             if (player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) {
                 lines.add(new ChatNotice("§eStats§7: " + displayedName(player.name, renderedNames, "§f" + player.name)
-                    + " §8— §eprofile unavailable", null));
+                    + " §8— §eprofile unavailable", (String) null));
             } else {
-                lines.add(new ChatNotice("§bStats§7: " + displayedName(player.name, renderedNames, "§f" + player.name)
-                    + " §8— " + new Profile(player, Tier.NONE).statsSummary(starPadding(player.name, starPaddings)), null));
+                ChatNotice playerNotice = rosterCardNotice(
+                    new ChatEntry(player, displayedName(player.name, renderedNames, "§f" + player.name), null),
+                    starPadding(player.name, starPaddings), fkdrPadding(player.name, fkdrPaddings)
+                );
+                lines.add(new ChatNotice("§bStats§7: " + playerNotice.text, playerNotice.tagHovers));
             }
             for (StatsBridgePlayerResult.CommunityTag tag : player.communityTags) {
                 if ("diagnostic".equals(tag.source)) {
-                    lines.add(new ChatNotice("§cAPI§7: §f" + tag.label, null));
+                    lines.add(new ChatNotice("§cAPI§7: §f" + tag.label, (String) null));
                 } else if ("provider".equals(tag.source)) {
-                    lines.add(new ChatNotice("§aAPI§7: §f" + tag.label, null));
-                } else if (isAdvisoryTag(tag)) {
-                    lines.add(tagChatNotice(tag, displayedName(player.name, renderedNames, "§f" + player.name)));
+                    lines.add(new ChatNotice("§aAPI§7: §f" + tag.label, (String) null));
                 }
             }
         }
@@ -292,6 +363,88 @@ public final class StatsPresentation {
         }
     }
 
+    /** Exact FKDR field text used by the Chat roster card and measured during Tab rendering. */
+    public static String chatFkdr(StatsBridgePlayerResult player) {
+        if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN
+            || player.finalKillDeathRatio == null) return "";
+        return fkdr(player.finalKillDeathRatio.doubleValue()) + decimal(player.finalKillDeathRatio.doubleValue()) + " FKDR";
+    }
+
+    private static boolean visibleInRosterCard(StatsBridgePlayerResult player) {
+        return player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED
+            || tierFor(player) != Tier.NONE || hasCommunityAdvisoryTag(player);
+    }
+
+    private static ChatNotice rosterCardNotice(ChatEntry entry, String starPadding, String fkdrPadding) {
+        StatsBridgePlayerResult player = entry.player;
+        StringBuilder text = new StringBuilder(entry.formattedName);
+        if (player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED) text.append(" §c[NICK]");
+        String stats = rosterCardStats(player, starPadding, fkdrPadding);
+        if (!stats.isEmpty()) text.append(" §8— ").append(stats);
+        List<TagHover> hovers = new ArrayList<TagHover>();
+        for (StatsBridgePlayerResult.CommunityTag tag : advisoryTags(player)) {
+            text.append(" §8| ").append(formattedTagCode(tag));
+            hovers.add(tagHover(tag));
+        }
+        return new ChatNotice(text.toString(), hovers);
+    }
+
+    private static String rosterCardStats(StatsBridgePlayerResult player, String starPadding, String fkdrPadding) {
+        if (player == null || player.nickStatus != StatsBridgePlayerResult.NickStatus.KNOWN) return "";
+        StringBuilder fields = new StringBuilder();
+        String star = chatStar(player);
+        if (!star.isEmpty()) fields.append(star).append(starPadding == null ? "" : starPadding);
+        String fkdr = chatFkdr(player);
+        if (!fkdr.isEmpty()) {
+            if (fields.length() > 0) fields.append(" §8— ");
+            fields.append(fkdr).append(fkdrPadding == null ? "" : fkdrPadding);
+        }
+        if (player.modeWinStreak != null) {
+            if (fields.length() > 0) fields.append(" §8— ");
+            fields.append("§aWS ").append(player.modeWinStreak.intValue());
+        }
+        return fields.toString();
+    }
+
+    private static String teamHeader(String key) {
+        String color = teamColor(key);
+        return color + "§l" + key + " " + color + teamName(key);
+    }
+
+    private static String teamColor(String key) {
+        if ("R".equals(key)) return "§c";
+        if ("B".equals(key)) return "§9";
+        if ("G".equals(key)) return "§a";
+        if ("Y".equals(key)) return "§e";
+        if ("A".equals(key)) return "§b";
+        if ("W".equals(key)) return "§f";
+        if ("P".equals(key)) return "§d";
+        return "§8";
+    }
+
+    private static String teamName(String key) {
+        if ("R".equals(key)) return "Red";
+        if ("B".equals(key)) return "Blue";
+        if ("G".equals(key)) return "Green";
+        if ("Y".equals(key)) return "Yellow";
+        if ("A".equals(key)) return "Aqua";
+        if ("W".equals(key)) return "White";
+        if ("P".equals(key)) return "Pink";
+        return "Gray";
+    }
+
+    private static final class ChatEntry {
+        private final StatsBridgePlayerResult player;
+        private final String formattedName;
+        private final String teamKey;
+
+        private ChatEntry(StatsBridgePlayerResult player, String formattedName, String teamKey) {
+            this.player = player;
+            this.formattedName = formattedName;
+            this.teamKey = teamKey;
+        }
+    }
+
     private static String teamFormattedName(String name, Map<String, String> teamFormattedNames) {
         String fallback = name == null ? "Unknown" : name;
         return displayedName(name, teamFormattedNames, "§f" + fallback);
@@ -308,6 +461,12 @@ public final class StatsPresentation {
     private static String starPadding(String name, Map<String, String> starPaddings) {
         if (name == null || starPaddings == null) return "";
         String padding = starPaddings.get(name.toLowerCase(Locale.ROOT));
+        return padding == null ? "" : padding;
+    }
+
+    private static String fkdrPadding(String name, Map<String, String> fkdrPaddings) {
+        if (name == null || fkdrPaddings == null) return "";
+        String padding = fkdrPaddings.get(name.toLowerCase(Locale.ROOT));
         return padding == null ? "" : padding;
     }
 
@@ -359,7 +518,11 @@ public final class StatsPresentation {
 
     private static ChatNotice tagChatNotice(StatsBridgePlayerResult.CommunityTag tag, String formattedName) {
         String code = formattedTagCode(tag);
-        return new ChatNotice(code + " §8— " + formattedName, tagTooltip(tag), code);
+        return new ChatNotice(code + " §8— " + formattedName, Collections.singletonList(tagHover(tag)));
+    }
+
+    private static TagHover tagHover(StatsBridgePlayerResult.CommunityTag tag) {
+        return new TagHover(formattedTagCode(tag), tagTooltip(tag));
     }
 
     /** Keeps Minecraft's hover card narrow while making the provider's canonical category explicit. */
