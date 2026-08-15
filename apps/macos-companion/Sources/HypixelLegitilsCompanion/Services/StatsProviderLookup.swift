@@ -559,7 +559,12 @@ extension StatsProviderLookup {
         var tags: [ProviderTag] = []
 
         if let blacklist = record["blacklist"] as? [String: Any] {
+            if record["verified"] as? Bool == true || blacklist["verified"] as? Bool == true {
+                return [confirmedSeraphTag(from: blacklist)]
+            }
             tags.append(contentsOf: collectSeraphLabels(blacklist))
+        } else if record["verified"] as? Bool == true {
+            return [ProviderTag(label: "Confirmed Cheater", tooltip: sanitizedTooltip(from: record))]
         }
         if let rawTags = record["tags"] as? [[String: Any]] {
             for tag in rawTags { tags.append(contentsOf: collectSeraphLabels(tag)) }
@@ -571,6 +576,23 @@ extension StatsProviderLookup {
             }
         }
         return distinctProviderTags(tags)
+    }
+
+    private static func confirmedSeraphTag(from values: [String: Any]) -> ProviderTag {
+        let label: String
+        switch collectSeraphLabels(values).first?.label {
+        case "Blatant Cheating": label = "Confirmed Blatant Cheating"
+        case "Closet Cheating": label = "Confirmed Closet Cheating"
+        case "Sniping": label = "Confirmed Sniping"
+        case "Legit Sniper": label = "Confirmed Legit Sniper"
+        case "Potential Sniper": label = "Confirmed Potential Sniper"
+        case "Alt Account": label = "Confirmed Alt Account"
+        case "Bot": label = "Confirmed Bot"
+        case "Annoying": label = "Confirmed Annoying"
+        case "Caution": label = "Confirmed Caution"
+        default: label = "Confirmed Cheater"
+        }
+        return ProviderTag(label: label, tooltip: sanitizedTooltip(from: values))
     }
 
     private static func collectSeraphLabels(_ values: [String: Any]) -> [ProviderTag] {
@@ -627,6 +649,16 @@ extension StatsProviderLookup {
         switch source {
         case .seraph:
             switch identifier {
+            case "confirmedcheater", "confirmed_cheater": return "Confirmed Cheater"
+            case "confirmed_blatant_cheating": return "Confirmed Blatant Cheating"
+            case "confirmed_closet_cheating": return "Confirmed Closet Cheating"
+            case "confirmed_sniping": return "Confirmed Sniping"
+            case "confirmed_legit_sniper": return "Confirmed Legit Sniper"
+            case "confirmed_potential_sniper": return "Confirmed Potential Sniper"
+            case "confirmed_alt_account": return "Confirmed Alt Account"
+            case "confirmed_bot": return "Confirmed Bot"
+            case "confirmed_annoying": return "Confirmed Annoying"
+            case "confirmed_caution": return "Confirmed Caution"
             case "cheating_blatant", "blatant", "blatant_cheating": return "Blatant Cheating"
             case "cheating_closet", "closet", "closet_cheating": return "Closet Cheating"
             case "sniping", "sniper": return "Sniping"

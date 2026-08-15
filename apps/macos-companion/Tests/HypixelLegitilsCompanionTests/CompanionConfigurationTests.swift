@@ -335,6 +335,18 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(StatsProviderLookup.parseSeraphTags(publicDeveloperEnvelope), [
             StatsProviderLookup.ProviderTag(label: "Blatant Cheating", tooltip: "autoblock")
         ])
+        let verifiedSeraph = Data("""
+        {"data":{"verified":true,"blacklist":{"report_type":"cheating_closet","tooltip":"confirmed by Seraph"},"bot":{"tagged":true,"tooltip":"ignored while confirmed"}}}
+        """.utf8)
+        XCTAssertEqual(StatsProviderLookup.parseSeraphTags(verifiedSeraph), [
+            StatsProviderLookup.ProviderTag(label: "Confirmed Closet Cheating", tooltip: "confirmed by Seraph")
+        ])
+        let unverifiedSeraph = Data("""
+        {"data":{"verified":false,"blacklist":{"report_type":"cheating_closet","tooltip":"ordinary tag"}}}
+        """.utf8)
+        XCTAssertEqual(StatsProviderLookup.parseSeraphTags(unverifiedSeraph), [
+            StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "ordinary tag")
+        ])
         XCTAssertEqual(StatsProviderLookup.parseSeraphTags(Data("{\"player\":{\"blacklist\":null}}".utf8)), [])
     }
 

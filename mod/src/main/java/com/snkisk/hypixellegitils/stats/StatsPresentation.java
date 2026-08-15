@@ -328,7 +328,7 @@ public final class StatsPresentation {
         String label = tag.label == null ? "" : tag.label;
         if ("Blatant Cheating".equals(label) || "Blatant Cheater".equals(label)) return "[BC]";
         if ("Closet Cheating".equals(label) || "Closet Cheater".equals(label)) return "[CC]";
-        if ("Confirmed Cheater".equals(label)) return "[CF]";
+        if (label.startsWith("Confirmed ")) return "[CF]";
         if ("Sniping".equals(label) || "Sniper".equals(label)) return "[S]";
         if ("Possible Sniper".equals(label) || "Potential Sniper".equals(label)) return "[PS]";
         if ("Legit Sniper".equals(label)) return "[LS]";
@@ -343,7 +343,7 @@ public final class StatsPresentation {
         String label = tag.label == null ? "" : tag.label;
         if ("Blatant Cheating".equals(label) || "Blatant Cheater".equals(label)) return "§6";
         if ("Closet Cheating".equals(label) || "Closet Cheater".equals(label)) return "§6";
-        if ("Confirmed Cheater".equals(label)) return "§5";
+        if (label.startsWith("Confirmed ")) return "§5";
         if ("Sniping".equals(label) || "Sniper".equals(label)) return "§c";
         if ("Possible Sniper".equals(label) || "Potential Sniper".equals(label)) return "§c";
         if ("Legit Sniper".equals(label)) return "§c";

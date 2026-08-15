@@ -236,7 +236,7 @@ public final class StatsPresentationTest {
         StatsBridgePlayerResult player = new StatsBridgePlayerResult(
             "Player", StatsBridgePlayerResult.NickStatus.KNOWN, null, null, null,
             Collections.singletonList(new StatsBridgePlayerResult.CommunityTag(
-                "urchin", "Confirmed Cheater",
+                "seraph", "Confirmed Closet Cheating",
                 "vape v4 (legitscaff, aa + ac, hitselect, autoblockhit, visuals)"
             ))
         );
@@ -244,7 +244,7 @@ public final class StatsPresentationTest {
             StatsBridgeLookupResult.ready(Collections.singletonList(player))
         ).get(1);
         assertEquals("§5[CF] §8— §fPlayer", notice.text);
-        assertEquals("§5§lConfirmed Cheater\n§7vape v4 (legitscaff, aa + ac, hitselect,\n§7autoblockhit, visuals)", notice.tooltip);
+        assertEquals("§5§lConfirmed Closet Cheating\n§7vape v4 (legitscaff, aa + ac, hitselect,\n§7autoblockhit, visuals)", notice.tooltip);
     }
 
     private static StatsBridgePlayerResult player(String name, Integer stars, Double fkdr, Integer streak) {

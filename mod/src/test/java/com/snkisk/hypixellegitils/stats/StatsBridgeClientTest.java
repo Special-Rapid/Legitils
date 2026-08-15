@@ -246,6 +246,12 @@ public final class StatsBridgeClientTest {
         assertEquals(StatsBridgeLookupResult.Status.READY, accepted.status);
         assertEquals("vape v4\n- Added by @hexze", accepted.players.get(0).communityTags.get(0).tooltip);
 
+        StatsBridgeLookupResult confirmed = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"seraph\",\"label\":\"Confirmed Closet Cheating\",\"tooltip\":\"confirmed by Seraph\"}]}]}"
+        );
+        assertEquals(StatsBridgeLookupResult.Status.READY, confirmed.status);
+        assertEquals("Confirmed Closet Cheating", confirmed.players.get(0).communityTags.get(0).label);
+
         StatsBridgeLookupResult unsafe = request(
             "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"urchin\",\"label\":\"Closet Cheater\",\"tooltip\":\"unsafe\\u00a7cformat\"}]}]}"
         );

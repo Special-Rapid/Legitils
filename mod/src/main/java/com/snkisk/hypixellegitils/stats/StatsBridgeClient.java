@@ -313,7 +313,11 @@ public final class StatsBridgeClient {
     private static boolean isCanonicalAdvisoryLabel(String label) {
         return "Blatant Cheating".equals(label) || "Blatant Cheater".equals(label)
             || "Closet Cheating".equals(label) || "Closet Cheater".equals(label)
-            || "Confirmed Cheater".equals(label)
+            || "Confirmed Cheater".equals(label) || "Confirmed Blatant Cheating".equals(label)
+            || "Confirmed Closet Cheating".equals(label) || "Confirmed Sniping".equals(label)
+            || "Confirmed Legit Sniper".equals(label) || "Confirmed Potential Sniper".equals(label)
+            || "Confirmed Alt Account".equals(label) || "Confirmed Bot".equals(label)
+            || "Confirmed Annoying".equals(label) || "Confirmed Caution".equals(label)
             || "Sniping".equals(label) || "Sniper".equals(label)
             || "Potential Sniper".equals(label) || "Possible Sniper".equals(label)
             || "Legit Sniper".equals(label)
