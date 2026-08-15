@@ -8,7 +8,7 @@ struct StatsView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Stats")
                 .font(.largeTitle.weight(.bold))
-            Text("Hypixel・UrchinのキーはこのMacのKeychainだけに保存します。Seraphは公開APIのためキー不要です。")
+            Text("Hypixel・Urchin・SeraphのキーはこのMacのKeychainだけに保存します。")
                 .foregroundStyle(.secondary)
             GroupBox("プロバイダー") {
                 VStack(alignment: .leading, spacing: 14) {
@@ -40,7 +40,7 @@ struct StatsView: View {
                 .foregroundStyle(.secondary)
             Text(store.statsBridgeStatus)
                 .foregroundStyle(.secondary)
-            Text("MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。Hypixelの正規化済みStatsだけを最大24時間ローカルに保持します。")
+            Text("MOD・config.json・ログ・MinecraftチャットへAPIキーや取得元の生データは渡しません。正規化済みStatsとコミュニティタグだけを最大24時間ローカルに保持します。")
                 .foregroundStyle(.secondary)
             Spacer()
         }
@@ -48,11 +48,7 @@ struct StatsView: View {
 
     @ViewBuilder
     private func providerKeyRow(_ provider: StatsProvider) -> some View {
-        if provider.requiresAPIKey {
-            keyProviderRow(provider)
-        } else {
-            publicProviderRow(provider)
-        }
+        keyProviderRow(provider)
     }
 
     private func keyProviderRow(_ provider: StatsProvider) -> some View {
@@ -82,21 +78,6 @@ struct StatsView: View {
                 Text("旧Companionのキーを検出しました。今回だけ再入力して保存してください。旧キーの値は読み出しません。")
                     .font(.caption)
                     .foregroundStyle(.orange)
-            }
-        }
-    }
-
-    private func publicProviderRow(_ provider: StatsProvider) -> some View {
-        HStack(spacing: 10) {
-            Text(provider.displayName)
-                .frame(width: 70, alignment: .leading)
-            Label("公開API・キー不要", systemImage: "globe")
-                .foregroundStyle(.green)
-            Spacer()
-            if store.hasKey(for: provider) {
-                Button("保存済みキーを削除", role: .destructive) {
-                    store.removeProviderKey(for: provider)
-                }
             }
         }
     }

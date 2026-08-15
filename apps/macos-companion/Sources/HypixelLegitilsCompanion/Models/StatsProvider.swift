@@ -16,6 +16,6 @@ enum StatsProvider: String, CaseIterable, Identifiable {
     }
 
     var requiresAPIKey: Bool {
-        self != .seraph
+        true
     }
 }

@@ -64,7 +64,7 @@ final class StatsProviderLookup {
     /// Drops only normalized, provider-dependent process state after a successful Keychain save.
     /// Credentials and raw responses remain confined to Keychain and the provider transport.
     func invalidateCachedResults(for provider: StatsProvider) {
-        guard provider == .hypixel || provider == .urchin else { return }
+        guard provider == .hypixel || provider == .urchin || provider == .seraph else { return }
         queue.sync {
             self.matchCache.removeAll()
             self.cacheOrder.removeAll()
@@ -229,27 +229,31 @@ final class StatsProviderLookup {
             diagnostics.append(Self.diagnostic("Urchin", nil))
         }
 
-        for player in known {
-            if !forceCommunityTagRefresh, let cached = communityTagCache.tags(for: .seraph, uuid: player.uuid!) {
-                apply(cached, from: .seraph, to: player, records: records)
-                continue
-            }
-            group.enter()
-            transport.load(Self.seraphRequest(uuid: player.uuid!)) { result in
-                self.queue.async {
-                    defer { group.leave() }
-                    guard case let .success((data, response)) = result, response.statusCode == 200 else {
-                        if manualLookup { diagnostics.append(Self.diagnostic("Seraph", result)) }
-                        return
-                    }
-                    let labels = Self.parseSeraphTags(data)
-                    self.communityTagCache.store(labels, for: .seraph, uuid: player.uuid!)
-                    self.apply(labels, from: .seraph, to: player, records: records)
-                    if manualLookup {
-                        diagnostics.append(Self.providerStatus("Seraph", detail: labels.isEmpty ? "no active tags" : labels.map(\.label).joined(separator: ", ")))
+        if let key = try? keychainStore.readSecret(account: StatsProvider.seraph.keychainAccount), !key.isEmpty {
+            for player in known {
+                if !forceCommunityTagRefresh, let cached = communityTagCache.tags(for: .seraph, uuid: player.uuid!) {
+                    apply(cached, from: .seraph, to: player, records: records)
+                    continue
+                }
+                group.enter()
+                transport.load(Self.seraphRequest(uuid: player.uuid!, apiKey: key)) { result in
+                    self.queue.async {
+                        defer { group.leave() }
+                        guard case let .success((data, response)) = result, response.statusCode == 200 else {
+                            if manualLookup { diagnostics.append(Self.diagnostic("Seraph", result)) }
+                            return
+                        }
+                        let labels = Self.parseSeraphTags(data)
+                        self.communityTagCache.store(labels, for: .seraph, uuid: player.uuid!)
+                        self.apply(labels, from: .seraph, to: player, records: records)
+                        if manualLookup {
+                            diagnostics.append(Self.providerStatus("Seraph", detail: labels.isEmpty ? "no active tags" : labels.map(\.label).joined(separator: ", ")))
+                        }
                     }
                 }
             }
+        } else if manualLookup {
+            diagnostics.append(Self.diagnostic("Seraph", nil))
         }
 
         DispatchQueue.global(qos: .utility).async {
@@ -394,8 +398,13 @@ extension StatsProviderLookup {
         return request
     }
 
-    static func seraphRequest(uuid: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://developer-api.seraph.si/player/\(uuid)")!)
+    static func seraphRequest(uuid: String, apiKey: String) -> URLRequest {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "api.seraph.si"
+        components.path = "/\(uuid)/blacklist"
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+        var request = URLRequest(url: components.url!)
         request.timeoutInterval = responseTimeout
         return request
     }

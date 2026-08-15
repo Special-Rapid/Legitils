@@ -4,11 +4,11 @@ import Foundation
 /// It never stores provider credentials or raw provider responses.
 final class CommunityTagCache {
     static let lifetime: TimeInterval = 24 * 60 * 60
-    // Version 1 persisted empty Seraph results produced before the public
-    // Developer API's `payload` envelope was understood. Retain valid Urchin
-    // entries but force Seraph to refresh after this repair.
-    private static let schemaVersion = 2
+    // Versions 1 and 2 contain results from obsolete unauthenticated Seraph
+    // endpoints. Retain valid Urchin entries but force Seraph to refresh.
+    private static let schemaVersion = 3
     private static let legacySchemaVersion = 1
+    private static let publicEnvelopeSchemaVersion = 2
     private static let maximumEntries = 1_024
 
     private struct StoredCache: Codable {
@@ -54,10 +54,9 @@ final class CommunityTagCache {
         persist()
     }
 
-    /// Removes only one authenticated provider's normalized entries after its key changes.
-    /// Seraph remains keyless and is deliberately retained.
+    /// Removes only one provider's normalized entries after its Keychain key changes.
     func removeAll(for provider: StatsProvider) {
-        guard provider == .urchin else { return }
+        guard provider == .seraph || provider == .urchin else { return }
         let prefix = provider.rawValue + ":"
         entries = entries.filter { !$0.key.hasPrefix(prefix) }
         persist()
@@ -66,7 +65,7 @@ final class CommunityTagCache {
     private func load() {
         guard let data = try? Data(contentsOf: url),
               let stored = try? JSONDecoder().decode(StoredCache.self, from: data),
-              stored.schemaVersion == Self.schemaVersion || stored.schemaVersion == Self.legacySchemaVersion else {
+              stored.schemaVersion == Self.schemaVersion || stored.schemaVersion == Self.legacySchemaVersion || stored.schemaVersion == Self.publicEnvelopeSchemaVersion else {
             return
         }
         entries = stored.entries.filter {

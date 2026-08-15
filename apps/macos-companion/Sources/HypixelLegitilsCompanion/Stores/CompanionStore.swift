@@ -17,6 +17,7 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var hasSeraphKey = false
     @Published private(set) var needsHypixelKeyReentry = false
     @Published private(set) var needsUrchinKeyReentry = false
+    @Published private(set) var needsSeraphKeyReentry = false
 
     private let configurationStore: ConfigurationStore
     private let keychainStore: KeychainStore
@@ -224,15 +225,11 @@ final class CompanionStore: ObservableObject {
         switch provider {
         case .hypixel: needsHypixelKeyReentry
         case .urchin: needsUrchinKeyReentry
-        case .seraph: false
+        case .seraph: needsSeraphKeyReentry
         }
     }
 
     func saveProviderKey(_ rawKey: String, for provider: StatsProvider) {
-        guard provider.requiresAPIKey else {
-            statsStatusMessage = "Seraph は公開APIのためAPIキー不要です。"
-            return
-        }
         let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             statsStatusMessage = "\(provider.displayName) のAPIキーを入力してください。"
@@ -260,6 +257,7 @@ final class CompanionStore: ObservableObject {
     func removeProviderKey(for provider: StatsProvider) {
         do {
             try keychainStore.remove(account: provider.keychainAccount)
+            statsProviderLookup.invalidateCachedResults(for: provider)
             refreshProviderKeyStates()
             syncStatsBridge()
             statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainから削除しました。"
@@ -281,6 +279,11 @@ final class CompanionStore: ObservableObject {
             for: .urchin,
             hasCurrent: hasUrchinKey,
             hasLegacy: keychainStore.hasLegacySecret(account: StatsProvider.urchin.keychainAccount)
+        )
+        needsSeraphKeyReentry = KeychainStore.needsLegacyReentry(
+            for: .seraph,
+            hasCurrent: hasSeraphKey,
+            hasLegacy: keychainStore.hasLegacySecret(account: StatsProvider.seraph.keychainAccount)
         )
     }
 

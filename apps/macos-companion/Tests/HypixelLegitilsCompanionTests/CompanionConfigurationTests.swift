@@ -83,7 +83,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(Set(StatsProvider.allCases.map(\.keychainAccount)).count, StatsProvider.allCases.count)
         XCTAssertTrue(StatsProvider.hypixel.requiresAPIKey)
         XCTAssertTrue(StatsProvider.urchin.requiresAPIKey)
-        XCTAssertFalse(StatsProvider.seraph.requiresAPIKey)
+        XCTAssertTrue(StatsProvider.seraph.requiresAPIKey)
     }
 
     func testSignedKeychainNamespaceIsStableAndDoesNotReuseLegacyEntries() {
@@ -97,7 +97,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertTrue(KeychainStore.needsLegacyReentry(for: .urchin, hasCurrent: false, hasLegacy: true))
         XCTAssertFalse(KeychainStore.needsLegacyReentry(for: .hypixel, hasCurrent: true, hasLegacy: true))
         XCTAssertFalse(KeychainStore.needsLegacyReentry(for: .urchin, hasCurrent: false, hasLegacy: false))
-        XCTAssertFalse(KeychainStore.needsLegacyReentry(for: .seraph, hasCurrent: false, hasLegacy: true))
+        XCTAssertTrue(KeychainStore.needsLegacyReentry(for: .seraph, hasCurrent: false, hasLegacy: true))
     }
 
     func testProviderKeyChangeEventContainsOnlyBoundedProviderAndSequence() throws {
@@ -357,10 +357,15 @@ final class CompanionConfigurationTests: XCTestCase {
         ])
         XCTAssertFalse(String(data: urchin.httpBody ?? Data(), encoding: .utf8)?.contains("urchin-secret") == true)
 
-        let seraph = StatsProviderLookup.seraphRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        XCTAssertEqual(seraph.url?.absoluteString, "https://developer-api.seraph.si/player/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        let seraph = StatsProviderLookup.seraphRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", apiKey: "seraph-secret")
+        XCTAssertEqual(seraph.url?.host, "api.seraph.si")
+        XCTAssertEqual(seraph.url?.path, "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/blacklist")
+        XCTAssertEqual(URLComponents(url: seraph.url!, resolvingAgainstBaseURL: false)?.queryItems, [
+            URLQueryItem(name: "key", value: "seraph-secret")
+        ])
         XCTAssertNil(seraph.value(forHTTPHeaderField: "X-API-Key"))
         XCTAssertNil(seraph.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertNil(seraph.httpBody)
     }
 
     func testProviderLookupCachesOneNormalizedResultPerMatch() throws {
@@ -368,7 +373,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([
                 StatsProvider.hypixel.keychainAccount: "hypixel-secret",
-                StatsProvider.urchin.keychainAccount: "urchin-secret"
+                StatsProvider.urchin.keychainAccount: "urchin-secret",
+                StatsProvider.seraph.keychainAccount: "seraph-secret"
             ]),
             transport: transport,
             hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
@@ -595,13 +601,13 @@ final class CompanionConfigurationTests: XCTestCase {
             .tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
     }
 
-    func testCommunityTagCacheInvalidatesOnlyLegacySeraphEntriesAfterPublicEnvelopeRepair() throws {
+    func testCommunityTagCacheInvalidatesUnauthenticatedSeraphEntriesAfterAuthenticatedEndpointMigration() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("community-tag-cache.json")
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Data("""
-        {"schemaVersion":1,"entries":{
+        {"schemaVersion":2,"entries":{
           "seraph:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"fetchedAtMillis":1700000000000,"tags":[]},
           "urchin:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":{"fetchedAtMillis":1700000000000,"tags":[{"label":"Legit Sniper"}]}
         }}
@@ -648,7 +654,7 @@ final class CompanionConfigurationTests: XCTestCase {
         }
         wait(for: [response], timeout: 2)
 
-        XCTAssertEqual(transport.requestCount, 1)
+        XCTAssertEqual(transport.requestCount, 0)
         XCTAssertEqual(result?.players.first?.stars, 130)
         XCTAssertEqual(result?.players.first?.finalKillDeathRatio, 6.5)
         XCTAssertEqual(result?.players.first?.modeWinStreak, 11)
@@ -684,7 +690,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([
                 StatsProvider.hypixel.keychainAccount: "hypixel-secret",
-                StatsProvider.urchin.keychainAccount: "urchin-secret"
+                StatsProvider.urchin.keychainAccount: "urchin-secret",
+                StatsProvider.seraph.keychainAccount: "seraph-secret"
             ]),
             transport: transport,
             hypixelCache: cache,
@@ -735,6 +742,9 @@ final class CompanionConfigurationTests: XCTestCase {
         lookup.invalidateCachedResults(for: .urchin)
         XCTAssertNotNil(tagCache.tags(for: .seraph, uuid: uuid))
         XCTAssertNil(tagCache.tags(for: .urchin, uuid: uuid))
+
+        lookup.invalidateCachedResults(for: .seraph)
+        XCTAssertNil(tagCache.tags(for: .seraph, uuid: uuid))
     }
 
     func testProviderLookupResolvesVisiblePregameChatterBeforeFetchingStats() {
@@ -759,7 +769,7 @@ final class CompanionConfigurationTests: XCTestCase {
         }
         wait(for: [response], timeout: 2)
 
-        XCTAssertEqual(transport.requestCount, 3)
+        XCTAssertEqual(transport.requestCount, 2)
         XCTAssertEqual(result?.players.first?.nickStatus, .known)
         XCTAssertEqual(result?.players.first?.stars, 100)
     }
@@ -794,12 +804,12 @@ final class CompanionConfigurationTests: XCTestCase {
         }
         wait(for: [response], timeout: 2)
 
-        XCTAssertEqual(transport.requestCount, 3)
+        XCTAssertEqual(transport.requestCount, 2)
         XCTAssertNil(result?.players.first?.stars)
         XCTAssertEqual(result?.players.first?.communityTags, [
             StatsBridgeCommunityTag(source: "diagnostic", label: "Hypixel: authorization failed"),
-            StatsBridgeCommunityTag(source: "diagnostic", label: "Urchin: API key unavailable"),
-            StatsBridgeCommunityTag(source: "provider", label: "Seraph: no active tags")
+            StatsBridgeCommunityTag(source: "diagnostic", label: "Seraph: API key unavailable"),
+            StatsBridgeCommunityTag(source: "diagnostic", label: "Urchin: API key unavailable")
         ])
     }
 
@@ -807,7 +817,8 @@ final class CompanionConfigurationTests: XCTestCase {
         let lookup = StatsProviderLookup(
             keychainStore: FakeStatsKeyStore([
                 StatsProvider.hypixel.keychainAccount: "hypixel-secret",
-                StatsProvider.urchin.keychainAccount: "urchin-secret"
+                StatsProvider.urchin.keychainAccount: "urchin-secret",
+                StatsProvider.seraph.keychainAccount: "seraph-secret"
             ]),
             transport: FakeStatsTransport(),
             hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
@@ -964,7 +975,7 @@ private final class FakeStatsTransport: StatsHTTPTransport {
             body = Data("""
             {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"legitsniper","tooltip":"queued on stream"}]}}
             """.utf8)
-        case "developer-api.seraph.si":
+        case "api.seraph.si":
             body = Data("""
             {"player":{"blacklist":{"report_type":"cheating_closet","tooltip":"vape v4 (legitscaff)\\n- Added by @hexze 4 months ago"}}}
             """.utf8)
