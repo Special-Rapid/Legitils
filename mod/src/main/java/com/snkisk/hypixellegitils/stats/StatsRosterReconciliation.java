@@ -29,6 +29,11 @@ public final class StatsRosterReconciliation {
         return confirmedMatchContext || (gameMode != null && gameMode != BedwarsMode.UNKNOWN);
     }
 
+    /** Incremental Tab recovery must not repeat the complete roster's Chat notice. */
+    public static boolean isIncrementalRequest(String matchId) {
+        return matchId != null && matchId.startsWith("reconcile_");
+    }
+
     /** Returns one missing-profile request at most once per scan and never while an earlier attempt is cooling down. */
     public synchronized Request dueRequest(
         long nowMillis,

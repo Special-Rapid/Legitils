@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
  * Lunar's Hypixel module composes a separate level-head line after it has
@@ -35,16 +36,30 @@ public abstract class MixinLunarHypixelLevelHead {
         return HypixelLegitilsBootstrap.lunarNickedLevelText(original, playerId);
     }
 
-    /** The third String STORE is Lunar's localized `Level`/`BedWars Level`/`SkyWars Level` prefix. */
-    @ModifyVariable(
+    /**
+     * The selected Level/BedWars Level/SkyWars Level source is composed by
+     * this exact getter in current Lunar builds. Redirecting it avoids relying
+     * on unstable String-local ordinals while retaining the numeric component.
+     */
+    @Redirect(
         method = "IROIRHHRRCOCCHOOCOHHORCHHCHOCO(Lcom/moonsworth/lunar/client/ROHIRIOHCIROCRROIRHCIHOCIRORIR/IROIRHHRRCOCCHOOCOHHORCHHCHOCO/ROHIRIOHCIROCRROIRHCIHOCIRORIR/HROORHRRIOHOCROCRRORHORHRIOCCO;)V",
-        at = @At("STORE"),
-        ordinal = 2,
+        at = @At(
+            value = "INVOKE",
+            target = "Lcom/moonsworth/lunar/client/OOIHHOORHCOCHOOHHIHIHICOOOROII/IIHHORIHHIHCOCOIHIOICHRHOHROHC/HOHROIHRORCRHRRRCOCIHHIIHOHOCI/OCICHIOHRIHHCCOIOROHCRICCHHCHI;getNametagPrefix()Ljava/lang/String;"
+        ),
         remap = false,
         require = 0
     )
-    private String hypixelLegitils$hideLevelSourcePrefix(String original) {
-        return "";
+    private String hypixelLegitils$hideLevelSourcePrefix(@Coerce Object source) {
+        if (source == null) return "Level";
+        try {
+            Object prefix = source.getClass().getMethod("getNametagPrefix").invoke(source);
+            return HypixelLegitilsBootstrap.lunarLevelHeadPrefixText(prefix instanceof String ? (String) prefix : null);
+        } catch (ReflectiveOperationException ignored) {
+            // Preserve a visible source label if Lunar changes the private object shape.
+            // Never turn an unrecognized label into an empty value.
+            return "Level";
+        }
     }
 
     @ModifyArg(

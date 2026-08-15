@@ -21,6 +21,14 @@ public final class StatsRosterReconciliationTest {
     }
 
     @Test
+    public void marksOnlyIncrementalRequestsAsChatSilent() {
+        assertEquals(true, StatsRosterReconciliation.isIncrementalRequest("reconcile_2_1"));
+        assertEquals(false, StatsRosterReconciliation.isIncrementalRequest("who_2_1"));
+        assertEquals(false, StatsRosterReconciliation.isIncrementalRequest("match_2_1"));
+        assertEquals(false, StatsRosterReconciliation.isIncrementalRequest(null));
+    }
+
+    @Test
     public void requestsOnlyVisibleProfilesMissingFromTheCurrentStatsState() {
         StatsRosterReconciliation reconciliation = new StatsRosterReconciliation();
         StatsRosterReconciliation.Request request = reconciliation.dueRequest(

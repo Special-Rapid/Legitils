@@ -36,7 +36,7 @@ public final class HypixelLegitilsBootstrapTest {
         java.util.UUID nick = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426655440000");
         assertTrue(HypixelLegitilsBootstrap.shouldShowNickedSessionMarker(nick));
         assertEquals(" §c[NICK]", HypixelLegitilsBootstrap.playerNametagSuffix("Nick", nick));
-        assertEquals("[NICK]", HypixelLegitilsBootstrap.lunarNickedLevelText("37", nick));
+        assertEquals("§c[NICK]", HypixelLegitilsBootstrap.lunarNickedLevelText("37", nick));
     }
 
     @Test
@@ -46,6 +46,16 @@ public final class HypixelLegitilsBootstrapTest {
         assertEquals("37", HypixelLegitilsBootstrap.lunarNickedLevelText("37", real));
         assertEquals("", HypixelLegitilsBootstrap.lunarNickedLevelText("", real));
         assertEquals(null, HypixelLegitilsBootstrap.lunarNickedLevelText(null, real));
+    }
+
+    @Test
+    public void lunarLevelHeadRemovesOnlyTheSelectedLevelSourcePrefix() {
+        assertEquals("", HypixelLegitilsBootstrap.lunarLevelHeadPrefixText("Level"));
+        assertEquals("", HypixelLegitilsBootstrap.lunarLevelHeadPrefixText("§fBedWars Level:"));
+        assertEquals("", HypixelLegitilsBootstrap.lunarLevelHeadPrefixText("SkyWars Level"));
+        assertEquals("Prestige", HypixelLegitilsBootstrap.lunarLevelHeadPrefixText("Prestige"));
+        assertEquals("37", HypixelLegitilsBootstrap.lunarLevelHeadPrefixText("37"));
+        assertEquals("§a427✫", HypixelLegitilsBootstrap.lunarLevelHeadPrefixText("§a427✫"));
     }
 
     @Test

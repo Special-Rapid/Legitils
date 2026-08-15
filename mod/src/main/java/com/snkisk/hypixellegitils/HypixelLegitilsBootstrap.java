@@ -547,10 +547,12 @@ public final class HypixelLegitilsBootstrap {
                 if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
                 StatsBridgeLookupResult result = client.requestOnce(matchId, gameMode, players, System.currentTimeMillis());
                 traceStats("roster bridge result=" + result.status + " players=" + result.players.size());
-                boolean reconcile = matchId.startsWith("reconcile_");
+                boolean reconcile = StatsRosterReconciliation.isIncrementalRequest(matchId);
                 boolean whoRefresh = matchId.startsWith("who_");
                 if (reconcile) STATS_ROSTER_RECONCILIATION.onResponse(matchId, result, System.currentTimeMillis());
-                publishStatsBridgeResult(sessionGeneration, result, visibleTeamNames, whoRefresh || reconcile, whoRefresh);
+                publishStatsBridgeResult(
+                    sessionGeneration, result, visibleTeamNames, whoRefresh || reconcile, whoRefresh, !reconcile
+                );
             }
         });
     }
@@ -635,7 +637,8 @@ public final class HypixelLegitilsBootstrap {
         StatsBridgeLookupResult result,
         Map<String, String> teamFormattedNames,
         boolean retainEliminatedMatchMembers,
-        boolean includeRetainedTagsInChat
+        boolean includeRetainedTagsInChat,
+        boolean publishChat
     ) {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
@@ -643,7 +646,7 @@ public final class HypixelLegitilsBootstrap {
                 ? StatsMatchResultRetention.mergeWhoRefresh(latestStatsBridgeResult, result)
                 : result;
             traceStats("roster result published chat=" + statsSettings.chatEnabled + " tab=" + statsSettings.tabEnabled);
-            if (statsSettings.enabled && statsSettings.chatEnabled) {
+            if (publishChat && statsSettings.enabled && statsSettings.chatEnabled) {
                 StatsBridgeLookupResult chatResult = includeRetainedTagsInChat
                     ? StatsMatchResultRetention.returnedMembersWithRetainedTags(latestStatsBridgeResult, result)
                     : result;
@@ -884,7 +887,20 @@ public final class HypixelLegitilsBootstrap {
      */
     public static String lunarNickedLevelText(String original, UUID playerId) {
         if (original == null || original.isEmpty() || !shouldShowNickedSessionMarker(playerId)) return original;
-        return "[NICK]";
+        return "§c[NICK]";
+    }
+
+    /** Removes only Lunar's selected level-source label while retaining its rendered numeric value. */
+    public static String lunarLevelHeadPrefixText(String original) {
+        if (original == null) return null;
+        String normalized = original.replaceAll("(?i)§[0-9A-FK-OR]", "").trim();
+        if ("level".equalsIgnoreCase(normalized)
+            || "level:".equalsIgnoreCase(normalized)
+            || "bedwars level".equalsIgnoreCase(normalized)
+            || "bedwars level:".equalsIgnoreCase(normalized)
+            || "skywars level".equalsIgnoreCase(normalized)
+            || "skywars level:".equalsIgnoreCase(normalized)) return "";
+        return original;
     }
 
     /**
