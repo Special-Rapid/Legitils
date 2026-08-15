@@ -86,6 +86,20 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertFalse(StatsProvider.seraph.requiresAPIKey)
     }
 
+    func testSignedKeychainNamespaceIsStableAndDoesNotReuseLegacyEntries() {
+        XCTAssertEqual(KeychainStore.service, "com.snkisk.hypixellegitils.companion.v2")
+        XCTAssertEqual(KeychainStore.legacyService, "com.snkisk.hypixellegitils.companion")
+        XCTAssertNotEqual(KeychainStore.service, KeychainStore.legacyService)
+    }
+
+    func testLegacyKeyReentryAppearsOnlyUntilEachNewSignedNamespaceKeyIsSaved() {
+        XCTAssertTrue(KeychainStore.needsLegacyReentry(for: .hypixel, hasCurrent: false, hasLegacy: true))
+        XCTAssertTrue(KeychainStore.needsLegacyReentry(for: .urchin, hasCurrent: false, hasLegacy: true))
+        XCTAssertFalse(KeychainStore.needsLegacyReentry(for: .hypixel, hasCurrent: true, hasLegacy: true))
+        XCTAssertFalse(KeychainStore.needsLegacyReentry(for: .urchin, hasCurrent: false, hasLegacy: false))
+        XCTAssertFalse(KeychainStore.needsLegacyReentry(for: .seraph, hasCurrent: false, hasLegacy: true))
+    }
+
     func testProviderKeyChangeEventContainsOnlyBoundedProviderAndSequence() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("provider-key-change-events.json")

@@ -15,6 +15,8 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var hasHypixelKey = false
     @Published private(set) var hasUrchinKey = false
     @Published private(set) var hasSeraphKey = false
+    @Published private(set) var needsHypixelKeyReentry = false
+    @Published private(set) var needsUrchinKeyReentry = false
 
     private let configurationStore: ConfigurationStore
     private let keychainStore: KeychainStore
@@ -218,6 +220,14 @@ final class CompanionStore: ObservableObject {
         }
     }
 
+    func needsKeyReentry(for provider: StatsProvider) -> Bool {
+        switch provider {
+        case .hypixel: needsHypixelKeyReentry
+        case .urchin: needsUrchinKeyReentry
+        case .seraph: false
+        }
+    }
+
     func saveProviderKey(_ rawKey: String, for provider: StatsProvider) {
         guard provider.requiresAPIKey else {
             statsStatusMessage = "Seraph は公開APIのためAPIキー不要です。"
@@ -262,6 +272,16 @@ final class CompanionStore: ObservableObject {
         hasHypixelKey = keychainStore.hasSecret(account: StatsProvider.hypixel.keychainAccount)
         hasUrchinKey = keychainStore.hasSecret(account: StatsProvider.urchin.keychainAccount)
         hasSeraphKey = keychainStore.hasSecret(account: StatsProvider.seraph.keychainAccount)
+        needsHypixelKeyReentry = KeychainStore.needsLegacyReentry(
+            for: .hypixel,
+            hasCurrent: hasHypixelKey,
+            hasLegacy: keychainStore.hasLegacySecret(account: StatsProvider.hypixel.keychainAccount)
+        )
+        needsUrchinKeyReentry = KeychainStore.needsLegacyReentry(
+            for: .urchin,
+            hasCurrent: hasUrchinKey,
+            hasLegacy: keychainStore.hasLegacySecret(account: StatsProvider.urchin.keychainAccount)
+        )
     }
 
     private func syncStatsBridge() {

@@ -56,25 +56,32 @@ struct StatsView: View {
     }
 
     private func keyProviderRow(_ provider: StatsProvider) -> some View {
-        HStack(spacing: 10) {
-            Text(provider.displayName)
-                .frame(width: 70, alignment: .leading)
-            keyState(store.hasKey(for: provider))
-                .frame(width: 74, alignment: .leading)
-            SecureField("APIキー", text: Binding(
-                get: { draftKeys[provider, default: ""] },
-                set: { draftKeys[provider] = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            Button("保存") {
-                store.saveProviderKey(draftKeys[provider, default: ""], for: provider)
-                draftKeys[provider] = ""
-            }
-            .disabled(draftKeys[provider, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            if store.hasKey(for: provider) {
-                Button("削除", role: .destructive) {
-                    store.removeProviderKey(for: provider)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text(provider.displayName)
+                    .frame(width: 70, alignment: .leading)
+                keyState(store.hasKey(for: provider))
+                    .frame(width: 74, alignment: .leading)
+                SecureField("APIキー", text: Binding(
+                    get: { draftKeys[provider, default: ""] },
+                    set: { draftKeys[provider] = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                Button("保存") {
+                    store.saveProviderKey(draftKeys[provider, default: ""], for: provider)
+                    draftKeys[provider] = ""
                 }
+                .disabled(draftKeys[provider, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if store.hasKey(for: provider) {
+                    Button("削除", role: .destructive) {
+                        store.removeProviderKey(for: provider)
+                    }
+                }
+            }
+            if store.needsKeyReentry(for: provider) {
+                Text("旧Companionのキーを検出しました。今回だけ再入力して保存してください。旧キーの値は読み出しません。")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
         }
     }
