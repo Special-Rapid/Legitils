@@ -20,6 +20,11 @@ public final class StatsRosterReconciliation {
     private long nextScanAtMillis;
     private long nextSequence;
 
+    /** Automatic reconciliation belongs only to a current world with a confirmed Bed Wars mode. */
+    public static boolean supports(BedwarsMode gameMode) {
+        return gameMode != null && gameMode != BedwarsMode.UNKNOWN;
+    }
+
     /** Returns one missing-profile request at most once per scan and never while an earlier attempt is cooling down. */
     public synchronized Request dueRequest(
         long nowMillis,
