@@ -46,6 +46,13 @@ final class HypixelStatsCache {
         persist()
     }
 
+    /// A successful Hypixel key replacement must not keep an in-memory process using
+    /// statistics obtained before the replacement. The cache never contains the key itself.
+    func removeAll() {
+        entries.removeAll()
+        persist()
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: url),
               let stored = try? JSONDecoder().decode(StoredCache.self, from: data),

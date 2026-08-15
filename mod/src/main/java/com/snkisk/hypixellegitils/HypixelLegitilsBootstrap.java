@@ -257,10 +257,42 @@ public final class HypixelLegitilsBootstrap {
         for (String provider : reader.poll()) {
             if ("hypixel".equals(provider)) {
                 PENDING_PROVIDER_KEY_CHANGE_NOTICES.add(ChatFormat.line("§aHypixel API key changed in Companion."));
+                recoverStatsAfterProviderKeyChange();
+                requestHypixelKeyValidationAfterKeyChange();
             } else if ("urchin".equals(provider)) {
                 PENDING_PROVIDER_KEY_CHANGE_NOTICES.add(ChatFormat.line("§aUrchin API key changed in Companion."));
+                recoverStatsAfterProviderKeyChange();
             }
         }
+    }
+
+    /** Starts a fresh local roster generation without retaining a pre-Keychain-save response. */
+    private static void recoverStatsAfterProviderKeyChange() {
+        STATS_BRIDGE_SESSION.reset();
+        StatsBridgeClient client = statsBridgeClient;
+        if (client != null) client.resetForProviderKeyChange();
+        synchronized (STATS_BRIDGE_RESULT_LOCK) {
+            latestStatsBridgeResult = StatsBridgeLookupResult.unavailable();
+            STATS_ROSTER_RECONCILIATION.reset();
+        }
+    }
+
+    /** Key replacement is a deliberate validation retry, still limited to the loopback Companion endpoint. */
+    private static void requestHypixelKeyValidationAfterKeyChange() {
+        final StatsBridgeClient client = statsBridgeClient;
+        if (client == null) return;
+        STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
+            @Override
+            public void run() {
+                if (client.requestHypixelKeyValidationAfterKeyChange(System.currentTimeMillis()) != HypixelKeyValidationResult.INVALID) {
+                    return;
+                }
+                PENDING_EXTERNAL_LINK_NOTICES.add(new PendingExternalLinkNotice(
+                    ChatFormat.line("§cHypixel API key expired or invalid. §eReissue it"),
+                    "https://developer.hypixel.net/dashboard"
+                ));
+            }
+        });
     }
 
     /** Receives only the actor name parsed from a server Bed-destruction announcement. */

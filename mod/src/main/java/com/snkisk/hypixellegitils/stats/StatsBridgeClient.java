@@ -66,6 +66,18 @@ public final class StatsBridgeClient {
         return requestHypixelKeyValidation(descriptor.get());
     }
 
+    /** A successful Keychain replacement is an explicit retry boundary, unlike world changes. */
+    public HypixelKeyValidationResult requestHypixelKeyValidationAfterKeyChange(long nowMillis) {
+        Optional<StatsBridgeDescriptor> descriptor = StatsBridgeDescriptor.read(descriptorPath, nowMillis);
+        if (!descriptor.isPresent()) return HypixelKeyValidationResult.UNAVAILABLE;
+        return requestHypixelKeyValidation(descriptor.get());
+    }
+
+    /** Allows a fresh, post-key-change roster generation without retaining old request gates. */
+    public void resetForProviderKeyChange() {
+        requestedMatchIds.clear();
+    }
+
     private StatsBridgeLookupResult request(
         StatsBridgeDescriptor descriptor,
         String matchId,

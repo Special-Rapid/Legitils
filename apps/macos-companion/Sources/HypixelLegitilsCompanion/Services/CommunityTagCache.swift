@@ -54,6 +54,15 @@ final class CommunityTagCache {
         persist()
     }
 
+    /// Removes only one authenticated provider's normalized entries after its key changes.
+    /// Seraph remains keyless and is deliberately retained.
+    func removeAll(for provider: StatsProvider) {
+        guard provider == .urchin else { return }
+        let prefix = provider.rawValue + ":"
+        entries = entries.filter { !$0.key.hasPrefix(prefix) }
+        persist()
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: url),
               let stored = try? JSONDecoder().decode(StoredCache.self, from: data),

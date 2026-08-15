@@ -57,7 +57,8 @@ public final class StatsBridgeClientTest {
             assertEquals(HypixelKeyValidationResult.INVALID, client.requestHypixelKeyValidationOnce(System.currentTimeMillis()));
             client.resetForNewWorld();
             assertEquals(HypixelKeyValidationResult.ALREADY_REQUESTED, client.requestHypixelKeyValidationOnce(System.currentTimeMillis()));
-            assertEquals(1, requests.get());
+            assertEquals(HypixelKeyValidationResult.INVALID, client.requestHypixelKeyValidationAfterKeyChange(System.currentTimeMillis()));
+            assertEquals(2, requests.get());
         } finally {
             server.stop(0);
             deleteTree(directory);

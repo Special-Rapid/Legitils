@@ -37,6 +37,17 @@ public final class StatsRosterReconciliationTest {
         assertEquals("Other", reconciliation.dueRequest(9700L, 2L, Collections.singletonList(member("Other")), result(player("Resolved"))).players.get(0).name);
     }
 
+    @Test
+    public void unavailableCurrentStateRecoversEveryVisibleProfileAfterBridgeOrKeyRecovery() {
+        StatsRosterReconciliation reconciliation = new StatsRosterReconciliation();
+        StatsRosterReconciliation.Request request = reconciliation.dueRequest(
+            1000L, 7L, Arrays.asList(member("First"), member("Second")), StatsBridgeLookupResult.unavailable()
+        );
+
+        assertEquals("reconcile_7_1", request.matchId);
+        assertEquals(Arrays.asList("First", "Second"), Arrays.asList(request.players.get(0).name, request.players.get(1).name));
+    }
+
     private static StatsBridgeRosterMember member(String name) {
         return new StatsBridgeRosterMember(name, null);
     }

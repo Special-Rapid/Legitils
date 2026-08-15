@@ -32,19 +32,23 @@ final class StatsBridgeServer {
     private let descriptorURL: URL
     private let lookup: RosterLookup
     private let hypixelKeyValidation: HypixelKeyValidation
+    private let descriptorLifetime: TimeInterval
     private var listener: NWListener?
     private var descriptor: StatsBridgeDescriptor?
     private var rotationTimer: DispatchSourceTimer?
     private var pendingStartCompletions: [(Result<StatsBridgeDescriptor, Error>) -> Void] = []
+    private var availabilityObserver: ((Bool) -> Void)?
 
     init(
         descriptorURL: URL = CompanionPaths.statsBridgeDescriptorURL,
         lookup: @escaping RosterLookup = { _, completion in completion(.unavailable()) },
-        hypixelKeyValidation: @escaping HypixelKeyValidation = { completion in completion(.unavailable) }
+        hypixelKeyValidation: @escaping HypixelKeyValidation = { completion in completion(.unavailable) },
+        descriptorLifetime: TimeInterval = StatsBridgeServer.descriptorLifetime
     ) {
         self.descriptorURL = descriptorURL
         self.lookup = lookup
         self.hypixelKeyValidation = hypixelKeyValidation
+        self.descriptorLifetime = descriptorLifetime
     }
 
     deinit {
@@ -56,12 +60,24 @@ final class StatsBridgeServer {
     func start(completion: @escaping (Result<StatsBridgeDescriptor, Error>) -> Void) {
         queue.async { [weak self] in
             guard let self else { return }
-            if let descriptor = self.descriptor, descriptor.isUsable() {
-                completion(.success(descriptor))
+            if self.listener != nil {
+                if let descriptor = self.descriptor, descriptor.isUsable() {
+                    completion(.success(descriptor))
+                    return
+                }
+                do {
+                    try self.rotateDescriptor()
+                    guard let descriptor = self.descriptor, descriptor.isUsable() else {
+                        completion(.failure(StatsBridgeServerError.descriptorWriteFailed))
+                        return
+                    }
+                    completion(.success(descriptor))
+                } catch {
+                    completion(.failure(error))
+                }
                 return
             }
             self.pendingStartCompletions.append(completion)
-            guard self.listener == nil else { return }
 
             do {
                 let parameters = NWParameters.tcp
@@ -81,6 +97,15 @@ final class StatsBridgeServer {
         }
     }
 
+    /// Reports listener availability only; it never exposes the descriptor capability.
+    func observeAvailability(_ observer: @escaping (Bool) -> Void) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.availabilityObserver = observer
+            observer(self.listener != nil && self.descriptor?.isUsable() == true)
+        }
+    }
+
     func stop() {
         queue.async { [weak self] in
             guard let self else { return }
@@ -90,6 +115,7 @@ final class StatsBridgeServer {
             self.listener = nil
             self.descriptor = nil
             try? FileManager.default.removeItem(at: self.descriptorURL)
+            self.availabilityObserver?(false)
             self.finishStart(with: .failure(StatsBridgeServerError.didNotStart))
         }
     }
@@ -105,6 +131,7 @@ final class StatsBridgeServer {
                 try rotateDescriptor()
                 scheduleDescriptorRotation()
                 if let descriptor {
+                    availabilityObserver?(true)
                     finishStart(with: .success(descriptor))
                 } else {
                     finishStart(with: .failure(StatsBridgeServerError.descriptorWriteFailed))
@@ -117,11 +144,21 @@ final class StatsBridgeServer {
                 finishStart(with: .failure(error))
             }
         case .failed(let error):
+            rotationTimer?.cancel()
+            rotationTimer = nil
             listener?.cancel()
             listener = nil
             descriptor = nil
             try? FileManager.default.removeItem(at: descriptorURL)
+            availabilityObserver?(false)
             finishStart(with: .failure(error))
+        case .cancelled:
+            rotationTimer?.cancel()
+            rotationTimer = nil
+            listener = nil
+            descriptor = nil
+            try? FileManager.default.removeItem(at: descriptorURL)
+            availabilityObserver?(false)
         default:
             break
         }
@@ -144,7 +181,7 @@ final class StatsBridgeServer {
             schemaVersion: StatsBridgeDescriptor.schemaVersion,
             port: port.rawValue,
             capability: Self.makeCapability(),
-            expiresAt: Date.now.addingTimeInterval(Self.descriptorLifetime)
+            expiresAt: Date.now.addingTimeInterval(descriptorLifetime)
         )
         let parent = descriptorURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)

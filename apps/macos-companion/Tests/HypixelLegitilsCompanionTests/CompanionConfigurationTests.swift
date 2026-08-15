@@ -170,6 +170,34 @@ final class CompanionConfigurationTests: XCTestCase {
         server.stop()
     }
 
+    func testStatsBridgeRefreshesAnExpiredDescriptorWhileItsListenerRemainsLive() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let descriptorURL = directory.appendingPathComponent("stats-bridge.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let server = StatsBridgeServer(descriptorURL: descriptorURL, descriptorLifetime: 0.03)
+        let initialStarted = expectation(description: "initial bridge started")
+        var initial: StatsBridgeDescriptor?
+        server.start { result in
+            initial = try? result.get()
+            initialStarted.fulfill()
+        }
+        wait(for: [initialStarted], timeout: 2)
+        Thread.sleep(forTimeInterval: 0.06)
+
+        let refreshedStarted = expectation(description: "expired descriptor refreshed")
+        var refreshed: StatsBridgeDescriptor?
+        server.start { result in
+            refreshed = try? result.get()
+            refreshedStarted.fulfill()
+        }
+        wait(for: [refreshedStarted], timeout: 2)
+
+        XCTAssertNotNil(initial)
+        XCTAssertTrue(refreshed?.isUsable() == true)
+        XCTAssertNotEqual(initial?.capability, refreshed?.capability)
+        server.stop()
+    }
+
     func testHypixelKeyValidationUsesOneFixedRequestAndReturnsOnlySafeStatus() {
         let valid = HypixelKeyValidationTransport(statusCode: 200, body: Data("{\"success\":true}".utf8))
         let invalid = HypixelKeyValidationTransport(statusCode: 403, body: Data("{\"cause\":\"expired\"}".utf8))
@@ -525,6 +553,21 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertNil(CommunityTagCache(url: url, now: { current }).tags(for: .seraph, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
     }
 
+    func testUrchinKeyReplacementInvalidatesOnlyUrchinNormalizedTags() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("community-tag-cache.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = CommunityTagCache(url: url)
+        let uuid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        cache.store([StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "safe")], for: .seraph, uuid: uuid)
+        cache.store([StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: "safe")], for: .urchin, uuid: uuid)
+
+        cache.removeAll(for: .urchin)
+
+        XCTAssertEqual(cache.tags(for: .seraph, uuid: uuid), [StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "safe")])
+        XCTAssertNil(cache.tags(for: .urchin, uuid: uuid))
+    }
+
     func testCommunityTagCacheIgnoresMalformedOrUnsafeStoredData() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("community-tag-cache.json")
@@ -653,6 +696,31 @@ final class CompanionConfigurationTests: XCTestCase {
             StatsBridgeCommunityTag(source: "seraph", label: "Closet Cheating", tooltip: "cached Seraph"),
             StatsBridgeCommunityTag(source: "urchin", label: "Legit Sniper", tooltip: "cached Urchin")
         ])
+    }
+
+    func testProviderKeyReplacementDropsOnlyTheAffectedNormalizedCaches() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let uuid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        let hypixelCache = HypixelStatsCache(url: directory.appendingPathComponent("hypixel-stats-cache.json"))
+        let tagCache = CommunityTagCache(url: directory.appendingPathComponent("community-tag-cache.json"))
+        hypixelCache.store(StatsProviderLookup.HypixelStats(stars: 100, finalKillDeathRatio: 2, modeWinStreak: 3), for: uuid, gameMode: .fours)
+        tagCache.store([StatsProviderLookup.ProviderTag(label: "Closet Cheating", tooltip: "safe")], for: .seraph, uuid: uuid)
+        tagCache.store([StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: "safe")], for: .urchin, uuid: uuid)
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([:]),
+            hypixelCache: hypixelCache,
+            communityTagCache: tagCache
+        )
+
+        lookup.invalidateCachedResults(for: .hypixel)
+        XCTAssertNil(hypixelCache.stats(for: uuid, gameMode: .fours))
+        XCTAssertNotNil(tagCache.tags(for: .seraph, uuid: uuid))
+        XCTAssertNotNil(tagCache.tags(for: .urchin, uuid: uuid))
+
+        lookup.invalidateCachedResults(for: .urchin)
+        XCTAssertNotNil(tagCache.tags(for: .seraph, uuid: uuid))
+        XCTAssertNil(tagCache.tags(for: .urchin, uuid: uuid))
     }
 
     func testProviderLookupResolvesVisiblePregameChatterBeforeFetchingStats() {

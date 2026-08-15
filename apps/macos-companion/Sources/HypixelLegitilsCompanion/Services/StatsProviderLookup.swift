@@ -61,6 +61,21 @@ final class StatsProviderLookup {
         }
     }
 
+    /// Drops only normalized, provider-dependent process state after a successful Keychain save.
+    /// Credentials and raw responses remain confined to Keychain and the provider transport.
+    func invalidateCachedResults(for provider: StatsProvider) {
+        guard provider == .hypixel || provider == .urchin else { return }
+        queue.sync {
+            self.matchCache.removeAll()
+            self.cacheOrder.removeAll()
+            if provider == .hypixel {
+                self.hypixelCache.removeAll()
+            } else {
+                self.communityTagCache.removeAll(for: provider)
+            }
+        }
+    }
+
     /// Uses one fixed authenticated endpoint and returns only a safe status to the loopback bridge.
     func validateHypixelAPIKey(completion: @escaping (HypixelAPIKeyValidationStatus) -> Void) {
         queue.async { [weak self] in

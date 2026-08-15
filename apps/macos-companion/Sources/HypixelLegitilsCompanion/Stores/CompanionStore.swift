@@ -25,6 +25,7 @@ final class CompanionStore: ObservableObject {
     private let lunarBakeCacheInvalidator: LunarBakeCacheInvalidator
     private var bakeCacheRetryTimer: Timer?
     private var runtimeStatusRefreshTimer: Timer?
+    private var statsBridgeHealthTimer: Timer?
 
     init() {
         let keychainStore = KeychainStore()
@@ -39,11 +40,20 @@ final class CompanionStore: ObservableObject {
         )
         self.runtimeInstaller = RuntimeInstaller()
         self.lunarBakeCacheInvalidator = LunarBakeCacheInvalidator()
+        self.statsBridgeServer.observeAvailability { [weak self] available in
+            Task { @MainActor in
+                guard let self else { return }
+                self.statsBridgeStatus = available
+                    ? "Stats Bridge: 準備完了・MODリクエスト待機中"
+                    : "Stats Bridge: 接続を再確立中"
+            }
+        }
     }
 
     deinit {
         bakeCacheRetryTimer?.invalidate()
         runtimeStatusRefreshTimer?.invalidate()
+        statsBridgeHealthTimer?.invalidate()
     }
 
     /// Starts maintenance at launch. Subsequent retries happen only when a MOD update
@@ -51,6 +61,7 @@ final class CompanionStore: ObservableObject {
     func startAutomaticMaintenance() {
         refresh()
         startRuntimeStatusRefresh()
+        startStatsBridgeHealthRefresh()
     }
 
     private func refresh() {
@@ -82,6 +93,18 @@ final class CompanionStore: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         runtimeStatusRefreshTimer = timer
+    }
+
+    /// A stale descriptor must not strand the MOD after the loopback listener is interrupted.
+    private func startStatsBridgeHealthRefresh() {
+        guard statsBridgeHealthTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.ensureStatsBridge()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        statsBridgeHealthTimer = timer
     }
 
     private func refreshRuntimeStatus() {
@@ -207,6 +230,7 @@ final class CompanionStore: ObservableObject {
         }
         do {
             try keychainStore.save(secret: key, account: provider.keychainAccount)
+            statsProviderLookup.invalidateCachedResults(for: provider)
             do {
                 try providerKeyChangeEventStore.recordSavedKey(for: provider)
             } catch {
@@ -242,6 +266,10 @@ final class CompanionStore: ObservableObject {
 
     private func syncStatsBridge() {
         statsBridgeStatus = "Stats Bridge: ローカル接続を準備中"
+        ensureStatsBridge()
+    }
+
+    private func ensureStatsBridge() {
         statsBridgeServer.start { [weak self] result in
             DispatchQueue.main.async {
                 switch result {

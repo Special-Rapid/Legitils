@@ -28,7 +28,7 @@ public final class StatsRosterReconciliation {
         StatsBridgeLookupResult current
     ) {
         if (nowMillis < 0L || nowMillis < nextScanAtMillis || visiblePlayers == null
-            || visiblePlayers.isEmpty() || current == null || current.status != StatsBridgeLookupResult.Status.READY) return null;
+            || visiblePlayers.isEmpty() || current == null || current.status == StatsBridgeLookupResult.Status.ALREADY_REQUESTED) return null;
         nextScanAtMillis = nowMillis + SCAN_INTERVAL_MILLIS;
         Set<String> resolved = resolvedNames(current);
         Map<String, StatsBridgeRosterMember> missing = new LinkedHashMap<String, StatsBridgeRosterMember>();
