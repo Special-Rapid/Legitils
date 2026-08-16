@@ -71,11 +71,15 @@ public abstract class MixinNetHandlerPlayClient {
     private void hypixelLegitils$observePregameNickChat(Minecraft minecraft, String message, String senderName) {
         if (senderName == null) return;
         NetHandlerPlayClient handler = minecraft == null ? null : minecraft.getNetHandler();
+        int matchedTabProfileVersion = -1;
         if (handler != null) {
             for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
                 GameProfile profile = info == null ? null : info.getGameProfile();
-                if (profile == null || profile.getId() == null || profile.getId().version() != 1) continue;
+                if (profile == null || profile.getId() == null) continue;
                 if (NickChatSignal.isMessageFrom(message, profile.getName())) {
+                    matchedTabProfileVersion = profile.getId().version();
+                    if (matchedTabProfileVersion != 1) continue;
+                    HypixelLegitilsBootstrap.traceStats("pregame Nick resolved source=tab uuidVersion=1");
                     HypixelLegitilsBootstrap.onPregameNickChat(profile.getId(), profile.getName());
                     return;
                 }
@@ -85,17 +89,23 @@ public abstract class MixinNetHandlerPlayClient {
         // visible in the pregame world. Check that already-visible entity before
         // falling back to the current-world Nick candidate cache.
         WorldClient world = minecraft == null ? null : minecraft.theWorld;
+        int matchedWorldProfileVersion = -1;
         if (world != null) for (Object rawPlayer : world.playerEntities) {
             if (!(rawPlayer instanceof EntityPlayer)) continue;
             EntityPlayer player = (EntityPlayer) rawPlayer;
             java.util.UUID playerId = player instanceof PlayerIdentityAccess
                 ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId() : null;
-            if (playerId == null || playerId.version() != 1) continue;
+            if (playerId == null) continue;
             if (NickChatSignal.isMessageFrom(message, player.getName())) {
+                matchedWorldProfileVersion = playerId.version();
+                if (matchedWorldProfileVersion != 1) continue;
+                HypixelLegitilsBootstrap.traceStats("pregame Nick resolved source=world uuidVersion=1");
                 HypixelLegitilsBootstrap.onPregameNickChat(playerId, player.getName());
                 return;
             }
         }
+        HypixelLegitilsBootstrap.traceStats("pregame Nick unresolved tabUuidVersion=" + matchedTabProfileVersion
+            + " worldUuidVersion=" + matchedWorldProfileVersion);
         HypixelLegitilsBootstrap.onPregameNickChat(senderName);
     }
 
