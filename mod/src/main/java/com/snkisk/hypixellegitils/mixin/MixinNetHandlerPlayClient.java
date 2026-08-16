@@ -52,8 +52,8 @@ public abstract class MixinNetHandlerPlayClient {
             HypixelLegitilsBootstrap.onBedwarsGameStart(System.currentTimeMillis());
         }
         if (bedwarsPreGame && packet != null && packet.getType() != 2) {
-            hypixelLegitils$observePregameNickChat(minecraft, message);
             String senderName = PregameChatSender.visibleName(message);
+            hypixelLegitils$observePregameNickChat(minecraft, message, senderName);
             HypixelLegitilsBootstrap.traceStats("server chat pregame=" + bedwarsPreGame + " type=" + packet.getType()
                 + " mode=" + gameMode + " visibleSender=" + (senderName != null));
             if (senderName != null) {
@@ -68,17 +68,20 @@ public abstract class MixinNetHandlerPlayClient {
         }
     }
 
-    private void hypixelLegitils$observePregameNickChat(Minecraft minecraft, String message) {
+    private void hypixelLegitils$observePregameNickChat(Minecraft minecraft, String message, String senderName) {
+        if (senderName == null) return;
         NetHandlerPlayClient handler = minecraft == null ? null : minecraft.getNetHandler();
-        if (handler == null) return;
-        for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
-            GameProfile profile = info == null ? null : info.getGameProfile();
-            if (profile == null || profile.getId() == null || profile.getId().version() != 1) continue;
-            if (NickChatSignal.isMessageFrom(message, profile.getName())) {
-                HypixelLegitilsBootstrap.onPregameNickChat(profile.getId(), profile.getName());
-                return;
+        if (handler != null) {
+            for (NetworkPlayerInfo info : handler.getPlayerInfoMap()) {
+                GameProfile profile = info == null ? null : info.getGameProfile();
+                if (profile == null || profile.getId() == null || profile.getId().version() != 1) continue;
+                if (NickChatSignal.isMessageFrom(message, profile.getName())) {
+                    HypixelLegitilsBootstrap.onPregameNickChat(profile.getId(), profile.getName());
+                    return;
+                }
             }
         }
+        HypixelLegitilsBootstrap.onPregameNickChat(senderName);
     }
 
     @Inject(

@@ -56,6 +56,19 @@ public final class HypixelLegitilsBootstrapTest {
     }
 
     @Test
+    public void pregameNickCandidateCanBeClaimedByChatWhenTabProfileIsTemporarilyMissing() {
+        java.util.Set<String> candidates = new java.util.HashSet<String>();
+        candidates.add("pregamenick");
+        assertTrue(HypixelLegitilsBootstrap.claimPregameNickCandidate(candidates, "PregameNick"));
+        assertTrue(candidates.isEmpty());
+    }
+
+    @Test
+    public void sessionNickAliasPreventsASecondAlertWhenTheUuidProfileArrivesLater() {
+        assertTrue(HypixelLegitilsBootstrap.hasSessionNickAlias(Collections.singleton("pregamenick"), "PregameNick"));
+    }
+
+    @Test
     public void chatColumnsFindOneExactlyReachablePixelEndForVariableGlyphWidths() {
         assertEquals(38, HypixelLegitilsBootstrap.alignedChatColumnEnd(33, java.util.Arrays.asList(33, 30), 4, 5));
         assertEquals("§r§l §r", HypixelLegitilsBootstrap.chatPixelPadding(5, 4, 5));
