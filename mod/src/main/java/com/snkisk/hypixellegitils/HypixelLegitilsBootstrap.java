@@ -101,9 +101,6 @@ public final class HypixelLegitilsBootstrap {
     /** Current displayed Nick aliases only; never persisted or resolved to a real identity. */
     private static final Set<String> NICKED_SESSION_PLAYER_NAMES
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
-    /** Pregame UUID-v1 aliases observed in the current world, held only until their visible chat line arrives. */
-    private static final Set<String> PREGAME_NICK_CANDIDATE_NAMES
-        = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Set<String> PREGAME_STATS_CHATTERS
         = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final int MAXIMUM_PREGAME_STATS_LOOKUP_ATTEMPTS = 2;
@@ -388,55 +385,26 @@ public final class HypixelLegitilsBootstrap {
             return;
         }
         if (!nickDetectionEnabled) return;
-        // During pre-game, retain only the currently visible Nick alias. The
-        // chat packet later proves that alias actually spoke and triggers the
-        // immediate user-facing alert.
-        if (bedwarsPreGame) {
-            if (STARTED.get() && serverPresentedName != null && !serverPresentedName.trim().isEmpty()) {
-                PREGAME_NICK_CANDIDATE_NAMES.add(serverPresentedName.toLowerCase(Locale.ROOT));
-            }
-            return;
-        }
+        // Pregame Tab/world state is not a reliable roster source. The visible
+        // chat name is classified only through the local Companion instead.
+        if (bedwarsPreGame) return;
         if (!markNickedSession(playerId, serverPresentedName)) return;
         if (NICK_OBSERVATION_LOGGED.compareAndSet(false, true)) {
             System.out.println("[HypixelLegitils] Nick session marker observed for " + serverPresentedName + ".");
         }
     }
 
-    /** A pre-game Nick who chats is useful immediately; team colour is unavailable until the game starts. */
-    public static void onPregameNickChat(UUID playerId, String serverPresentedName) {
-        if (!STARTED.get() || !nickDetectionEnabled || playerId == null || playerId.version() != 1
-            || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
-        String key = serverPresentedName.toLowerCase(Locale.ROOT);
-        PREGAME_NICK_CANDIDATE_NAMES.remove(key);
-        // The visible chat can arrive while Lunar rebuilds NetworkPlayerInfo.
-        // If its candidate fallback already alerted, retain the UUID marker but
-        // never emit the same Nick alert again when the profile becomes visible.
-        if (hasSessionNickAlias(NICKED_SESSION_PLAYER_NAMES, serverPresentedName)) {
-            if (NICKED_SESSION_PLAYER_IDS.size() < 256) NICKED_SESSION_PLAYER_IDS.add(playerId);
-            return;
-        }
-        if (!markNickedSession(playerId, serverPresentedName)) return;
-        PENDING_NICK_NOTICES.add(pregameNickChatNotice(serverPresentedName));
-    }
-
-    /** Covers Lunar's short window where a visible Nick chat arrives before NetworkPlayerInfo is rebuilt. */
-    public static void onPregameNickChat(String serverPresentedName) {
-        if (!STARTED.get() || !nickDetectionEnabled || serverPresentedName == null || serverPresentedName.trim().isEmpty()) return;
-        String key = serverPresentedName.toLowerCase(Locale.ROOT);
-        if (!claimPregameNickCandidate(PREGAME_NICK_CANDIDATE_NAMES, serverPresentedName)) return;
-        NICKED_SESSION_PLAYER_NAMES.add(key);
-        PENDING_NICK_NOTICES.add(pregameNickChatNotice(serverPresentedName));
-    }
-
-    static boolean claimPregameNickCandidate(Set<String> candidates, String serverPresentedName) {
-        return candidates != null && serverPresentedName != null && !serverPresentedName.trim().isEmpty()
-            && candidates.remove(serverPresentedName.toLowerCase(Locale.ROOT));
-    }
-
     static boolean hasSessionNickAlias(Set<String> aliases, String serverPresentedName) {
         return aliases != null && serverPresentedName != null && !serverPresentedName.trim().isEmpty()
             && aliases.contains(serverPresentedName.toLowerCase(Locale.ROOT));
+    }
+
+    /** Claims an explicit Companion Nick result once, without mapping or retaining a real identity. */
+    static boolean claimPregameBridgeNick(Set<String> nickedNames, StatsBridgePlayerResult player) {
+        return nickedNames != null && player != null && player.name != null
+            && player.nickStatus == StatsBridgePlayerResult.NickStatus.NICKED
+            && !player.name.trim().isEmpty() && nickedNames.size() < 256
+            && nickedNames.add(player.name.toLowerCase(Locale.ROOT));
     }
 
     /** Pregame Nick chat is intentionally emitted immediately, so game start has no duplicate to release. */
@@ -447,7 +415,6 @@ public final class HypixelLegitilsBootstrap {
     /** Called only after a visible Bed Wars pre-game start message. */
     public static void onBedwarsGameStart(long nowMillis) {
         if (!STARTED.get()) return;
-        PREGAME_NICK_CANDIDATE_NAMES.clear();
         STATS_MATCH_REQUEST_GATE.onBedwarsGameStart(nowMillis);
         traceStats("roster awaits game-world transition from start countdown");
     }
@@ -713,6 +680,7 @@ public final class HypixelLegitilsBootstrap {
         synchronized (STATS_BRIDGE_RESULT_LOCK) {
             if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration) || !statsSettings.enabled) return;
             if (result.status == StatsBridgeLookupResult.Status.READY) {
+                capturePregameBridgeNickNotices(result);
                 latestStatsBridgeResult = mergePregameStatsResult(latestStatsBridgeResult, result);
             }
             traceStats("pregame chat result published");
@@ -723,6 +691,16 @@ public final class HypixelLegitilsBootstrap {
                     PENDING_STATS_NOTICES.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
                 }
             }
+        }
+    }
+
+    /** A pregame chat name is classified only by the Companion's normalized provider result. */
+    private static void capturePregameBridgeNickNotices(StatsBridgeLookupResult result) {
+        if (!nickDetectionEnabled || result == null || result.status != StatsBridgeLookupResult.Status.READY) return;
+        for (StatsBridgePlayerResult player : result.players) {
+            if (player == null || player.name == null) continue;
+            if (!claimPregameBridgeNick(NICKED_SESSION_PLAYER_NAMES, player)) continue;
+            PENDING_NICK_NOTICES.add(pregameNickChatNotice(player.name));
         }
     }
 
@@ -1526,7 +1504,6 @@ public final class HypixelLegitilsBootstrap {
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
             NICKED_SESSION_PLAYER_NAMES.clear();
-            PREGAME_NICK_CANDIDATE_NAMES.clear();
             }
             return new String[] {
                 ChatFormat.line("§fNick detect " + (nickDetectionEnabled ? "§aenabled" : "§cdisabled")
@@ -2057,7 +2034,6 @@ public final class HypixelLegitilsBootstrap {
             if (!postStartRosterScheduled) {
                 NICKED_SESSION_PLAYER_IDS.clear();
                 NICKED_SESSION_PLAYER_NAMES.clear();
-                PREGAME_NICK_CANDIDATE_NAMES.clear();
                 PENDING_NICK_NOTICES.clear();
                 PENDING_TEAM_NICK_NOTICES.clear();
             }

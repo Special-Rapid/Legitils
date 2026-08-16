@@ -786,6 +786,87 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(result?.players.first?.stars, 100)
     }
 
+    func testPregameChatterWithARealMojangProfileButNoHypixelProfileIsNicked() {
+        let transport = PregameNickTransport(mojangStatusCode: 200)
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            transport: transport,
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+            communityTagCache: temporaryCommunityTagCache()
+        )
+        let response = expectation(description: "pregame Nick response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "pregame_NickAlias",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "NickAlias", uuid: nil)]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(transport.requestCount, 2)
+        XCTAssertEqual(result?.players.first?.nickStatus, .nicked)
+        XCTAssertNil(result?.players.first?.stars)
+    }
+
+    func testPregameChatterMissingFromMojangIsNickedWithoutProviderLookups() {
+        let transport = PregameNickTransport(mojangStatusCode: 404)
+        let lookup = StatsProviderLookup(
+            keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+            transport: transport,
+            hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+            communityTagCache: temporaryCommunityTagCache()
+        )
+        let response = expectation(description: "missing pregame Nick response")
+        var result: StatsBridgeRosterResponse?
+
+        lookup.lookup(StatsBridgeRosterRequest(
+            schemaVersion: 2,
+            matchID: "pregame_MissingAlias",
+            gameMode: .fours,
+            players: [StatsBridgeRosterMember(name: "MissingAlias", uuid: nil)]
+        )) {
+            result = $0
+            response.fulfill()
+        }
+        wait(for: [response], timeout: 2)
+
+        XCTAssertEqual(transport.requestCount, 1)
+        XCTAssertEqual(result?.players.first?.nickStatus, .nicked)
+    }
+
+    func testPregameHypixelFailuresNeverClassifyAResolvedNameAsNicked() {
+        for failure in PregameHypixelFailure.allCases {
+            let transport = PregameHypixelFailureTransport(failure: failure)
+            let lookup = StatsProviderLookup(
+                keychainStore: FakeStatsKeyStore([StatsProvider.hypixel.keychainAccount: "hypixel-secret"]),
+                transport: transport,
+                hypixelCache: HypixelStatsCache(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
+                communityTagCache: temporaryCommunityTagCache()
+            )
+            let response = expectation(description: "pregame non-Nick \(failure)")
+            var result: StatsBridgeRosterResponse?
+
+            lookup.lookup(StatsBridgeRosterRequest(
+                schemaVersion: 2,
+                matchID: "pregame_\(failure)",
+                gameMode: .fours,
+                players: [StatsBridgeRosterMember(name: "KnownAlias", uuid: nil)]
+            )) {
+                result = $0
+                response.fulfill()
+            }
+            wait(for: [response], timeout: 2)
+
+            XCTAssertEqual(transport.requestCount, 2)
+            XCTAssertNotEqual(result?.players.first?.nickStatus, .nicked)
+        }
+    }
+
     func testManualStatsLookupForcesAProviderRequestAndReturnsOnlySafeDiagnostics() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -997,6 +1078,93 @@ private final class FakeStatsTransport: StatsHTTPTransport {
         completion(.success((body, HTTPURLResponse(
             url: request.url!,
             statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!)))
+    }
+}
+
+private final class PregameNickTransport: StatsHTTPTransport {
+    private let mojangStatusCode: Int
+    private(set) var requestCount = 0
+
+    init(mojangStatusCode: Int) {
+        self.mojangStatusCode = mojangStatusCode
+    }
+
+    func load(_ request: URLRequest, completion: @escaping (Result<(Data, HTTPURLResponse), Error>) -> Void) {
+        requestCount += 1
+        let statusCode: Int
+        let body: Data
+        switch request.url?.host {
+        case "api.mojang.com":
+            statusCode = mojangStatusCode
+            body = Data("{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"NickAlias\"}".utf8)
+        case "api.hypixel.net":
+            statusCode = 200
+            body = Data("{\"success\":true,\"player\":null}".utf8)
+        default:
+            statusCode = 500
+            body = Data()
+        }
+        completion(.success((body, HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!)))
+    }
+}
+
+private enum PregameHypixelFailure: CaseIterable {
+    case transport
+    case authorization
+    case rateLimited
+    case malformed
+}
+
+private final class PregameHypixelFailureTransport: StatsHTTPTransport {
+    let failure: PregameHypixelFailure
+    private(set) var requestCount = 0
+
+    init(failure: PregameHypixelFailure) {
+        self.failure = failure
+    }
+
+    func load(_ request: URLRequest, completion: @escaping (Result<(Data, HTTPURLResponse), Error>) -> Void) {
+        requestCount += 1
+        if request.url?.host == "api.hypixel.net", failure == .transport {
+            completion(.failure(URLError(.notConnectedToInternet)))
+            return
+        }
+        let statusCode: Int
+        let body: Data
+        switch request.url?.host {
+        case "api.mojang.com":
+            statusCode = 200
+            body = Data("{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"KnownAlias\"}".utf8)
+        case "api.hypixel.net":
+            switch failure {
+            case .authorization:
+                statusCode = 403
+                body = Data("{\"success\":false}".utf8)
+            case .rateLimited:
+                statusCode = 429
+                body = Data("{\"success\":false}".utf8)
+            case .malformed:
+                statusCode = 200
+                body = Data("not-json".utf8)
+            case .transport:
+                statusCode = 500
+                body = Data()
+            }
+        default:
+            statusCode = 500
+            body = Data()
+        }
+        completion(.success((body, HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: nil
         )!)))

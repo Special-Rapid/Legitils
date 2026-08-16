@@ -56,16 +56,22 @@ public final class HypixelLegitilsBootstrapTest {
     }
 
     @Test
-    public void pregameNickCandidateCanBeClaimedByChatWhenTabProfileIsTemporarilyMissing() {
-        java.util.Set<String> candidates = new java.util.HashSet<String>();
-        candidates.add("pregamenick");
-        assertTrue(HypixelLegitilsBootstrap.claimPregameNickCandidate(candidates, "PregameNick"));
-        assertTrue(candidates.isEmpty());
+    public void sessionNickAliasPreventsASecondAlertWhenTheUuidProfileArrivesLater() {
+        assertTrue(HypixelLegitilsBootstrap.hasSessionNickAlias(Collections.singleton("pregamenick"), "PregameNick"));
     }
 
     @Test
-    public void sessionNickAliasPreventsASecondAlertWhenTheUuidProfileArrivesLater() {
-        assertTrue(HypixelLegitilsBootstrap.hasSessionNickAlias(Collections.singleton("pregamenick"), "PregameNick"));
+    public void companionPregameNickResultClaimsOnlyTheVisibleAliasOnce() {
+        com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult nicked =
+            new com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult(
+                "PregameNick", com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult.NickStatus.NICKED,
+                null, null, null, Collections.<com.snkisk.hypixellegitils.stats.StatsBridgePlayerResult.CommunityTag>emptyList()
+            );
+        java.util.Set<String> aliases = new java.util.HashSet<String>();
+
+        assertTrue(HypixelLegitilsBootstrap.claimPregameBridgeNick(aliases, nicked));
+        assertTrue(HypixelLegitilsBootstrap.hasSessionNickAlias(aliases, "pregamenick"));
+        assertTrue(!HypixelLegitilsBootstrap.claimPregameBridgeNick(aliases, nicked));
     }
 
     @Test

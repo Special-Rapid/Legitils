@@ -106,8 +106,10 @@ final class StatsProviderLookup {
     private func fetch(_ roster: StatsBridgeRosterRequest, completion: @escaping (StatsBridgeRosterResponse) -> Void) {
         let manualLookup = roster.matchID.hasPrefix("manual_")
         // `/who` is the user's explicit recovery path after rotating a Hypixel key.
+        // A pregame chat name has no trustworthy client UUID, so it must be
+        // checked against Hypixel even when an older normalized cache exists.
         // Keep community advisory tags cache-first so a transient provider reply cannot clear them.
-        let forceHypixelRefresh = manualLookup || roster.matchID.hasPrefix("who_")
+        let forceHypixelRefresh = manualLookup || roster.matchID.hasPrefix("who_") || roster.matchID.hasPrefix("pregame_")
         let forceCommunityTagRefresh = manualLookup
         let records = Dictionary(uniqueKeysWithValues: roster.players.map { player in
             (player.name.lowercased(), MutablePlayer(name: player.name, uuid: player.uuid))
@@ -123,8 +125,15 @@ final class StatsProviderLookup {
             transport.load(Self.mojangProfileRequest(name: player.name)) { result in
                 self.queue.async {
                     defer { resolveGroup.leave() }
-                    guard case let .success((data, response)) = result, response.statusCode == 200,
-                          let uuid = Self.parseMojangProfileUUID(data) else {
+                    guard case let .success((data, response)) = result else {
+                        if manualLookup { diagnostics.append(Self.diagnostic("Mojang", result)) }
+                        return
+                    }
+                    if response.statusCode == 404 {
+                        records[player.name.lowercased()]?.markNicked()
+                        return
+                    }
+                    guard response.statusCode == 200, let uuid = Self.parseMojangProfileUUID(data) else {
                         if manualLookup { diagnostics.append(Self.diagnostic("Mojang", result)) }
                         return
                     }
@@ -149,8 +158,8 @@ final class StatsProviderLookup {
         }
     }
 
-    /// A visible pregame chatter can be queried only when their current chat name resolves to a real profile.
-    /// A failed lookup is deliberately treated as unavailable, not as a recovered Nick identity.
+    /// Resolves a visible chat name before provider tags are queried. Explicit Mojang/Hypixel no-profile
+    /// responses are Nick evidence; transport, authorization, and malformed-response failures are not.
     private func fetchProviderData(
         _ roster: StatsBridgeRosterRequest,
         records: [String: MutablePlayer],
@@ -167,8 +176,7 @@ final class StatsProviderLookup {
             return
         }
 
-        let group = DispatchGroup()
-        let deadline = DispatchTime.now() + Self.responseTimeout
+        let hypixelGroup = DispatchGroup()
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.hypixel.keychainAccount), !key.isEmpty {
             for player in known {
@@ -176,24 +184,65 @@ final class StatsProviderLookup {
                     records[player.name.lowercased()]?.apply(cached)
                     continue
                 }
-                group.enter()
+                hypixelGroup.enter()
                 transport.load(Self.hypixelRequest(uuid: player.uuid!, apiKey: key)) { result in
                     self.queue.async {
-                        defer { group.leave() }
-                        guard case let .success((data, response)) = result, response.statusCode == 200,
-                              let stats = Self.parseHypixelStats(data, gameMode: roster.gameMode) else {
+                        defer { hypixelGroup.leave() }
+                        guard case let .success((data, response)) = result, response.statusCode == 200 else {
                             if manualLookup { diagnostics.append(Self.diagnostic("Hypixel", result)) }
                             return
                         }
-                        records[player.name.lowercased()]?.apply(stats)
-                        if manualLookup { diagnostics.append(Self.providerStatus("Hypixel")) }
-                        self.hypixelCache.store(stats, for: player.uuid!, gameMode: roster.gameMode)
+                        switch Self.hypixelProfileStatus(data, gameMode: roster.gameMode) {
+                        case let .known(stats):
+                            records[player.name.lowercased()]?.apply(stats)
+                            if manualLookup { diagnostics.append(Self.providerStatus("Hypixel")) }
+                            self.hypixelCache.store(stats, for: player.uuid!, gameMode: roster.gameMode)
+                        case .nicked:
+                            records[player.name.lowercased()]?.markNicked()
+                        case .unavailable:
+                            if manualLookup { diagnostics.append(Self.diagnostic("Hypixel", result)) }
+                        }
                     }
                 }
             }
         } else if manualLookup {
             diagnostics.append(Self.diagnostic("Hypixel", nil))
         }
+
+        hypixelGroup.notify(queue: queue) {
+            let profilesEligibleForTags = known.filter {
+                records[$0.name.lowercased()]?.isNicked != true
+            }
+            self.fetchCommunityTagData(
+                roster,
+                records: records,
+                known: profilesEligibleForTags,
+                manualLookup: manualLookup,
+                forceCommunityTagRefresh: forceCommunityTagRefresh,
+                diagnostics: diagnostics,
+                completion: completion
+            )
+        }
+    }
+
+    /// Community APIs run only after Hypixel has ruled out an explicit no-profile Nick response.
+    private func fetchCommunityTagData(
+        _ roster: StatsBridgeRosterRequest,
+        records: [String: MutablePlayer],
+        known: [StatsBridgeRosterMember],
+        manualLookup: Bool,
+        forceCommunityTagRefresh: Bool,
+        diagnostics initialDiagnostics: [StatsBridgeCommunityTag],
+        completion: @escaping (StatsBridgeRosterResponse) -> Void
+    ) {
+        var diagnostics = initialDiagnostics
+        guard !known.isEmpty else {
+            finish(matchID: roster.matchID, records: records, diagnostics: diagnostics, completion: completion)
+            return
+        }
+
+        let group = DispatchGroup()
+        let deadline = DispatchTime.now() + Self.responseTimeout
 
         if let key = try? keychainStore.readSecret(account: StatsProvider.urchin.keychainAccount), !key.isEmpty {
             let uncached = known.filter { player in
@@ -311,6 +360,12 @@ extension StatsProviderLookup {
         let modeWinStreak: Int?
     }
 
+    enum HypixelProfileStatus {
+        case known(HypixelStats)
+        case nicked
+        case unavailable
+    }
+
     struct ProviderTag: Codable, Equatable {
         let label: String
         let tooltip: String?
@@ -319,6 +374,7 @@ extension StatsProviderLookup {
     final class MutablePlayer {
         let name: String
         private var resolvedUUID: String?
+        private var nicked = false
         var stars: Int?
         var finalKillDeathRatio: Double?
         var modeWinStreak: Int?
@@ -331,6 +387,19 @@ extension StatsProviderLookup {
 
         func resolve(uuid: String) {
             resolvedUUID = uuid
+        }
+
+        func markNicked() {
+            resolvedUUID = nil
+            nicked = true
+            stars = nil
+            finalKillDeathRatio = nil
+            modeWinStreak = nil
+            communityTags.removeAll()
+        }
+
+        var isNicked: Bool {
+            nicked
         }
 
         func apply(_ stats: HypixelStats) {
@@ -350,8 +419,7 @@ extension StatsProviderLookup {
                 .prefix(8)
             return StatsBridgePlayerResult(
                 name: name,
-                // A failed name lookup is not proof of a Nick and never produces an identity mapping.
-                nickStatus: resolvedUUID == nil ? .unavailable : .known,
+                nickStatus: nicked ? .nicked : (resolvedUUID == nil ? .unavailable : .known),
                 stars: stars,
                 finalKillDeathRatio: finalKillDeathRatio,
                 modeWinStreak: modeWinStreak,
@@ -413,6 +481,21 @@ extension StatsProviderLookup {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               root["success"] as? Bool == true,
               let player = root["player"] as? [String: Any] else { return nil }
+        return parseHypixelStats(player, gameMode: gameMode)
+    }
+
+    /// A successful `player: null` response is the only Hypixel-side Nick signal.
+    /// Missing/invalid envelopes remain unavailable so a transport or API issue cannot flag a player.
+    static func hypixelProfileStatus(_ data: Data, gameMode: StatsBridgeGameMode?) -> HypixelProfileStatus {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              root["success"] as? Bool == true else { return .unavailable }
+        if root["player"] is NSNull { return .nicked }
+        guard let player = root["player"] as? [String: Any],
+              let stats = parseHypixelStats(player, gameMode: gameMode) else { return .unavailable }
+        return .known(stats)
+    }
+
+    private static func parseHypixelStats(_ player: [String: Any], gameMode: StatsBridgeGameMode?) -> HypixelStats? {
         let achievements = player["achievements"] as? [String: Any]
         let bedwars = ((player["stats"] as? [String: Any])?["Bedwars"]) as? [String: Any]
         let stars = integer(achievements?["bedwars_level"])
