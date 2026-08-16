@@ -81,6 +81,21 @@ public abstract class MixinNetHandlerPlayClient {
                 }
             }
         }
+        // Lunar can rebuild its Tab entries a little after the player entity is
+        // visible in the pregame world. Check that already-visible entity before
+        // falling back to the current-world Nick candidate cache.
+        WorldClient world = minecraft == null ? null : minecraft.theWorld;
+        if (world != null) for (Object rawPlayer : world.playerEntities) {
+            if (!(rawPlayer instanceof EntityPlayer)) continue;
+            EntityPlayer player = (EntityPlayer) rawPlayer;
+            java.util.UUID playerId = player instanceof PlayerIdentityAccess
+                ? ((PlayerIdentityAccess) player).hypixelLegitils$getProfileId() : null;
+            if (playerId == null || playerId.version() != 1) continue;
+            if (NickChatSignal.isMessageFrom(message, player.getName())) {
+                HypixelLegitilsBootstrap.onPregameNickChat(playerId, player.getName());
+                return;
+            }
+        }
         HypixelLegitilsBootstrap.onPregameNickChat(senderName);
     }
 
