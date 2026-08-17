@@ -27,7 +27,9 @@ if [[ ! -x "$JAVA_8_HOME/bin/java" || ! -f "$JAVA_8_HOME/lib/tools.jar" ]]; then
   echo "A full Java 8 JDK is required. Set LEGITILS_JAVA_8_HOME to a JDK 8 home containing lib/tools.jar." >&2
   exit 1
 fi
-JAVA_HOME="$JAVA_8_HOME" "$PROJECT_ROOT/gradlew" -p "$PROJECT_ROOT" --no-daemon :prepareCompanionArtifacts
+# Build metadata embeds the current Git revision, so packaging must not reuse an
+# up-to-date JAR produced before the current commit.
+JAVA_HOME="$JAVA_8_HOME" "$PROJECT_ROOT/gradlew" -p "$PROJECT_ROOT" --no-daemon --rerun-tasks :prepareCompanionArtifacts
 
 EXPECTED_REVISION="$(git -C "$PROJECT_ROOT" describe --always --dirty --abbrev=7)"
 ACTUAL_REVISION="$(unzip -p "$MOD_JAR" hypixellegitils-build.properties | sed -n 's/^revision=//p')"
