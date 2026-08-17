@@ -260,7 +260,10 @@ final class StatsProviderLookup {
                             if manualLookup { diagnostics.append(Self.diagnostic("Urchin", result)) }
                             return
                         }
-                        let tagsByUUID = Self.parseUrchinTags(data)
+                        guard let tagsByUUID = Self.parseUrchinTagsIfValid(data) else {
+                            if manualLookup { diagnostics.append(Self.diagnostic("Urchin", nil)) }
+                            return
+                        }
                         for member in uncached {
                             guard let uuid = member.uuid else { continue }
                             let labels = tagsByUUID[uuid.lowercased()] ?? []
@@ -292,7 +295,10 @@ final class StatsProviderLookup {
                             if manualLookup { diagnostics.append(Self.diagnostic("Seraph", result)) }
                             return
                         }
-                        let labels = Self.parseSeraphTags(data)
+                        guard let labels = Self.parseSeraphTagsIfValid(data) else {
+                            if manualLookup { diagnostics.append(Self.diagnostic("Seraph", nil)) }
+                            return
+                        }
                         self.communityTagCache.store(labels, for: .seraph, uuid: player.uuid!)
                         self.apply(labels, from: .seraph, to: player, records: records)
                         if manualLookup {
@@ -543,8 +549,13 @@ extension StatsProviderLookup {
     }
 
     static func parseUrchinTags(_ data: Data) -> [String: [ProviderTag]] {
+        parseUrchinTagsIfValid(data) ?? [:]
+    }
+
+    /// A successful HTTP status alone is not a cacheable provider result. Unknown envelopes stay uncached.
+    static func parseUrchinTagsIfValid(_ data: Data) -> [String: [ProviderTag]]? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let players = root["players"] else { return [:] }
+              let players = root["players"], players is [String: Any] || players is [Any] else { return nil }
 
         let entries = playersToEntries(players)
         var tagsByUUID: [String: [ProviderTag]] = [:]
@@ -632,13 +643,20 @@ extension StatsProviderLookup {
     /// Converts only known Seraph tag identifiers to display labels. Reasons, reporter attribution,
     /// timestamps, and every other raw provider field are deliberately discarded at this boundary.
     static func parseSeraphTags(_ data: Data) -> [ProviderTag] {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        parseSeraphTagsIfValid(data) ?? []
+    }
+
+    /// Accept only recognized player-record envelopes before treating an empty tag list as cacheable.
+    static func parseSeraphTagsIfValid(_ data: Data) -> [ProviderTag]? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         // The public Developer API wraps the normalized player record in `payload`.
         // Retain the older shapes as defensive compatibility for an in-flight response.
         let record = (root["payload"] as? [String: Any])
             ?? (root["player"] as? [String: Any])
             ?? (root["data"] as? [String: Any])
             ?? root
+        let supportedRecordKeys: Set<String> = ["blacklist", "verified", "tags", "annoylist", "bot"]
+        guard !supportedRecordKeys.isDisjoint(with: Set(record.keys)) else { return nil }
         var tags: [ProviderTag] = []
 
         if let blacklist = record["blacklist"] as? [String: Any] {
@@ -713,7 +731,16 @@ extension StatsProviderLookup {
             .replacingOccurrences(of: "\r", with: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
-        return String(normalized.prefix(384))
+        var bounded = ""
+        var utf16Count = 0
+        for character in normalized {
+            let component = String(character)
+            let nextCount = component.utf16.count
+            guard utf16Count + nextCount <= 384 else { break }
+            bounded.append(character)
+            utf16Count += nextCount
+        }
+        return bounded
     }
 
     /**

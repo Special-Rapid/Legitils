@@ -84,7 +84,7 @@ final class CommunityTagCache {
         guard tag.label.count <= 64,
               StatsProviderLookup.isCanonicalTagLabel(tag.label, source: provider) else { return false }
         guard let tooltip = tag.tooltip else { return true }
-        return tooltip.count <= 384
+        return tooltip.utf16.count <= 384
             && tooltip.unicodeScalars.allSatisfy { $0 == "\n" || ($0.value >= 0x20 && $0.value != 0x00A7 && $0.value != 0x007F) }
     }
 

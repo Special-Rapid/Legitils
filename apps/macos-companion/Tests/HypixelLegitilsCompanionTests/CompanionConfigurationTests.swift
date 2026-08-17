@@ -350,6 +350,29 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(StatsProviderLookup.parseSeraphTags(Data("{\"player\":{\"blacklist\":null}}".utf8)), [])
     }
 
+    func testUnknownSuccessfulProviderEnvelopesAreNotCacheableNoTagResults() {
+        XCTAssertNil(StatsProviderLookup.parseUrchinTagsIfValid(Data("{\"players\":42}".utf8)))
+        XCTAssertNil(StatsProviderLookup.parseUrchinTagsIfValid(Data("{\"unexpected\":[]}".utf8)))
+        XCTAssertNil(StatsProviderLookup.parseSeraphTagsIfValid(Data("{\"payload\":{\"unexpected\":true}}".utf8)))
+        XCTAssertNil(StatsProviderLookup.parseSeraphTagsIfValid(Data("{\"unexpected\":true}".utf8)))
+        XCTAssertEqual(StatsProviderLookup.parseUrchinTagsIfValid(Data("{\"players\":{}}".utf8)), [:])
+        XCTAssertEqual(StatsProviderLookup.parseSeraphTagsIfValid(Data("{\"data\":{\"blacklist\":null}}".utf8)), [])
+    }
+
+    func testProviderTooltipIsBoundedByUtf16CodeUnitsBeforeCrossingTheBridgeOrCache() {
+        let emoji = String(repeating: "😀", count: 193)
+        let urchin = Data("""
+        {"players":{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":[{"tag_type":"legitsniper","tooltip":"\(emoji)"}]}}
+        """.utf8)
+        let tag = StatsProviderLookup.parseUrchinTagsIfValid(urchin)?["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]?.first
+        XCTAssertEqual(tag?.tooltip, String(repeating: "😀", count: 192))
+        XCTAssertEqual(tag?.tooltip?.utf16.count, 384)
+
+        let cache = temporaryCommunityTagCache()
+        cache.store([StatsProviderLookup.ProviderTag(label: "Legit Sniper", tooltip: emoji)], for: .urchin, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        XCTAssertNil(cache.tags(for: .urchin, uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+    }
+
     func testProviderRequestsUseFixedHostsAndKeepSecretsOutOfPayloads() throws {
         let hypixel = StatsProviderLookup.hypixelRequest(uuid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", apiKey: "hypixel-secret")
         XCTAssertEqual(hypixel.url?.host, "api.hypixel.net")

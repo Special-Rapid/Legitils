@@ -315,6 +315,27 @@ public final class StatsBridgeClientTest {
         assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, unknownLabel.status);
     }
 
+    @Test
+    public void measuresTooltipBoundsInUtf16CodeUnitsLikeTheCompanion() throws Exception {
+        StringBuilder acceptedTooltip = new StringBuilder();
+        for (int index = 0; index < 192; index++) acceptedTooltip.append("\uD83D\uDE00");
+        assertEquals(384, acceptedTooltip.length());
+        StatsBridgeLookupResult accepted = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"urchin\",\"label\":\"Legit Sniper\",\"tooltip\":\""
+                + acceptedTooltip + "\"}]}]}"
+        );
+        assertEquals(StatsBridgeLookupResult.Status.READY, accepted.status);
+
+        StringBuilder rejectedTooltip = new StringBuilder(acceptedTooltip);
+        rejectedTooltip.append("\uD83D\uDE00");
+        assertEquals(386, rejectedTooltip.length());
+        StatsBridgeLookupResult rejected = request(
+            "{\"schemaVersion\":2,\"availability\":\"ready\",\"players\":[{\"name\":\"Player_1\",\"nickStatus\":\"known\",\"communityTags\":[{\"source\":\"urchin\",\"label\":\"Legit Sniper\",\"tooltip\":\""
+                + rejectedTooltip + "\"}]}]}"
+        );
+        assertEquals(StatsBridgeLookupResult.Status.UNAVAILABLE, rejected.status);
+    }
+
     private static List<StatsBridgeRosterMember> players() {
         List<StatsBridgeRosterMember> players = new ArrayList<StatsBridgeRosterMember>();
         players.add(new StatsBridgeRosterMember("Player_1", null));
