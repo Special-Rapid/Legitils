@@ -238,6 +238,7 @@ public final class HypixelLegitilsBootstrap {
         nickDetectionEnabled = reload.config.nickDetectionSettings.enabled;
         partyDetectionEnabled = reload.config.partyDetectionSettings.enabled;
         statsSettings = reload.config.statsSettings;
+        discardDisabledStatsChatOutput();
         developerSelfDetectionEnabled = reload.config.debugEnabled;
         if (!developerSelfDetectionEnabled) developmentBedNukeActorVisibilityMode = false;
         enqueueCompanionSettingsApplied(reload.config.revision);
@@ -245,6 +246,7 @@ public final class HypixelLegitilsBootstrap {
             NICKED_SESSION_PLAYER_IDS.clear();
             NICKED_SESSION_PLAYER_NAMES.clear();
             LUNAR_NICKED_LEVEL_HEAD_RENDERED_AT.clear();
+            discardPendingNickNotices();
         }
         if (!partyDetectionEnabled) resetPartyDetectors();
         try {
@@ -1118,6 +1120,10 @@ public final class HypixelLegitilsBootstrap {
     }
 
     public static PendingStatsNotice[] drainPendingStatsNotices() {
+        if (!shouldDisplayPendingStatsChat(statsSettings)) {
+            discardDisabledStatsChatOutput();
+            return new PendingStatsNotice[0];
+        }
         long nowMillis = System.currentTimeMillis();
         while (true) {
             PendingStatsPublication publication = PENDING_STATS_PUBLICATIONS.peek();
@@ -1141,6 +1147,16 @@ public final class HypixelLegitilsBootstrap {
         PendingStatsNotice notice;
         while ((notice = PENDING_STATS_NOTICES.poll()) != null) notices.add(notice);
         return notices.toArray(new PendingStatsNotice[notices.size()]);
+    }
+
+    static boolean shouldDisplayPendingStatsChat(StatsSettings settings) {
+        return settings != null && settings.enabled && settings.chatEnabled;
+    }
+
+    private static void discardDisabledStatsChatOutput() {
+        if (shouldDisplayPendingStatsChat(statsSettings)) return;
+        PENDING_STATS_PUBLICATIONS.clear();
+        PENDING_STATS_NOTICES.clear();
     }
 
     /** Emits settings changes that arrived from the Companion rather than a local Minecraft command. */
@@ -1278,6 +1294,7 @@ public final class HypixelLegitilsBootstrap {
             }
             DetectorSettingsService.Update update = detectorSettings.setStatsSettings(replacement);
             statsSettings = update.config.statsSettings;
+            discardDisabledStatsChatOutput();
             return new String[] {
                 ChatFormat.line("§fStats " + request.statsOption.displayName() + " "
                     + (request.enabled ? "§aenabled" : "§cdisabled")
@@ -1404,6 +1421,10 @@ public final class HypixelLegitilsBootstrap {
 
     /** Called on the client thread; each session Nick produces one local chat notification. */
     public static String[] drainPendingNickNotices() {
+        if (!shouldDisplayPendingNickNotices(nickDetectionEnabled)) {
+            discardPendingNickNotices();
+            return new String[0];
+        }
         List<String> notices = new ArrayList<String>();
         String notice;
         while ((notice = PENDING_NICK_NOTICES.poll()) != null) notices.add(notice);
@@ -1411,6 +1432,10 @@ public final class HypixelLegitilsBootstrap {
     }
 
     public static PendingTeamNickNotice[] drainPendingTeamNickNotices(long nowMillis) {
+        if (!shouldDisplayPendingNickNotices(nickDetectionEnabled)) {
+            discardPendingNickNotices();
+            return new PendingTeamNickNotice[0];
+        }
         List<PendingTeamNickNotice> notices = new ArrayList<PendingTeamNickNotice>();
         while (true) {
             PendingTeamNickNotice notice = PENDING_TEAM_NICK_NOTICES.peek();
@@ -1419,6 +1444,15 @@ public final class HypixelLegitilsBootstrap {
             if (notice != null) notices.add(notice);
         }
         return notices.toArray(new PendingTeamNickNotice[notices.size()]);
+    }
+
+    static boolean shouldDisplayPendingNickNotices(boolean enabled) {
+        return enabled;
+    }
+
+    private static void discardPendingNickNotices() {
+        PENDING_NICK_NOTICES.clear();
+        PENDING_TEAM_NICK_NOTICES.clear();
     }
 
     public static String pregameNickNotice(String serverPresentedName, String formattedDisplayName) {
@@ -1504,6 +1538,7 @@ public final class HypixelLegitilsBootstrap {
         if (!nickDetectionEnabled) {
             NICKED_SESSION_PLAYER_IDS.clear();
             NICKED_SESSION_PLAYER_NAMES.clear();
+            discardPendingNickNotices();
             }
             return new String[] {
                 ChatFormat.line("§fNick detect " + (nickDetectionEnabled ? "§aenabled" : "§cdisabled")

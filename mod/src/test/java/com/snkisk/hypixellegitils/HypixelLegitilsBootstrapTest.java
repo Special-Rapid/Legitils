@@ -1,7 +1,11 @@
 package com.snkisk.hypixellegitils;
 
 import com.snkisk.hypixellegitils.alert.ChatFormat;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.Queue;
+import java.util.UUID;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.LegitilsTestTextComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -72,6 +76,108 @@ public final class HypixelLegitilsBootstrapTest {
         assertTrue(HypixelLegitilsBootstrap.claimPregameBridgeNick(aliases, nicked));
         assertTrue(HypixelLegitilsBootstrap.hasSessionNickAlias(aliases, "pregamenick"));
         assertTrue(!HypixelLegitilsBootstrap.claimPregameBridgeNick(aliases, nicked));
+    }
+
+    @Test
+    public void pendingStatsAndNickChatAreDisplayedOnlyWhileTheirFeaturesRemainEnabled() {
+        com.snkisk.hypixellegitils.config.StatsSettings defaults =
+            com.snkisk.hypixellegitils.config.StatsSettings.defaults();
+        assertTrue(HypixelLegitilsBootstrap.shouldDisplayPendingStatsChat(defaults));
+        assertTrue(!HypixelLegitilsBootstrap.shouldDisplayPendingStatsChat(
+            new com.snkisk.hypixellegitils.config.StatsSettings(false, true, true, true, true, true)
+        ));
+        assertTrue(!HypixelLegitilsBootstrap.shouldDisplayPendingStatsChat(
+            new com.snkisk.hypixellegitils.config.StatsSettings(true, true, true, true, true, false)
+        ));
+        assertTrue(HypixelLegitilsBootstrap.shouldDisplayPendingNickNotices(true));
+        assertTrue(!HypixelLegitilsBootstrap.shouldDisplayPendingNickNotices(false));
+    }
+
+    @Test
+    public void disablingFeaturesDropsAlreadyQueuedAutomaticAndPregameChatOutput() throws Exception {
+        com.snkisk.hypixellegitils.config.StatsSettings originalStatsSettings =
+            (com.snkisk.hypixellegitils.config.StatsSettings) staticField("statsSettings").get(null);
+        boolean originalNickDetectionEnabled = staticField("nickDetectionEnabled").getBoolean(null);
+        Queue<Object> statsNotices = queue("PENDING_STATS_NOTICES");
+        Queue<Object> statsPublications = queue("PENDING_STATS_PUBLICATIONS");
+        Queue<Object> nickNotices = queue("PENDING_NICK_NOTICES");
+        Queue<Object> teamNickNotices = queue("PENDING_TEAM_NICK_NOTICES");
+        try {
+            statsNotices.add(newPendingStatsNotice("pregame Stats"));
+            statsNotices.add(newPendingStatsNotice("automatic Stats"));
+            statsPublications.add(newPendingStatsPublication());
+            staticField("statsSettings").set(null,
+                new com.snkisk.hypixellegitils.config.StatsSettings(false, true, true, true, true, true));
+
+            assertEquals(0, HypixelLegitilsBootstrap.drainPendingStatsNotices().length);
+            assertTrue(statsNotices.isEmpty());
+            assertTrue(statsPublications.isEmpty());
+
+            statsNotices.add(newPendingStatsNotice("chat disabled Stats"));
+            staticField("statsSettings").set(null,
+                new com.snkisk.hypixellegitils.config.StatsSettings(true, true, true, true, true, false));
+
+            assertEquals(0, HypixelLegitilsBootstrap.drainPendingStatsNotices().length);
+            assertTrue(statsNotices.isEmpty());
+
+            nickNotices.add("pregame Nick");
+            teamNickNotices.add(newPendingTeamNickNotice());
+            staticField("nickDetectionEnabled").setBoolean(null, false);
+
+            assertEquals(0, HypixelLegitilsBootstrap.drainPendingNickNotices().length);
+            assertEquals(0, HypixelLegitilsBootstrap.drainPendingTeamNickNotices(System.currentTimeMillis()).length);
+            assertTrue(nickNotices.isEmpty());
+            assertTrue(teamNickNotices.isEmpty());
+        } finally {
+            statsNotices.clear();
+            statsPublications.clear();
+            nickNotices.clear();
+            teamNickNotices.clear();
+            staticField("statsSettings").set(null, originalStatsSettings);
+            staticField("nickDetectionEnabled").setBoolean(null, originalNickDetectionEnabled);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Queue<Object> queue(String fieldName) throws Exception {
+        return (Queue<Object>) staticField(fieldName).get(null);
+    }
+
+    private static Field staticField(String fieldName) throws Exception {
+        Field field = HypixelLegitilsBootstrap.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field;
+    }
+
+    private static Object newPendingStatsNotice(String text) throws Exception {
+        Class<?> type = Class.forName(HypixelLegitilsBootstrap.class.getName() + "$PendingStatsNotice");
+        Constructor<?> constructor = type.getDeclaredConstructor(String.class, java.util.List.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(text, Collections.emptyList());
+    }
+
+    private static Object newPendingStatsPublication() throws Exception {
+        Class<?> type = Class.forName(HypixelLegitilsBootstrap.class.getName() + "$PendingStatsPublication");
+        Constructor<?> constructor = type.getDeclaredConstructor(
+            com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult.class,
+            java.util.Map.class,
+            Long.TYPE,
+            Long.TYPE
+        );
+        constructor.setAccessible(true);
+        return constructor.newInstance(
+            com.snkisk.hypixellegitils.stats.StatsBridgeLookupResult.unavailable(),
+            Collections.emptyMap(),
+            0L,
+            System.currentTimeMillis()
+        );
+    }
+
+    private static Object newPendingTeamNickNotice() throws Exception {
+        Class<?> type = Class.forName(HypixelLegitilsBootstrap.class.getName() + "$PendingTeamNickNotice");
+        Constructor<?> constructor = type.getDeclaredConstructor(UUID.class, String.class, Long.TYPE);
+        constructor.setAccessible(true);
+        return constructor.newInstance(UUID.randomUUID(), "PregameNick", 0L);
     }
 
     @Test
