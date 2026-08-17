@@ -15,7 +15,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -23,6 +22,7 @@ import java.util.regex.Pattern;
 public final class StatsBridgeClient {
     private static final int MAXIMUM_PLAYERS = 64;
     private static final int MAXIMUM_RESPONSE_BYTES = 32 * 1024;
+    private static final int MAXIMUM_RETAINED_REQUEST_IDS = 256;
     // The Companion can wait up to four seconds for its fixed provider calls. This client runs
     // on the dedicated bridge executor, so allow one local response window plus small overhead.
     private static final int READ_TIMEOUT_MILLIS = 6000;
@@ -30,7 +30,8 @@ public final class StatsBridgeClient {
     private static final Pattern TAG_SOURCE = Pattern.compile("[A-Za-z0-9_-]{1,24}");
     private static final int MAXIMUM_TAG_LABEL_LENGTH = 64;
     private final Path descriptorPath;
-    private final Set<String> requestedMatchIds = Collections.synchronizedSet(new LinkedHashSet<String>());
+    /** Recent opaque IDs deduplicate retry loops without retaining one unique manual ID forever. */
+    private final LinkedHashSet<String> requestedMatchIds = new LinkedHashSet<String>();
     private final AtomicBoolean hypixelKeyValidationRequested = new AtomicBoolean(false);
 
     public StatsBridgeClient(Path descriptorPath) {
@@ -47,13 +48,22 @@ public final class StatsBridgeClient {
         Optional<StatsBridgeDescriptor> descriptor = StatsBridgeDescriptor.read(descriptorPath, nowMillis);
         if (!descriptor.isPresent()) return StatsBridgeLookupResult.unavailable();
         synchronized (requestedMatchIds) {
-            if (!requestedMatchIds.add(matchId)) return StatsBridgeLookupResult.alreadyRequested();
+            if (requestedMatchIds.remove(matchId)) {
+                requestedMatchIds.add(matchId);
+                return StatsBridgeLookupResult.alreadyRequested();
+            }
+            if (requestedMatchIds.size() >= MAXIMUM_RETAINED_REQUEST_IDS) {
+                requestedMatchIds.remove(requestedMatchIds.iterator().next());
+            }
+            requestedMatchIds.add(matchId);
         }
         return request(descriptor.get(), matchId, gameMode, players);
     }
 
     public void resetForNewWorld() {
-        requestedMatchIds.clear();
+        synchronized (requestedMatchIds) {
+            requestedMatchIds.clear();
+        }
     }
 
     /** One per MOD injection, deliberately independent from world/session Stats reset. */
@@ -75,7 +85,15 @@ public final class StatsBridgeClient {
 
     /** Allows a fresh, post-key-change roster generation without retaining old request gates. */
     public void resetForProviderKeyChange() {
-        requestedMatchIds.clear();
+        synchronized (requestedMatchIds) {
+            requestedMatchIds.clear();
+        }
+    }
+
+    int retainedRequestIdCount() {
+        synchronized (requestedMatchIds) {
+            return requestedMatchIds.size();
+        }
     }
 
     private StatsBridgeLookupResult request(

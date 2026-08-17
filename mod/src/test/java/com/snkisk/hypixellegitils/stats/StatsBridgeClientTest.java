@@ -135,6 +135,58 @@ public final class StatsBridgeClientTest {
     }
 
     @Test
+    public void retainsOnlyABoundedRecentWindowOfRequestIds() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
+        server.createContext("/v1/roster", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws java.io.IOException {
+                readAll(exchange);
+                byte[] body = readyResponse().getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                OutputStream output = exchange.getResponseBody();
+                try {
+                    output.write(body);
+                } finally {
+                    output.close();
+                }
+            }
+        });
+        server.start();
+        Path directory = Files.createTempDirectory("legitils-bounded-request-ids");
+        try {
+            writeDescriptor(
+                directory.resolve("stats-bridge.json"),
+                server.getAddress().getPort(),
+                "capability0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                System.currentTimeMillis() + 120000L
+            );
+            StatsBridgeClient client = new StatsBridgeClient(directory.resolve("stats-bridge.json"));
+            for (int index = 0; index < 256; index++) {
+                assertEquals(StatsBridgeLookupResult.Status.READY, client.requestOnce(
+                    "manual_" + index, BedwarsMode.FOURS, players(), System.currentTimeMillis()
+                ).status);
+            }
+            assertEquals(256, client.retainedRequestIdCount());
+            assertEquals(StatsBridgeLookupResult.Status.ALREADY_REQUESTED, client.requestOnce(
+                "manual_0", BedwarsMode.FOURS, players(), System.currentTimeMillis()
+            ).status);
+            assertEquals(StatsBridgeLookupResult.Status.READY, client.requestOnce(
+                "manual_256", BedwarsMode.FOURS, players(), System.currentTimeMillis()
+            ).status);
+            assertEquals(StatsBridgeLookupResult.Status.READY, client.requestOnce(
+                "manual_1", BedwarsMode.FOURS, players(), System.currentTimeMillis()
+            ).status);
+            assertEquals(StatsBridgeLookupResult.Status.ALREADY_REQUESTED, client.requestOnce(
+                "manual_0", BedwarsMode.FOURS, players(), System.currentTimeMillis()
+            ).status);
+            assertEquals(256, client.retainedRequestIdCount());
+        } finally {
+            server.stop(0);
+            deleteTree(directory);
+        }
+    }
+
+    @Test
     public void requestsStatsWithoutAModeWhenTheVisibleSidebarOmitsIt() throws Exception {
         final AtomicInteger requests = new AtomicInteger(0);
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);

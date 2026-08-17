@@ -26,6 +26,7 @@ import com.snkisk.hypixellegitils.nick.BedDestructionChatSignal;
 import com.snkisk.hypixellegitils.party.BedwarsPreGameState;
 import com.snkisk.hypixellegitils.party.PartyScoreboardJumpDetector;
 import com.snkisk.hypixellegitils.stats.StatsBridgeClient;
+import com.snkisk.hypixellegitils.stats.ManualStatsLookupBudget;
 import com.snkisk.hypixellegitils.stats.HypixelKeyValidationResult;
 import com.snkisk.hypixellegitils.stats.StatsDisplayNameColumns;
 import com.snkisk.hypixellegitils.stats.BedwarsMode;
@@ -120,6 +121,7 @@ public final class HypixelLegitilsBootstrap {
         = new ConcurrentLinkedQueue<PendingExternalLinkNotice>();
     private static final Queue<StatsBridgeLookupResult> PENDING_MANUAL_STATS_RESULTS
         = new ConcurrentLinkedQueue<StatsBridgeLookupResult>();
+    private static final ManualStatsLookupBudget PENDING_MANUAL_STATS_LOOKUPS = new ManualStatsLookupBudget(8);
     private static final AtomicLong MANUAL_STATS_LOOKUP_SEQUENCE = new AtomicLong(0L);
     private static final PartyScoreboardJumpDetector PARTY_SCOREBOARD_JUMPS = new PartyScoreboardJumpDetector();
     private static final Set<UUID> NICKED_SESSION_PLAYER_IDS
@@ -1192,13 +1194,22 @@ public final class HypixelLegitilsBootstrap {
         List<PendingStatsNotice> responses = new ArrayList<PendingStatsNotice>();
         StatsBridgeLookupResult result;
         while ((result = PENDING_MANUAL_STATS_RESULTS.poll()) != null) {
-            for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(
-                result, statsChatDisplayNames(result), statsChatStarPaddings(result), statsChatFkdrPaddings(result)
-            )) {
-                responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
+            try {
+                for (StatsPresentation.ChatNotice notice : StatsPresentation.manualLookupNotices(
+                    result, statsChatDisplayNames(result), statsChatStarPaddings(result), statsChatFkdrPaddings(result)
+                )) {
+                    responses.add(new PendingStatsNotice(ChatFormat.line(notice.text), notice.tagHovers));
+                }
+            } finally {
+                PENDING_MANUAL_STATS_LOOKUPS.release();
             }
         }
         return responses.toArray(new PendingStatsNotice[responses.size()]);
+    }
+
+    /** Releases delivery reservations when a world transition discards manual results. */
+    private static void discardPendingManualStatsResults() {
+        while (PENDING_MANUAL_STATS_RESULTS.poll() != null) PENDING_MANUAL_STATS_LOOKUPS.release();
     }
 
     /** A paused, skipped, or replaced client-world tick invalidates timing signals. */
@@ -1235,7 +1246,9 @@ public final class HypixelLegitilsBootstrap {
         if (request.kind == LocalCommand.Kind.STATS_SET) return updateStatsSetting(request);
         if (request.kind == LocalCommand.Kind.STATS_TRACE_SET_ENABLED) return updateStatsTrace(request.enabled);
         if (request.kind == LocalCommand.Kind.STATS_LOOKUP) {
-            requestManualStatsLookup(request.playerName, visiblePlayers, visibleMode);
+            if (!requestManualStatsLookup(request.playerName, visiblePlayers, visibleMode)) {
+                return new String[] { ChatFormat.line("§eStats lookup queue is full. §7Wait for the current results.") };
+            }
             return new String[] { ChatFormat.line("§bStats lookup started for §f" + request.playerName + "§b.") };
         }
         if (request.kind == LocalCommand.Kind.ANTICHEAT_LIST) return detectorListLines(active.statusText(), detectorSettings.savedConfig());
@@ -1260,29 +1273,45 @@ public final class HypixelLegitilsBootstrap {
     }
 
     /** Explicit user lookup; it works even when automatic Stats presentation is disabled. */
-    private static void requestManualStatsLookup(String playerName, Map<String, UUID> visiblePlayers, BedwarsMode visibleMode) {
-        if (playerName == null) return;
+    private static boolean requestManualStatsLookup(String playerName, Map<String, UUID> visiblePlayers, BedwarsMode visibleMode) {
+        if (playerName == null || !PENDING_MANUAL_STATS_LOOKUPS.tryReserve()) return false;
         StatsBridgeRosterMember requested = new StatsBridgeRosterMember(playerName, null);
-        if (!requested.isValid()) return;
+        if (!requested.isValid()) {
+            PENDING_MANUAL_STATS_LOOKUPS.release();
+            return false;
+        }
         UUID visibleId = visiblePlayers == null ? null : visiblePlayers.get(playerName.toLowerCase(Locale.ROOT));
         if (visibleId != null && visibleId.version() != 1) requested = new StatsBridgeRosterMember(playerName, visibleId.toString());
         final StatsBridgeClient client = statsBridgeClient;
         if (client == null) {
             PENDING_MANUAL_STATS_RESULTS.add(StatsBridgeLookupResult.unavailable());
-            return;
+            return true;
         }
         final long sessionGeneration = STATS_BRIDGE_SESSION.currentGeneration();
         final String requestId = "manual_" + sessionGeneration + "_" + MANUAL_STATS_LOOKUP_SEQUENCE.incrementAndGet();
         final List<StatsBridgeRosterMember> players = Collections.singletonList(requested);
         final BedwarsMode gameMode = statsModeFor(visibleMode);
-        STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
-            @Override
-            public void run() {
-                if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
-                StatsBridgeLookupResult result = client.requestOnce(requestId, gameMode, players, System.currentTimeMillis());
-                if (STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) PENDING_MANUAL_STATS_RESULTS.add(result);
-            }
-        });
+        try {
+            STATS_BRIDGE_EXECUTOR.submit(new Runnable() {
+                @Override
+                public void run() {
+                    boolean resultQueued = false;
+                    try {
+                        if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+                        StatsBridgeLookupResult result = client.requestOnce(requestId, gameMode, players, System.currentTimeMillis());
+                        if (!STATS_BRIDGE_SESSION.isCurrent(sessionGeneration)) return;
+                        PENDING_MANUAL_STATS_RESULTS.add(result);
+                        resultQueued = true;
+                    } finally {
+                        if (!resultQueued) PENDING_MANUAL_STATS_LOOKUPS.release();
+                    }
+                }
+            });
+            return true;
+        } catch (RuntimeException exception) {
+            PENDING_MANUAL_STATS_LOOKUPS.release();
+            return false;
+        }
     }
 
     private static String[] updateStatsSetting(LocalCommand.Request request) {
@@ -2050,7 +2079,7 @@ public final class HypixelLegitilsBootstrap {
         PENDING_STATS_NOTICES.clear();
         PENDING_STATS_PUBLICATIONS.clear();
         PENDING_CONFIGURATION_NOTICES.clear();
-        PENDING_MANUAL_STATS_RESULTS.clear();
+        discardPendingManualStatsResults();
         PREGAME_STATS_CHATTERS.clear();
         PREGAME_STATS_LOOKUP_ATTEMPTS.clear();
         BEDWARS_MODE_TRACKER.reset();
