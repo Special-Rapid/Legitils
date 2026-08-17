@@ -3,6 +3,8 @@ import Foundation
 
 /// Installs the bundled Java artifacts outside the app bundle so a copied JVM argument remains valid after updates.
 struct RuntimeInstaller {
+    static let bundledLoaderResourceName = "hypixel-legitils-loader"
+    static let bundledModResourceName = "hypixel-legitils-mod"
     static let loaderFileName = "hypixel-legitils-loader.jar"
     static let modFileName = "hypixel-legitils-mod.jar"
     static let configurationFileName = "loader-config.json"
@@ -14,12 +16,12 @@ struct RuntimeInstaller {
 
     init(
         bundledLoaderURL: URL? = Bundle.main.url(
-            forResource: "hypixel-legitils-loader-0.1.0-SNAPSHOT",
+            forResource: Self.bundledLoaderResourceName,
             withExtension: "jar",
             subdirectory: "LegitilsRuntime"
         ),
         bundledModURL: URL? = Bundle.main.url(
-            forResource: "hypixel-legitils-0.1.0-SNAPSHOT",
+            forResource: Self.bundledModResourceName,
             withExtension: "jar",
             subdirectory: "LegitilsRuntime"
         ),

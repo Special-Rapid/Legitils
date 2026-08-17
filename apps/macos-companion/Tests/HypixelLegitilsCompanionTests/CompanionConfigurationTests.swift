@@ -460,6 +460,10 @@ final class CompanionConfigurationTests: XCTestCase {
     }
 
     func testRuntimeInstallerCopiesBundledArtifactsAndGeneratesARealArgument() throws {
+        XCTAssertEqual(RuntimeInstaller.bundledLoaderResourceName, "hypixel-legitils-loader")
+        XCTAssertEqual(RuntimeInstaller.bundledModResourceName, "hypixel-legitils-mod")
+        XCTAssertEqual(RuntimeInstaller.loaderFileName, "hypixel-legitils-loader.jar")
+        XCTAssertEqual(RuntimeInstaller.modFileName, "hypixel-legitils-mod.jar")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let bundledLoader = root.appendingPathComponent("bundled-loader.jar")

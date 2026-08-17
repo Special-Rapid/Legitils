@@ -11,7 +11,7 @@ public final class MixinRuntimeRegistrarTest {
     @Test
     public void registersTheFixedConfigThroughAnAvailableMixinBootstrap() throws Exception {
         Path directory = Files.createTempDirectory("legitils-mixin-runtime-test");
-        Path modJar = Files.createFile(directory.resolve("hypixel-legitils.jar"));
+        Path modJar = LoaderConfigTest.createModJar(directory, true, true);
         Path configFile = directory.resolve("loader-config.json");
         String json = "{\"schemaVersion\":1,\"modJar\":\"" + modJar.toString()
             + "\",\"mixinConfig\":\"mixins.hypixellegitils.json\",\"injectedProperty\":\"hypixellegitils.agent.injected\"}";

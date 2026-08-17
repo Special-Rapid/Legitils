@@ -6,8 +6,9 @@ PROJECT_ROOT="$(cd "$ROOT/../.." && pwd)"
 APP_NAME="Hypixel Legitils"
 BUILD_DIR="$ROOT/.build/release"
 APP_DIR="$ROOT/dist/$APP_NAME.app"
-LOADER_JAR="$PROJECT_ROOT/loader/build/libs/hypixel-legitils-loader-0.1.0-SNAPSHOT.jar"
-MOD_JAR="$PROJECT_ROOT/mod/build/libs/hypixel-legitils-0.1.0-SNAPSHOT.jar"
+ARTIFACT_DIR="$PROJECT_ROOT/build/companion-artifacts"
+LOADER_JAR="$ARTIFACT_DIR/hypixel-legitils-loader.jar"
+MOD_JAR="$ARTIFACT_DIR/hypixel-legitils-mod.jar"
 CODE_SIGN_IDENTITY="${LEGITILS_CODESIGN_IDENTITY:-}"
 JAVA_8_HOME="${LEGITILS_JAVA_8_HOME:-}"
 if [[ -z "$JAVA_8_HOME" ]]; then
@@ -26,7 +27,7 @@ if [[ ! -x "$JAVA_8_HOME/bin/java" || ! -f "$JAVA_8_HOME/lib/tools.jar" ]]; then
   echo "A full Java 8 JDK is required. Set LEGITILS_JAVA_8_HOME to a JDK 8 home containing lib/tools.jar." >&2
   exit 1
 fi
-JAVA_HOME="$JAVA_8_HOME" "$PROJECT_ROOT/gradlew" -p "$PROJECT_ROOT" --no-daemon :loader:jar :mod:jar
+JAVA_HOME="$JAVA_8_HOME" "$PROJECT_ROOT/gradlew" -p "$PROJECT_ROOT" --no-daemon :prepareCompanionArtifacts
 
 EXPECTED_REVISION="$(git -C "$PROJECT_ROOT" describe --always --dirty --abbrev=7)"
 ACTUAL_REVISION="$(unzip -p "$MOD_JAR" hypixellegitils-build.properties | sed -n 's/^revision=//p')"
@@ -39,8 +40,8 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 cp "$BUILD_DIR/HypixelLegitilsCompanion" "$APP_DIR/Contents/MacOS/HypixelLegitilsCompanion"
 mkdir -p "$APP_DIR/Contents/Resources/LegitilsRuntime"
-cp "$LOADER_JAR" "$APP_DIR/Contents/Resources/LegitilsRuntime/hypixel-legitils-loader-0.1.0-SNAPSHOT.jar"
-cp "$MOD_JAR" "$APP_DIR/Contents/Resources/LegitilsRuntime/hypixel-legitils-0.1.0-SNAPSHOT.jar"
+cp "$LOADER_JAR" "$APP_DIR/Contents/Resources/LegitilsRuntime/hypixel-legitils-loader.jar"
+cp "$MOD_JAR" "$APP_DIR/Contents/Resources/LegitilsRuntime/hypixel-legitils-mod.jar"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

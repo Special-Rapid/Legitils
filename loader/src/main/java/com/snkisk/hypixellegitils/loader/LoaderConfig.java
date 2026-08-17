@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
 final class LoaderConfig {
@@ -48,6 +49,7 @@ final class LoaderConfig {
         if (!MIXIN_CONFIG.matcher(mixinConfig).matches()) {
             throw new ConfigException("mixinConfig must be a root JAR JSON resource name");
         }
+        validateModJarResources(modJar, mixinConfig);
 
         String injectedProperty = requiredString(values, "injectedProperty");
         if (!SYSTEM_PROPERTY.matcher(injectedProperty).matches()) {
@@ -55,6 +57,21 @@ final class LoaderConfig {
         }
 
         return new LoaderConfig(modJar, mixinConfig, injectedProperty);
+    }
+
+    private static void validateModJarResources(Path modJar, String mixinConfig) throws ConfigException {
+        try {
+            JarFile jar = new JarFile(modJar.toFile());
+            try {
+                if (jar.getJarEntry(mixinConfig) == null || jar.getJarEntry("hypixellegitils-build.properties") == null) {
+                    throw new ConfigException("modJar is missing required MOD resources");
+                }
+            } finally {
+                jar.close();
+            }
+        } catch (IOException exception) {
+            throw new ConfigException("modJar must be a readable JAR with required MOD resources");
+        }
     }
 
     private static String requiredString(Map<String, Object> values, String key) throws ConfigException {

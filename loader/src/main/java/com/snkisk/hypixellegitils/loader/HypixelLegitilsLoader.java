@@ -32,9 +32,12 @@ public final class HypixelLegitilsLoader {
             }
             Path configPath = agentArgs == null ? null : Paths.get(agentArgs).normalize();
             LoaderConfig config = LoaderConfig.load(configPath);
+            if (!appendModJarToSystemSearch(config, instrumentation)) {
+                status("mod-jar-error");
+                return;
+            }
             System.setProperty(config.injectedProperty, "true");
-            status("config-valid");
-            appendModJarToSystemSearch(config, instrumentation);
+            status("mod-jar-appended");
             // Lunar's current Genesis runtime creates its Ichor Mixin host after
             // premain. Register only once that host loader exists: forcing the
             // system-loader copy of MixinBootstrap earlier has no host service.
@@ -60,7 +63,7 @@ public final class HypixelLegitilsLoader {
      * still a pre-launch classpath operation; it does not transform or redefine
      * any class.
      */
-    private static void appendModJarToSystemSearch(LoaderConfig config, Instrumentation instrumentation) {
+    private static boolean appendModJarToSystemSearch(LoaderConfig config, Instrumentation instrumentation) {
         JarFile jar = null;
         try {
             jar = new JarFile(config.modJar.toFile());
@@ -68,6 +71,7 @@ public final class HypixelLegitilsLoader {
             instrumentation.appendToSystemClassLoaderSearch(jar);
             systemSearchJar = jar;
             diagnostic("MOD JAR appended to the system classloader search.");
+            return true;
         } catch (Exception exception) {
             if (jar != null) {
                 try {
@@ -78,6 +82,7 @@ public final class HypixelLegitilsLoader {
             }
             diagnostic("Unable to append MOD JAR to the system classloader search: "
                 + exception.getClass().getSimpleName());
+            return false;
         }
     }
 

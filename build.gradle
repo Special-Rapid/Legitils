@@ -172,6 +172,25 @@ project(':mod') {
     }
 }
 
+/** Stable, version-independent inputs for the Companion bundle. */
+task prepareCompanionArtifacts(dependsOn: [':loader:jar', ':mod:jar']) {
+    def artifactDirectory = file("$buildDir/companion-artifacts")
+    outputs.dir artifactDirectory
+    doLast {
+        artifactDirectory.mkdirs()
+        copy {
+            from project(':loader').tasks.jar.archivePath
+            into artifactDirectory
+            rename { 'hypixel-legitils-loader.jar' }
+        }
+        copy {
+            from project(':mod').tasks.jar.archivePath
+            into artifactDirectory
+            rename { 'hypixel-legitils-mod.jar' }
+        }
+    }
+}
+
 task verifyBootstrapArtifacts(dependsOn: [':loader:jar', ':mod:jar']) {
     description = 'Checks the clean-room bootstrap artifacts and their Java 8 manifests.'
     group = 'verification'
