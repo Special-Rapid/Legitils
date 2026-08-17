@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Reads Companion's bounded key-save notifications. The wire format contains only a
+ * Reads Companion's bounded key-change notifications. The wire format contains only a
  * monotonically increasing sequence and the provider name; API keys never leave Keychain.
  */
 public final class ProviderKeyChangeEventReader {
@@ -77,7 +77,7 @@ public final class ProviderKeyChangeEventReader {
                 if (!(rawSequence instanceof Long) || !(rawProvider instanceof String)) return Collections.emptyList();
                 long sequence = ((Long) rawSequence).longValue();
                 String provider = (String) rawProvider;
-                if (sequence <= previous || !("hypixel".equals(provider) || "urchin".equals(provider))) {
+                if (sequence <= previous || !("hypixel".equals(provider) || "urchin".equals(provider) || "seraph".equals(provider))) {
                     return Collections.emptyList();
                 }
                 previous = sequence;

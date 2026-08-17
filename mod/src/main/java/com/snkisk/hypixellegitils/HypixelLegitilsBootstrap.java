@@ -273,6 +273,9 @@ public final class HypixelLegitilsBootstrap {
             } else if ("urchin".equals(provider)) {
                 PENDING_PROVIDER_KEY_CHANGE_NOTICES.add(ChatFormat.line("§aUrchin API key changed in Companion."));
                 recoverStatsAfterProviderKeyChange();
+            } else if ("seraph".equals(provider)) {
+                PENDING_PROVIDER_KEY_CHANGE_NOTICES.add(ChatFormat.line("§aSeraph API key changed in Companion."));
+                recoverStatsAfterProviderKeyChange();
             }
         }
     }

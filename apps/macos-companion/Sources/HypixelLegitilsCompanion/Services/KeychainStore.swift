@@ -33,12 +33,32 @@ struct KeychainStore {
             kSecAttrService as String: Self.service,
             kSecAttrAccount as String: account
         ]
-        SecItemDelete(query as CFDictionary)
+        let replacement: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        let updateResult = SecItemUpdate(query as CFDictionary, replacement as CFDictionary)
+        if updateResult == errSecSuccess { return }
+        guard Self.shouldInsertAfterFailedUpdate(updateResult) else {
+            throw KeychainStoreError.operationFailed(updateResult)
+        }
         var add = query
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        let result = SecItemAdd(add as CFDictionary, nil)
-        guard result == errSecSuccess else { throw KeychainStoreError.operationFailed(result) }
+        let addResult = SecItemAdd(add as CFDictionary, nil)
+        if addResult == errSecSuccess { return }
+        // Another process may insert the item between our update and add. Retry an in-place update;
+        // never delete the existing value before a replacement is known to have succeeded.
+        if addResult == errSecDuplicateItem {
+            let retryResult = SecItemUpdate(query as CFDictionary, replacement as CFDictionary)
+            guard retryResult == errSecSuccess else { throw KeychainStoreError.operationFailed(retryResult) }
+            return
+        }
+        throw KeychainStoreError.operationFailed(addResult)
+    }
+
+    static func shouldInsertAfterFailedUpdate(_ status: OSStatus) -> Bool {
+        status == errSecItemNotFound
     }
 
     func hasSecret(account: String) -> Bool {

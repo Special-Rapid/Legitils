@@ -18,8 +18,8 @@ public final class ProviderKeyChangeEventReaderTest {
             reader.baseline();
             assertArrayEquals(new String[0], reader.poll());
 
-            write(events, "{\"schemaVersion\":1,\"events\":[{\"sequence\":3,\"provider\":\"hypixel\"},{\"sequence\":4,\"provider\":\"urchin\"},{\"sequence\":5,\"provider\":\"hypixel\"}]}");
-            assertArrayEquals(new String[] { "urchin", "hypixel" }, reader.poll());
+            write(events, "{\"schemaVersion\":1,\"events\":[{\"sequence\":3,\"provider\":\"hypixel\"},{\"sequence\":4,\"provider\":\"urchin\"},{\"sequence\":5,\"provider\":\"seraph\"}]}");
+            assertArrayEquals(new String[] { "urchin", "seraph" }, reader.poll());
             assertArrayEquals(new String[0], reader.poll());
         } finally {
             Files.deleteIfExists(events);
@@ -34,7 +34,7 @@ public final class ProviderKeyChangeEventReaderTest {
         try {
             ProviderKeyChangeEventReader reader = new ProviderKeyChangeEventReader(events);
             reader.baseline();
-            write(events, "{\"schemaVersion\":1,\"events\":[{\"sequence\":1,\"provider\":\"seraph\"}]}");
+            write(events, "{\"schemaVersion\":1,\"events\":[{\"sequence\":1,\"provider\":\"unknown\"}]}");
             assertArrayEquals(new String[0], reader.poll());
             write(events, "{\"schemaVersion\":1,\"events\":[{\"sequence\":1,\"provider\":\"hypixel\",\"key\":\"forbidden\"}]}");
             assertArrayEquals(new String[0], reader.poll());

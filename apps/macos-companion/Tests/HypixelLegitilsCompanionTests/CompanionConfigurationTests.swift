@@ -1,4 +1,5 @@
 import XCTest
+import Security
 @testable import HypixelLegitilsCompanion
 
 final class CompanionConfigurationTests: XCTestCase {
@@ -100,6 +101,12 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertTrue(KeychainStore.needsLegacyReentry(for: .seraph, hasCurrent: false, hasLegacy: true))
     }
 
+    func testKeychainReplacementOnlyInsertsAfterANotFoundUpdate() {
+        XCTAssertTrue(KeychainStore.shouldInsertAfterFailedUpdate(errSecItemNotFound))
+        XCTAssertFalse(KeychainStore.shouldInsertAfterFailedUpdate(errSecSuccess))
+        XCTAssertFalse(KeychainStore.shouldInsertAfterFailedUpdate(errSecAuthFailed))
+    }
+
     func testProviderKeyChangeEventContainsOnlyBoundedProviderAndSequence() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = directory.appendingPathComponent("provider-key-change-events.json")
@@ -107,17 +114,17 @@ final class CompanionConfigurationTests: XCTestCase {
 
         let store = ProviderKeyChangeEventStore(url: url)
         for index in 1...17 {
-            try store.recordSavedKey(for: index.isMultiple(of: 2) ? .urchin : .hypixel)
+            try store.recordKeyChange(for: index.isMultiple(of: 2) ? .urchin : .hypixel)
         }
-        try store.recordSavedKey(for: .seraph)
+        try store.recordKeyChange(for: .seraph)
 
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         let events = object?["events"] as? [[String: Any]]
         XCTAssertEqual(object?["schemaVersion"] as? Int, 1)
         XCTAssertEqual(events?.count, 16)
-        XCTAssertEqual(events?.map { $0["sequence"] as? Int }, Array(2...17))
-        XCTAssertEqual(events?.first?["provider"] as? String, "urchin")
-        XCTAssertEqual(events?.last?["provider"] as? String, "hypixel")
+        XCTAssertEqual(events?.map { $0["sequence"] as? Int }, Array(3...18))
+        XCTAssertEqual(events?.first?["provider"] as? String, "hypixel")
+        XCTAssertEqual(events?.last?["provider"] as? String, "seraph")
         XCTAssertEqual(Set(object?.keys ?? Dictionary<String, Any>().keys), Set(["schemaVersion", "events"]))
     }
 

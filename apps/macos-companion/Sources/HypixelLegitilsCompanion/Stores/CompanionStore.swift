@@ -239,7 +239,7 @@ final class CompanionStore: ObservableObject {
             try keychainStore.save(secret: key, account: provider.keychainAccount)
             statsProviderLookup.invalidateCachedResults(for: provider)
             do {
-                try providerKeyChangeEventStore.recordSavedKey(for: provider)
+                try providerKeyChangeEventStore.recordKeyChange(for: provider)
             } catch {
                 refreshProviderKeyStates()
                 syncStatsBridge()
@@ -258,9 +258,17 @@ final class CompanionStore: ObservableObject {
         do {
             try keychainStore.remove(account: provider.keychainAccount)
             statsProviderLookup.invalidateCachedResults(for: provider)
+            do {
+                try providerKeyChangeEventStore.recordKeyChange(for: provider)
+            } catch {
+                refreshProviderKeyStates()
+                syncStatsBridge()
+                statsStatusMessage = "\(provider.displayName) のAPIキーはKeychainから削除しましたが、Minecraftへの変更通知を準備できませんでした。"
+                return
+            }
             refreshProviderKeyStates()
             syncStatsBridge()
-            statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainから削除しました。"
+            statsStatusMessage = "\(provider.displayName) のAPIキーをKeychainから削除しました。MinecraftのChatにも変更を通知します。"
         } catch {
             statsStatusMessage = error.localizedDescription
         }

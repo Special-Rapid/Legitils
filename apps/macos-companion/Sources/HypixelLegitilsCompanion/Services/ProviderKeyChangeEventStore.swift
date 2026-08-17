@@ -1,6 +1,6 @@
 import Foundation
 
-/// Writes a small, local-only notification for the running MOD after a Keychain save succeeds.
+/// Writes a small, local-only notification for the running MOD after a Keychain value changes.
 /// The persisted payload intentionally contains neither an API key nor any key-derived value.
 struct ProviderKeyChangeEventStore {
     private static let schemaVersion = 1
@@ -14,8 +14,7 @@ struct ProviderKeyChangeEventStore {
         self.fileManager = fileManager
     }
 
-    func recordSavedKey(for provider: StatsProvider) throws {
-        guard provider == .hypixel || provider == .urchin else { return }
+    func recordKeyChange(for provider: StatsProvider) throws {
 
         var document = loadDocument()
         let nextSequence = (document.events.map(\.sequence).max() ?? 0) + 1
@@ -36,7 +35,7 @@ struct ProviderKeyChangeEventStore {
             let document = try? JSONDecoder().decode(Document.self, from: data),
             document.schemaVersion == Self.schemaVersion,
             document.events.count <= Self.maximumEvents,
-            document.events.allSatisfy({ $0.sequence > 0 && ($0.provider == StatsProvider.hypixel.rawValue || $0.provider == StatsProvider.urchin.rawValue) }),
+            document.events.allSatisfy({ $0.sequence > 0 && StatsProvider(rawValue: $0.provider) != nil }),
             zip(document.events, document.events.dropFirst()).allSatisfy({ $0.sequence < $1.sequence })
         else {
             return Document(schemaVersion: Self.schemaVersion, events: [])
