@@ -165,7 +165,8 @@ public final class HypixelLegitilsLoader {
 
         private Class<?> findLoadedMixinsClass() {
             for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
-                if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())) {
+                if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())
+                    && isIchorClassLoader(candidate.getClassLoader())) {
                     return candidate;
                 }
             }
@@ -195,8 +196,7 @@ public final class HypixelLegitilsLoader {
         }
 
         private boolean isIchorClassLoader(ClassLoader candidate) {
-            return candidate != null
-                && candidate.getClass().getName().startsWith("com.moonsworth.lunar.ichor.");
+            return isIchorClassLoaderName(candidate == null ? null : candidate.getClass().getName());
         }
 
         private void register(Class<?> mixins) {
@@ -221,5 +221,9 @@ public final class HypixelLegitilsLoader {
             }
         }
 
+    }
+
+    static boolean isIchorClassLoaderName(String className) {
+        return className != null && className.startsWith("com.moonsworth.lunar.ichor.");
     }
 }
