@@ -7,12 +7,15 @@ import net.minecraft.client.gui.GuiPlayerTabOverlay;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.scoreboard.ScoreObjective;
 import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScorePlayerTeam;
+import net.minecraft.scoreboard.Team;
+import net.minecraft.util.IChatComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Appends a local-only persistent or session-only marker to the transient Tab render string. */
 @Mixin({GuiPlayerTabOverlay.class})
@@ -41,12 +44,39 @@ public class MixinGuiPlayerTabOverlay {
         HypixelLegitilsBootstrap.finishTabStatsRender();
     }
 
-    @Inject(method = {"getPlayerName"}, at = {@At("RETURN")}, cancellable = true)
-    private void hypixelLegitils$appendMarker(NetworkPlayerInfo info, CallbackInfoReturnable<String> callbackInfo) {
+    /**
+     * Decorate the server-supplied display-name branch before a foreign RETURN
+     * callback can cancel {@code getPlayerName}. Meowtils is one such callback:
+     * it then wraps this result with its own icon prefix/suffix, preserving both
+     * products' content without requiring any change to the other agent.
+     */
+    @Redirect(
+        method = {"getPlayerName"},
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/util/IChatComponent;getFormattedText()Ljava/lang/String;"
+        )
+    )
+    private String hypixelLegitils$decorateDisplayName(IChatComponent displayName, NetworkPlayerInfo info) {
+        return hypixelLegitils$appendStats(displayName == null ? "" : displayName.getFormattedText(), info);
+    }
+
+    /** Covers vanilla's scoreboard-team fallback when the server omits a display component. */
+    @Redirect(
+        method = {"getPlayerName"},
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/scoreboard/ScorePlayerTeam;formatPlayerName(Lnet/minecraft/scoreboard/Team;Ljava/lang/String;)Ljava/lang/String;"
+        )
+    )
+    private String hypixelLegitils$decorateTeamName(Team team, String playerName, NetworkPlayerInfo info) {
+        return hypixelLegitils$appendStats(ScorePlayerTeam.formatPlayerName(team, playerName), info);
+    }
+
+    private String hypixelLegitils$appendStats(String renderedName, NetworkPlayerInfo info) {
         HypixelLegitilsBootstrap.onMarkerRenderHookObserved("tab");
-        if (info == null || info.getGameProfile() == null) return;
+        if (info == null || info.getGameProfile() == null) return renderedName;
         java.util.UUID playerId = info.getGameProfile().getId();
-        String renderedName = callbackInfo.getReturnValue();
         String markers = TabStatsMarkers.forPlayer(
             HypixelLegitilsBootstrap.shouldShowNickedProfileMarker(playerId),
             HypixelLegitilsBootstrap.shouldShowAcceptedAlertMarker(playerId)
@@ -72,9 +102,9 @@ public class MixinGuiPlayerTabOverlay {
             info.getGameProfile().getName(), playerId,
             HypixelLegitilsBootstrap.statsTabStarPadding(info.getGameProfile().getName(), starText, starPixelWidth)
         );
-        if (markers.isEmpty() && suffix.isEmpty()) return;
-        callbackInfo.setReturnValue(statsColumnName + padding + suffix);
+        if (markers.isEmpty() && suffix.isEmpty()) return renderedName;
         HypixelLegitilsBootstrap.onMarkerRenderObserved(playerId, markers + suffix);
+        return statsColumnName + padding + suffix;
     }
 
 }
