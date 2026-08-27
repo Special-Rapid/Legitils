@@ -16,4 +16,21 @@ public final class HypixelLegitilsLoaderTest {
         ));
         assertFalse(HypixelLegitilsLoader.isIchorClassLoaderName(null));
     }
+
+    @Test
+    public void acceptsOnlyTheIchorGameMixinStage() {
+        String className = "com.moonsworth.lunar.ichor.IchorClassLoader";
+        assertTrue(HypixelLegitilsLoader.isLunarGameMixinClassLoader(
+            className, "IchorClassLoader(MIXIN)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLunarGameMixinClassLoader(
+            className, "IchorClassLoader(META_MIXIN)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLunarGameMixinClassLoader(
+            className, "IchorClassLoader(PRE_OPTIFINE_PATCH)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLunarGameMixinClassLoader(
+            "org.spongepowered.asm.launch.MixinClassLoader", "IchorClassLoader(MIXIN)"
+        ));
+    }
 }

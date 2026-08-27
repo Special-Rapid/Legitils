@@ -166,7 +166,7 @@ public final class HypixelLegitilsLoader {
         private Class<?> findLoadedMixinsClass() {
             for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
                 if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())
-                    && isIchorClassLoader(candidate.getClassLoader())) {
+                    && isLunarGameMixinClassLoader(candidate.getClassLoader())) {
                     return candidate;
                 }
             }
@@ -183,7 +183,7 @@ public final class HypixelLegitilsLoader {
         private ClassLoader findIchorMixinClassLoader() {
             for (Thread thread : Thread.getAllStackTraces().keySet()) {
                 ClassLoader candidate = thread.getContextClassLoader();
-                if (!isIchorClassLoader(candidate)) continue;
+                if (!isLunarGameMixinClassLoader(candidate)) continue;
                 try {
                     Class<?> bootstrap = Class.forName(MixinRuntimeRegistrar.bootstrapClassName(), false, candidate);
                     if (bootstrap.getClassLoader() == candidate) return candidate;
@@ -195,8 +195,11 @@ public final class HypixelLegitilsLoader {
             return null;
         }
 
-        private boolean isIchorClassLoader(ClassLoader candidate) {
-            return isIchorClassLoaderName(candidate == null ? null : candidate.getClass().getName());
+        private boolean isLunarGameMixinClassLoader(ClassLoader candidate) {
+            return HypixelLegitilsLoader.isLunarGameMixinClassLoader(
+                candidate == null ? null : candidate.getClass().getName(),
+                candidate == null ? null : candidate.toString()
+            );
         }
 
         private void register(Class<?> mixins) {
@@ -225,5 +228,17 @@ public final class HypixelLegitilsLoader {
 
     static boolean isIchorClassLoaderName(String className) {
         return className != null && className.startsWith("com.moonsworth.lunar.ichor.");
+    }
+
+    /**
+     * Lunar exposes several Ichor loaders during launch. Only the normal MIXIN
+     * stage owns game classes; PRE_OPTIFINE_PATCH has no host service and
+     * META_MIXIN cannot see the Level Head renderer. Selecting either can make
+     * registration timing depend on the number/order of Java agents.
+     */
+    static boolean isLunarGameMixinClassLoader(String className, String description) {
+        return isIchorClassLoaderName(className)
+            && description != null
+            && description.contains("IchorClassLoader(MIXIN)");
     }
 }
