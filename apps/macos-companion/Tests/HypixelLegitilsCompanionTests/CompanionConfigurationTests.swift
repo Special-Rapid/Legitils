@@ -596,6 +596,11 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertFalse(LunarBakeCacheInvalidator.isLunarMinecraftProcessCommand(
             "/usr/bin/java -jar gradle-wrapper.jar"
         ))
+        XCTAssertTrue(LunarBakeCacheInvalidator.containsLunarMinecraftProcess(in: """
+            /usr/bin/java -jar gradle-wrapper.jar
+            /Users/example/.lunarclient/jre/bin/java -Dichor.logsFile=/Users/example/.lunarclient/profiles/1.8/logs/ichor-boot.log
+            """))
+        XCTAssertFalse(LunarBakeCacheInvalidator.containsLunarMinecraftProcess(in: "/usr/bin/java -jar gradle-wrapper.jar"))
 
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }

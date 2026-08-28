@@ -76,13 +76,21 @@ final class LunarBakeCacheInvalidator {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
+            // Drain before waiting. `ps` can list enough command lines to fill a Pipe;
+            // waiting first deadlocks the Companion and the headless launchd job.
+            let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return true }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
             guard let commands = String(data: data, encoding: .utf8) else { return true }
-            return commands.split(whereSeparator: \.isNewline).contains { isLunarMinecraftProcessCommand(String($0)) }
+            return containsLunarMinecraftProcess(in: commands)
         } catch {
             return true
+        }
+    }
+
+    static func containsLunarMinecraftProcess(in commands: String) -> Bool {
+        commands.split(whereSeparator: \.isNewline).contains {
+            isLunarMinecraftProcessCommand(String($0))
         }
     }
 
