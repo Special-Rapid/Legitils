@@ -13,24 +13,27 @@ final class LunarBakeCacheInvalidator {
     private let cache: LunarBakeCacheService
     private let fileManager: FileManager
     private let minecraftGameWindowExists: () -> Bool
+    private let minecraftProcessExists: () -> Bool
 
     init(
         fingerprintURL: URL = CompanionPaths.lunarBakeCacheFingerprintURL,
         cache: LunarBakeCacheService = LunarBakeCacheService(),
         fileManager: FileManager = .default,
-        minecraftGameWindowExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftGameWindowExists
+        minecraftGameWindowExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftGameWindowExists,
+        minecraftProcessExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftProcessExists
     ) {
         self.fingerprintURL = fingerprintURL
         self.cache = cache
         self.fileManager = fileManager
         self.minecraftGameWindowExists = minecraftGameWindowExists
+        self.minecraftProcessExists = minecraftProcessExists
     }
 
     /// Records a fingerprint only after safe cleanup, including when no bake archive exists.
     func invalidateIfNeeded(for modFingerprint: String) throws -> Outcome {
         guard !modFingerprint.isEmpty else { throw InvalidatorError.emptyFingerprint }
         if completedFingerprint() == modFingerprint { return .unchanged }
-        if minecraftGameWindowExists() { return .deferredWhileMinecraftGameWindowExists }
+        if minecraftGameWindowExists() || minecraftProcessExists() { return .deferredWhileMinecraftGameWindowExists }
         let moved = try cache.moveToTrash(cache.scan())
         try fileManager.createDirectory(at: fingerprintURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = modFingerprint.data(using: .utf8) else { throw InvalidatorError.emptyFingerprint }
@@ -59,6 +62,36 @@ final class LunarBakeCacheInvalidator {
             let title = window[kCGWindowName as String] as? String ?? ""
             return isMinecraftGameWindow(ownerName: owner, title: title)
         }
+    }
+
+    /// Protects Lunar's game process before it creates a visible window and while the
+    /// window is hidden. If process inspection is unavailable, defer rather than risk
+    /// moving a bake archive that the JVM may still be reading.
+    static func defaultMinecraftProcessExists() -> Bool {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-ax", "-o", "command="]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return true }
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            guard let commands = String(data: data, encoding: .utf8) else { return true }
+            return commands.split(whereSeparator: \.isNewline).contains { isLunarMinecraftProcessCommand(String($0)) }
+        } catch {
+            return true
+        }
+    }
+
+    static func isLunarMinecraftProcessCommand(_ command: String) -> Bool {
+        let normalized = command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.contains(".lunarclient")
+            && (normalized.contains("ichor.logsfile")
+                || normalized.contains("--ichorexternalfiles")
+                || normalized.contains("com.moonsworth.lunar.genesis"))
     }
 
     static func isMinecraftGameWindow(ownerName: String, title: String) -> Bool {

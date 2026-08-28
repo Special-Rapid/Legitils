@@ -28,15 +28,22 @@ struct InstallView: View {
                 .foregroundStyle(.secondary)
             Text(store.bakeCacheInvalidationStatus)
                 .foregroundStyle(.secondary)
+            Text(store.backgroundPreparerStatus)
+                .foregroundStyle(.secondary)
             Divider()
             GroupBox("Lunar bake cache") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("MODの版が変わった時だけ、Lunarのハッシュ名キャッシュ階層を自動走査します。Minecraftゲームwindowが存在しないことを確認してから、見つかった bake.zip をゴミ箱へ移動します。")
+                    Text("MODの版が変わった時だけ、Lunarのハッシュ名キャッシュ階層を自動走査します。MinecraftのゲームwindowとLunar processが存在しないことを確認してから、見つかった bake.zip をゴミ箱へ移動します。")
                         .foregroundStyle(.secondary)
                     Text("ゲーム中は削除せず、Companionを開いたまま終了すれば自動で再確認します。")
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
+            }
+            GroupBox("バックグラウンド更新準備") {
+                Text("Companion UIを閉じていても、ログイン時とCompanion更新時にruntimeを準備します。ゲーム中の bake.zip は触らず、終了後にだけ再確認します。実行中Minecraftへの注入は行いません。")
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
             }
             Spacer()
         }

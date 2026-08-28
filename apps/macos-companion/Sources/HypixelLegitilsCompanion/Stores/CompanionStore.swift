@@ -9,6 +9,7 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var installedRuntime: InstalledRuntime?
     @Published private(set) var runtimeInstallStatus = "JVM runtime を準備していません。"
     @Published private(set) var bakeCacheInvalidationStatus = "MOD更新後にLunar bake cacheを自動確認します。"
+    @Published private(set) var backgroundPreparerStatus = "バックグラウンド更新準備を確認していません。"
     @Published private(set) var statusMessage = "Legitils の状態を確認しています。"
     @Published private(set) var statsStatusMessage = "APIキーはこのMacのKeychainだけに保存します。"
     @Published private(set) var statsBridgeStatus = "Stats Bridge: 停止中"
@@ -26,6 +27,7 @@ final class CompanionStore: ObservableObject {
     private let statsBridgeServer: StatsBridgeServer
     private let runtimeInstaller: RuntimeInstaller
     private let lunarBakeCacheInvalidator: LunarBakeCacheInvalidator
+    private let backgroundPreparerLaunchAgent: BackgroundPreparerLaunchAgent
     private var bakeCacheRetryTimer: Timer?
     private var runtimeStatusRefreshTimer: Timer?
     private var statsBridgeHealthTimer: Timer?
@@ -43,6 +45,7 @@ final class CompanionStore: ObservableObject {
         )
         self.runtimeInstaller = RuntimeInstaller()
         self.lunarBakeCacheInvalidator = LunarBakeCacheInvalidator()
+        self.backgroundPreparerLaunchAgent = BackgroundPreparerLaunchAgent()
         self.statsBridgeServer.observeAvailability { [weak self] available in
             Task { @MainActor in
                 guard let self else { return }
@@ -62,9 +65,19 @@ final class CompanionStore: ObservableObject {
     /// Starts maintenance at launch. Subsequent retries happen only when a MOD update
     /// was safely deferred because a Minecraft game window still exists.
     func startAutomaticMaintenance() {
+        installBackgroundPreparer()
         refresh()
         startRuntimeStatusRefresh()
         startStatsBridgeHealthRefresh()
+    }
+
+    private func installBackgroundPreparer() {
+        do {
+            let plistURL = try backgroundPreparerLaunchAgent.install()
+            backgroundPreparerStatus = "バックグラウンド更新準備を登録しました（\(plistURL.lastPathComponent)）。"
+        } catch {
+            backgroundPreparerStatus = "バックグラウンド更新準備を登録できませんでした: \(error.localizedDescription)"
+        }
     }
 
     private func refresh() {
@@ -152,7 +165,7 @@ final class CompanionStore: ObservableObject {
                 bakeCacheInvalidationStatus = "bake.zip: MOD更新なし（自動削除なし）"
             case .deferredWhileMinecraftGameWindowExists:
                 scheduleBakeCacheRetry()
-                bakeCacheInvalidationStatus = "bake.zip: Minecraftゲームwindowを検出。終了後に自動削除します。"
+                bakeCacheInvalidationStatus = "bake.zip: Minecraftのwindowまたはprocessを検出。終了後に自動削除します。"
             case .movedToTrash(let count):
                 stopBakeCacheRetry()
                 bakeCacheInvalidationStatus = "bake.zip: MOD更新を検出し、\(count) 件をゴミ箱へ移動しました。"
