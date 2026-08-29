@@ -14,26 +14,31 @@ final class LunarBakeCacheInvalidator {
     private let fileManager: FileManager
     private let minecraftGameWindowExists: () -> Bool
     private let minecraftProcessExists: () -> Bool
+    private let lunarLauncherIsRunning: () -> Bool
 
     init(
         fingerprintURL: URL = CompanionPaths.lunarBakeCacheFingerprintURL,
         cache: LunarBakeCacheService = LunarBakeCacheService(),
         fileManager: FileManager = .default,
         minecraftGameWindowExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftGameWindowExists,
-        minecraftProcessExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftProcessExists
+        minecraftProcessExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftProcessExists,
+        lunarLauncherIsRunning: @escaping () -> Bool = LunarLauncherSettingsUpdater.defaultLunarLauncherIsRunning
     ) {
         self.fingerprintURL = fingerprintURL
         self.cache = cache
         self.fileManager = fileManager
         self.minecraftGameWindowExists = minecraftGameWindowExists
         self.minecraftProcessExists = minecraftProcessExists
+        self.lunarLauncherIsRunning = lunarLauncherIsRunning
     }
 
     /// Records a fingerprint only after safe cleanup, including when no bake archive exists.
     func invalidateIfNeeded(for modFingerprint: String) throws -> Outcome {
         guard !modFingerprint.isEmpty else { throw InvalidatorError.emptyFingerprint }
         if completedFingerprint() == modFingerprint { return .unchanged }
-        if minecraftGameWindowExists() || minecraftProcessExists() { return .deferredWhileMinecraftGameWindowExists }
+        if lunarLauncherIsRunning() || minecraftGameWindowExists() || minecraftProcessExists() {
+            return .deferredWhileMinecraftGameWindowExists
+        }
         let moved = try cache.moveToTrash(cache.scan())
         try fileManager.createDirectory(at: fingerprintURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = modFingerprint.data(using: .utf8) else { throw InvalidatorError.emptyFingerprint }

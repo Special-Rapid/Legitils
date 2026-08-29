@@ -43,4 +43,9 @@ enum CompanionPaths {
         return library.appendingPathComponent(productDirectoryName, isDirectory: true)
             .appendingPathComponent("runtime", isDirectory: true)
     }
+
+    static var lunarLauncherSettingsURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".lunarclient/settings/launcher.json")
+    }
 }

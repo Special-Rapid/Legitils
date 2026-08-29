@@ -457,6 +457,7 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertEqual(CompanionPaths.hypixelStatsCacheURL.lastPathComponent, "hypixel-stats-cache.json")
         XCTAssertEqual(CompanionPaths.communityTagCacheURL.lastPathComponent, "community-tag-cache.json")
         XCTAssertEqual(CompanionPaths.loaderRuntimeDirectory.lastPathComponent, "runtime")
+        XCTAssertEqual(CompanionPaths.lunarLauncherSettingsURL.lastPathComponent, "launcher.json")
     }
 
     func testRuntimeInstallerCopiesBundledArtifactsAndGeneratesARealArgument() throws {
@@ -508,6 +509,51 @@ final class CompanionConfigurationTests: XCTestCase {
         }
     }
 
+    func testLunarLauncherSettingsUpdaterReplacesOnlyTheLegitilsAgent() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let launcherSettingsURL = root.appendingPathComponent("settings/launcher.json")
+        try FileManager.default.createDirectory(at: launcherSettingsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let original: [String: Any] = [
+            "settings": [
+                "jvmArgs": "-Xmx4G -javaagent:/repo/hypixel-legitils-loader-0.1.0-SNAPSHOT.jar=/repo/loader-dev-smoke.json -Dexample=true",
+                "closingNotifications": "JUST_ONCE"
+            ],
+            "trackingIds": ["ga4": ""]
+        ]
+        try JSONSerialization.data(withJSONObject: original).write(to: launcherSettingsURL)
+
+        let argument = "-javaagent:/Users/example/Library/HypixelLegitils/runtime/hypixel-legitils-loader.jar=/Users/example/Library/HypixelLegitils/runtime/loader-config.json"
+        XCTAssertEqual(
+            try LunarLauncherSettingsUpdater(
+                launcherSettingsURL: launcherSettingsURL,
+                lunarLauncherIsRunning: { false }
+            ).install(jvmArgument: argument),
+            .updated
+        )
+
+        let updated = try JSONSerialization.jsonObject(with: Data(contentsOf: launcherSettingsURL)) as? [String: Any]
+        let settings = updated?["settings"] as? [String: Any]
+        XCTAssertEqual(settings?["jvmArgs"] as? String, "-Xmx4G \(argument) -Dexample=true")
+        XCTAssertEqual(settings?["closingNotifications"] as? String, "JUST_ONCE")
+        XCTAssertEqual(updated?["trackingIds"] as? [String: String], ["ga4": ""])
+        XCTAssertEqual(LunarLauncherSettingsUpdater.replacingLegitilsAgent(in: "-Xmx2G", with: argument), "-Xmx2G")
+        XCTAssertFalse(LunarLauncherSettingsUpdater.isSafelyTokenizableJVMArguments("-Xmx2G \"unterminated"))
+        XCTAssertFalse(LunarLauncherSettingsUpdater.isSafelyTokenizableJVMArguments("-Xmx2G\n-Dunsafe=true"))
+        XCTAssertFalse(LunarLauncherSettingsUpdater.isSafelyTokenizableJVMArguments("-Dfoo=/path\\ with-space"))
+
+        let deferredSettingsURL = root.appendingPathComponent("settings/deferred-launcher.json")
+        try JSONSerialization.data(withJSONObject: original).write(to: deferredSettingsURL)
+        XCTAssertEqual(
+            try LunarLauncherSettingsUpdater(
+                launcherSettingsURL: deferredSettingsURL,
+                lunarLauncherIsRunning: { true }
+            ).install(jvmArgument: argument),
+            .deferredWhileLunarLauncherRunning
+        )
+        XCTAssertEqual(try Data(contentsOf: deferredSettingsURL), try JSONSerialization.data(withJSONObject: original))
+    }
+
     func testLunarBakeCacheFindsAndMovesAllNestedBakeArchivesWithoutHashAssumptions() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -549,7 +595,8 @@ final class CompanionConfigurationTests: XCTestCase {
             fingerprintURL: fingerprint,
             cache: cache,
             minecraftGameWindowExists: { false },
-            minecraftProcessExists: { false }
+            minecraftProcessExists: { false },
+            lunarLauncherIsRunning: { false }
         )
         XCTAssertEqual(try invalidator.invalidateIfNeeded(for: "mod-one"), .movedToTrash(1))
         XCTAssertEqual(moved.count, 1)
@@ -569,7 +616,8 @@ final class CompanionConfigurationTests: XCTestCase {
             fingerprintURL: deferredFingerprint,
             cache: cache,
             minecraftGameWindowExists: { true },
-            minecraftProcessExists: { false }
+            minecraftProcessExists: { false },
+            lunarLauncherIsRunning: { false }
         )
         XCTAssertEqual(try deferred.invalidateIfNeeded(for: "mod-two"), .deferredWhileMinecraftGameWindowExists)
         XCTAssertFalse(FileManager.default.fileExists(atPath: deferredFingerprint.path))
@@ -612,7 +660,8 @@ final class CompanionConfigurationTests: XCTestCase {
             fingerprintURL: root.appendingPathComponent("fingerprint.txt"),
             cache: cache,
             minecraftGameWindowExists: { false },
-            minecraftProcessExists: { true }
+            minecraftProcessExists: { true },
+            lunarLauncherIsRunning: { false }
         )
         XCTAssertEqual(try invalidator.invalidateIfNeeded(for: "mod-windowless"), .deferredWhileMinecraftGameWindowExists)
         XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
@@ -621,9 +670,12 @@ final class CompanionConfigurationTests: XCTestCase {
     func testBackgroundRuntimePreparerIsHeadlessAndFinishesWhenCacheIsSafe() throws {
         let runtime = makeInstalledRuntime(fingerprint: "mod-one")
         let runtimePreparer = FakeRuntimePreparer(runtime: runtime)
+        let launcherSettingsUpdater = FakeLauncherSettingsUpdater()
         let invalidator = FakeBakeCacheInvalidator(outcomes: [.movedToTrash(2)])
         let preparer = BackgroundRuntimePreparer(
             runtimePreparer: runtimePreparer,
+            lunarRuntimeIsActive: { false },
+            launcherSettingsUpdater: launcherSettingsUpdater,
             cacheInvalidator: invalidator,
             diagnostic: { _ in }
         )
@@ -632,15 +684,19 @@ final class CompanionConfigurationTests: XCTestCase {
         XCTAssertFalse(BackgroundRuntimePreparer.isRequested(arguments: ["Companion"]))
         XCTAssertEqual(try preparer.prepareOnce(), .prepared(.movedToTrash(2)))
         XCTAssertEqual(runtimePreparer.prepareCount, 1)
+        XCTAssertEqual(launcherSettingsUpdater.arguments, [runtime.jvmArgument])
         XCTAssertEqual(invalidator.fingerprints, ["mod-one"])
     }
 
     func testBackgroundRuntimePreparerWaitsOnlyForAnActiveGameAndDoesNotReinstallOnRetry() {
         let runtimePreparer = FakeRuntimePreparer(runtime: makeInstalledRuntime(fingerprint: "mod-two"))
+        let launcherSettingsUpdater = FakeLauncherSettingsUpdater()
         let invalidator = FakeBakeCacheInvalidator(outcomes: [.deferredWhileMinecraftGameWindowExists, .unchanged])
         var sleeps: [TimeInterval] = []
         let preparer = BackgroundRuntimePreparer(
             runtimePreparer: runtimePreparer,
+            lunarRuntimeIsActive: { false },
+            launcherSettingsUpdater: launcherSettingsUpdater,
             cacheInvalidator: invalidator,
             retryInterval: 0.25,
             sleep: { sleeps.append($0) },
@@ -649,8 +705,48 @@ final class CompanionConfigurationTests: XCTestCase {
 
         XCTAssertEqual(preparer.run(), 0)
         XCTAssertEqual(runtimePreparer.prepareCount, 1)
+        XCTAssertEqual(launcherSettingsUpdater.arguments, ["-javaagent:/tmp/loader.jar=/tmp/loader-config.json"])
         XCTAssertEqual(invalidator.fingerprints, ["mod-two", "mod-two"])
         XCTAssertEqual(sleeps, [0.25])
+    }
+
+    func testBackgroundRuntimePreparerDefersWithoutTouchingCacheWhileLunarLauncherIsRunning() throws {
+        let runtime = makeInstalledRuntime(fingerprint: "mod-launcher-active")
+        let runtimePreparer = FakeRuntimePreparer(runtime: runtime)
+        let launcherSettingsUpdater = FakeLauncherSettingsUpdater()
+        launcherSettingsUpdater.outcome = .deferredWhileLunarLauncherRunning
+        let invalidator = FakeBakeCacheInvalidator(outcomes: [.movedToTrash(1)])
+        let preparer = BackgroundRuntimePreparer(
+            runtimePreparer: runtimePreparer,
+            lunarRuntimeIsActive: { false },
+            launcherSettingsUpdater: launcherSettingsUpdater,
+            cacheInvalidator: invalidator,
+            diagnostic: { _ in }
+        )
+
+        XCTAssertEqual(try preparer.prepareOnce(), .deferredWhileLunarLauncherRunning)
+        XCTAssertEqual(runtimePreparer.prepareCount, 0)
+        XCTAssertTrue(launcherSettingsUpdater.arguments.isEmpty)
+        XCTAssertTrue(invalidator.fingerprints.isEmpty)
+    }
+
+    func testBackgroundRuntimePreparerDoesNotReplaceArtifactsWhileLunarIsActive() throws {
+        let runtime = makeInstalledRuntime(fingerprint: "mod-runtime-active")
+        let runtimePreparer = FakeRuntimePreparer(runtime: runtime)
+        let launcherSettingsUpdater = FakeLauncherSettingsUpdater()
+        let invalidator = FakeBakeCacheInvalidator(outcomes: [.movedToTrash(1)])
+        let preparer = BackgroundRuntimePreparer(
+            runtimePreparer: runtimePreparer,
+            lunarRuntimeIsActive: { true },
+            launcherSettingsUpdater: launcherSettingsUpdater,
+            cacheInvalidator: invalidator,
+            diagnostic: { _ in }
+        )
+
+        XCTAssertEqual(try preparer.prepareOnce(), .deferredWhileLunarRuntimeIsActive)
+        XCTAssertEqual(runtimePreparer.prepareCount, 0)
+        XCTAssertTrue(launcherSettingsUpdater.arguments.isEmpty)
+        XCTAssertTrue(invalidator.fingerprints.isEmpty)
     }
 
     func testLaunchAgentRegistrationUsesTheHeadlessPreparerAndWatchesTheCompanionBundle() throws {
@@ -1349,6 +1445,20 @@ private final class FakeBakeCacheInvalidator: LunarBakeCacheInvalidating {
     func invalidateIfNeeded(for modFingerprint: String) throws -> LunarBakeCacheInvalidator.Outcome {
         fingerprints.append(modFingerprint)
         return outcomes.isEmpty ? .unchanged : outcomes.removeFirst()
+    }
+}
+
+private final class FakeLauncherSettingsUpdater: LunarLauncherSettingsUpdating {
+    private(set) var arguments: [String] = []
+    var outcome: LunarLauncherSettingsUpdater.Outcome = .updated
+
+    func preflight(jvmArgument: String) throws -> LunarLauncherSettingsUpdater.Outcome {
+        outcome
+    }
+
+    func install(jvmArgument: String) throws -> LunarLauncherSettingsUpdater.Outcome {
+        arguments.append(jvmArgument)
+        return outcome
     }
 }
 
