@@ -2,7 +2,11 @@ package com.snkisk.hypixellegitils.loader;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public final class HypixelLegitilsLoaderTest {
@@ -62,6 +66,29 @@ public final class HypixelLegitilsLoaderTest {
         assertFalse(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
             "IchorClassLoader(META_MIXIN)"
         ));
+    }
+
+    @Test
+    public void emitsOnlyBoundedRecognizedStageDiagnostics() {
+        String className = "com.moonsworth.lunar.ichor.IchorClassLoader";
+        assertEquals(
+            className + "[stage=MIXIN]",
+            HypixelLegitilsLoader.describeMixinHostLoader(
+                className, "IchorClassLoader(MIXIN) /private/path"
+            )
+        );
+        assertEquals(
+            className + "[stage=META_MIXIN]",
+            HypixelLegitilsLoader.describeMixinHostLoader(className, "IchorClassLoader(META_MIXIN)")
+        );
+        List<String> candidates = new ArrayList<String>();
+        for (int index = 0; index < HypixelLegitilsLoader.MIXIN_HOST_DIAGNOSTIC_LIMIT + 2; index++) {
+            HypixelLegitilsLoader.addMixinHostCandidate(
+                candidates, "loader." + index, "opaque loader " + index
+            );
+        }
+        assertEquals(HypixelLegitilsLoader.MIXIN_HOST_DIAGNOSTIC_LIMIT, candidates.size());
+        assertEquals("loader.0[stage=unlabeled]", candidates.get(0));
     }
 
     @Test
