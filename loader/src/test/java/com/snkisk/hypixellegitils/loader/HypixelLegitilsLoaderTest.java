@@ -35,6 +35,26 @@ public final class HypixelLegitilsLoaderTest {
     }
 
     @Test
+    public void acceptsTheExactLabeledGameStageWithoutTrustingOtherStages() {
+        assertTrue(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
+            "IchorClassLoader(MIXIN)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
+            "IchorClassLoader(META_MIXIN)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
+            "IchorClassLoader(PRE_OPTIFINE_PATCH)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
+            "IchorClassLoader(MIXIN) META_MIXIN"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
+            "IchorClassLoader(MIXIN) PRE_OPTIFINE_PATCH"
+        ));
+        assertFalse(HypixelLegitilsLoader.isLabeledLunarGameMixinHost(null));
+    }
+
+    @Test
     public void acceptsOnlyAnUnlabeledIchorHostAfterItsMixinClassIsObserved() {
         String className = "com.moonsworth.lunar.ichor.IchorClassLoader";
         assertTrue(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(

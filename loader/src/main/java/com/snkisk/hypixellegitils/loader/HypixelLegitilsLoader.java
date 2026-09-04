@@ -212,6 +212,7 @@ public final class HypixelLegitilsLoader {
             String className = candidate == null ? null : candidate.getClass().getName();
             String description = candidate == null ? null : candidate.toString();
             return HypixelLegitilsLoader.isLunarGameMixinClassLoader(className, description)
+                || HypixelLegitilsLoader.isLabeledLunarGameMixinHost(description)
                 || HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(className, description);
         }
 
@@ -251,8 +252,20 @@ public final class HypixelLegitilsLoader {
      */
     static boolean isLunarGameMixinClassLoader(String className, String description) {
         return isIchorClassLoaderName(className)
-            && description != null
-            && description.contains("IchorClassLoader(MIXIN)");
+            && isLabeledLunarGameMixinHost(description);
+    }
+
+    /**
+     * The loaded-Mixins path already proves that this exact loader owns the Mixin
+     * runtime. Some Genesis builds expose that loader with an obfuscated Java class
+     * name while retaining the stable stage label in {@code toString()}; accept that
+     * exact label only in the loaded-Mixins path, never during early discovery.
+     */
+    static boolean isLabeledLunarGameMixinHost(String description) {
+        if (description == null || !description.contains("IchorClassLoader(MIXIN)")) return false;
+        String normalized = description.toUpperCase(java.util.Locale.ROOT);
+        return !normalized.contains("META_MIXIN")
+            && !normalized.contains("PRE_OPTIFINE_PATCH");
     }
 
     /**
