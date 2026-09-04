@@ -166,7 +166,7 @@ public final class HypixelLegitilsLoader {
         private Class<?> findLoadedMixinsClass() {
             for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
                 if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())
-                    && isLunarGameMixinClassLoader(candidate.getClassLoader())) {
+                    && isLoadedLunarGameMixinClassLoader(candidate.getClassLoader())) {
                     return candidate;
                 }
             }
@@ -200,6 +200,19 @@ public final class HypixelLegitilsLoader {
                 candidate == null ? null : candidate.getClass().getName(),
                 candidate == null ? null : candidate.toString()
             );
+        }
+
+        /**
+         * A current Lunar Ichor host can omit its stage from {@code toString()}.
+         * Do not use that host during the early context-loader probe: only accept it
+         * here after its own Mixins class has already been loaded. Explicitly labeled
+         * META_MIXIN and PRE_OPTIFINE_PATCH hosts remain rejected by the normal rule.
+         */
+        private boolean isLoadedLunarGameMixinClassLoader(ClassLoader candidate) {
+            String className = candidate == null ? null : candidate.getClass().getName();
+            String description = candidate == null ? null : candidate.toString();
+            return HypixelLegitilsLoader.isLunarGameMixinClassLoader(className, description)
+                || HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(className, description);
         }
 
         private void register(Class<?> mixins) {
@@ -240,5 +253,19 @@ public final class HypixelLegitilsLoader {
         return isIchorClassLoaderName(className)
             && description != null
             && description.contains("IchorClassLoader(MIXIN)");
+    }
+
+    /**
+     * Compatibility fallback for a host that no longer renders its stage name.
+     * It is deliberately used only after {@code org.spongepowered.asm.mixin.Mixins}
+     * is known to be loaded by that exact loader; early context-loader discovery keeps
+     * requiring the explicit game-stage label above.
+     */
+    static boolean isUnlabeledLunarIchorMixinClassLoader(String className, String description) {
+        if (!isIchorClassLoaderName(className) || description == null) return false;
+        String normalized = description.toUpperCase(java.util.Locale.ROOT);
+        return !normalized.contains("ICHORCLASSLOADER(")
+            && !normalized.contains("META_MIXIN")
+            && !normalized.contains("PRE_OPTIFINE_PATCH");
     }
 }

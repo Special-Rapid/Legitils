@@ -33,4 +33,21 @@ public final class HypixelLegitilsLoaderTest {
             "org.spongepowered.asm.launch.MixinClassLoader", "IchorClassLoader(MIXIN)"
         ));
     }
+
+    @Test
+    public void acceptsOnlyAnUnlabeledIchorHostAfterItsMixinClassIsObserved() {
+        String className = "com.moonsworth.lunar.ichor.IchorClassLoader";
+        assertTrue(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
+            className, "com.moonsworth.lunar.ichor.IchorClassLoader@1234"
+        ));
+        assertFalse(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
+            className, "IchorClassLoader(META_MIXIN)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
+            className, "IchorClassLoader(PRE_OPTIFINE_PATCH)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
+            "org.spongepowered.asm.launch.MixinClassLoader", "unlabeled"
+        ));
+    }
 }
