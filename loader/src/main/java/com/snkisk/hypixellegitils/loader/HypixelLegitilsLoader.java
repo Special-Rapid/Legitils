@@ -196,8 +196,11 @@ public final class HypixelLegitilsLoader {
         }
 
         private boolean isLunarGameMixinClassLoader(ClassLoader candidate) {
-            return HypixelLegitilsLoader.isLunarGameMixinClassLoader(
-                candidate == null ? null : candidate.getClass().getName(),
+            // Genesis can obfuscate the concrete Java class name of the context
+            // loader. The following bootstrap-ownership check still proves that
+            // the candidate owns Mixin; use the stable explicit game-stage label
+            // here rather than excluding that real host by its implementation name.
+            return HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
                 candidate == null ? null : candidate.toString()
             );
         }
