@@ -3,18 +3,12 @@ import SwiftUI
 
 @MainActor
 final class CompanionStore: ObservableObject {
-    private enum RuntimePreparationResult {
-        case deferred
-        case prepared(InstalledRuntime, LunarBakeCacheInvalidator.Outcome)
-    }
-
     @Published private(set) var configuration: CompanionConfiguration?
     @Published var settingsDraft: CompanionConfiguration?
     @Published private(set) var runtimeStatus: RuntimeStatus?
     @Published private(set) var installedRuntime: InstalledRuntime?
     @Published private(set) var runtimeInstallStatus = "JVM runtime を準備していません。"
     @Published private(set) var bakeCacheInvalidationStatus = "MOD更新後にLunar bake cacheを自動確認します。"
-    @Published private(set) var backgroundPreparerStatus = "バックグラウンド更新準備を確認していません。"
     @Published private(set) var statusMessage = "Legitils の状態を確認しています。"
     @Published private(set) var statsStatusMessage = "APIキーはこのMacのKeychainだけに保存します。"
     @Published private(set) var statsBridgeStatus = "Stats Bridge: 停止中"
@@ -31,9 +25,7 @@ final class CompanionStore: ObservableObject {
     private let statsProviderLookup: StatsProviderLookup
     private let statsBridgeServer: StatsBridgeServer
     private let runtimeInstaller: RuntimeInstaller
-    private let lunarLauncherSettingsUpdater: LunarLauncherSettingsUpdater
     private let lunarBakeCacheInvalidator: LunarBakeCacheInvalidator
-    private let backgroundPreparerLaunchAgent: BackgroundPreparerLaunchAgent
     private var bakeCacheRetryTimer: Timer?
     private var runtimeStatusRefreshTimer: Timer?
     private var statsBridgeHealthTimer: Timer?
@@ -50,9 +42,7 @@ final class CompanionStore: ObservableObject {
             hypixelKeyValidation: lookup.validateHypixelAPIKey
         )
         self.runtimeInstaller = RuntimeInstaller()
-        self.lunarLauncherSettingsUpdater = LunarLauncherSettingsUpdater()
         self.lunarBakeCacheInvalidator = LunarBakeCacheInvalidator()
-        self.backgroundPreparerLaunchAgent = BackgroundPreparerLaunchAgent()
         self.statsBridgeServer.observeAvailability { [weak self] available in
             Task { @MainActor in
                 guard let self else { return }
@@ -72,19 +62,9 @@ final class CompanionStore: ObservableObject {
     /// Starts maintenance at launch. Subsequent retries happen only when a MOD update
     /// was safely deferred because a Minecraft game window still exists.
     func startAutomaticMaintenance() {
-        installBackgroundPreparer()
         refresh()
         startRuntimeStatusRefresh()
         startStatsBridgeHealthRefresh()
-    }
-
-    private func installBackgroundPreparer() {
-        do {
-            let plistURL = try backgroundPreparerLaunchAgent.install()
-            backgroundPreparerStatus = "バックグラウンド更新準備を登録しました（\(plistURL.lastPathComponent)）。"
-        } catch {
-            backgroundPreparerStatus = "バックグラウンド更新準備を登録できませんでした: \(error.localizedDescription)"
-        }
     }
 
     private func refresh() {
@@ -141,35 +121,9 @@ final class CompanionStore: ObservableObject {
 
     func prepareRuntime() {
         do {
-            let result = try LunarRuntimePreparationGate.withExclusivePreparationLock { () throws -> RuntimePreparationResult in
-                guard !LunarRuntimePreparationGate.defaultLunarRuntimeIsActive() else { return .deferred }
-                switch try lunarLauncherSettingsUpdater.preflight(jvmArgument: RuntimeInstaller.runtimeJVMArgument) {
-                case .updated, .unchanged: break
-                case .noLegitilsAgent, .deferredWhileLunarLauncherRunning:
-                    return .deferred
-                }
-                guard !LunarRuntimePreparationGate.defaultLunarRuntimeIsActive() else { return .deferred }
-                let runtime = try runtimeInstaller.prepare()
-                guard !LunarRuntimePreparationGate.defaultLunarRuntimeIsActive() else { return .deferred }
-                switch try lunarLauncherSettingsUpdater.install(jvmArgument: runtime.jvmArgument) {
-                case .updated, .unchanged: break
-                case .noLegitilsAgent, .deferredWhileLunarLauncherRunning:
-                    return .deferred
-                }
-                guard !LunarRuntimePreparationGate.defaultLunarRuntimeIsActive() else { return .deferred }
-                return .prepared(runtime, try lunarBakeCacheInvalidator.invalidateIfNeeded(for: runtime.modFingerprint))
-            }
-            switch result {
-            case .prepared(let runtime, let bakeOutcome):
-                installedRuntime = runtime
-                runtimeInstallStatus = "最新のLoaderとMODを配置し、LunarのJVM引数を更新しました。"
-                updateBakeCacheInvalidationStatus(bakeOutcome)
-            case .deferred:
-                stopBakeCacheRetry()
-                installedRuntime = nil
-                runtimeInstallStatus = "Lunarが起動中のため、JVM引数の更新は終了後にバックグラウンドで再試行します。"
-                bakeCacheInvalidationStatus = "bake.zip: Lunar終了後にruntime更新と合わせて確認します。"
-            }
+            installedRuntime = try runtimeInstaller.prepare()
+            runtimeInstallStatus = "最新のLoaderとMODをローカルruntimeへ配置しました。"
+            try updateBakeCacheInvalidationStatus(for: installedRuntime!.modFingerprint)
         } catch {
             stopBakeCacheRetry()
             installedRuntime = nil
@@ -184,13 +138,7 @@ final class CompanionStore: ObservableObject {
             return
         }
         do {
-            let outcome = try LunarRuntimePreparationGate.withExclusivePreparationLock {
-                guard !LunarRuntimePreparationGate.defaultLunarRuntimeIsActive() else {
-                    return LunarBakeCacheInvalidator.Outcome.deferredWhileMinecraftGameWindowExists
-                }
-                return try lunarBakeCacheInvalidator.invalidateIfNeeded(for: installedRuntime.modFingerprint)
-            }
-            updateBakeCacheInvalidationStatus(outcome)
+            try updateBakeCacheInvalidationStatus(for: installedRuntime.modFingerprint)
         } catch {
             stopBakeCacheRetry()
             bakeCacheInvalidationStatus = "bake.zip: 自動確認できませんでした: \(error.localizedDescription)"
@@ -198,17 +146,13 @@ final class CompanionStore: ObservableObject {
     }
 
     private func updateBakeCacheInvalidationStatus(for modFingerprint: String) throws {
-        updateBakeCacheInvalidationStatus(try lunarBakeCacheInvalidator.invalidateIfNeeded(for: modFingerprint))
-    }
-
-    private func updateBakeCacheInvalidationStatus(_ outcome: LunarBakeCacheInvalidator.Outcome) {
-        switch outcome {
+        switch try lunarBakeCacheInvalidator.invalidateIfNeeded(for: modFingerprint) {
             case .unchanged:
                 stopBakeCacheRetry()
                 bakeCacheInvalidationStatus = "bake.zip: MOD更新なし（自動削除なし）"
             case .deferredWhileMinecraftGameWindowExists:
                 scheduleBakeCacheRetry()
-                bakeCacheInvalidationStatus = "bake.zip: Minecraftのwindowまたはprocessを検出。終了後に自動削除します。"
+                bakeCacheInvalidationStatus = "bake.zip: LunarまたはMinecraftが起動中です。終了後に自動で再確認します。"
             case .movedToTrash(let count):
                 stopBakeCacheRetry()
                 bakeCacheInvalidationStatus = "bake.zip: MOD更新を検出し、\(count) 件をゴミ箱へ移動しました。"

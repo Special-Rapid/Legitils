@@ -9,11 +9,6 @@ struct RuntimeInstaller {
     static let modFileName = "hypixel-legitils-mod.jar"
     static let configurationFileName = "loader-config.json"
 
-    static var runtimeJVMArgument: String {
-        let runtime = CompanionPaths.loaderRuntimeDirectory
-        return "-javaagent:\(runtime.appendingPathComponent(loaderFileName).path)=\(runtime.appendingPathComponent(configurationFileName).path)"
-    }
-
     private let bundledLoaderURL: URL?
     private let bundledModURL: URL?
     private let runtimeDirectory: URL

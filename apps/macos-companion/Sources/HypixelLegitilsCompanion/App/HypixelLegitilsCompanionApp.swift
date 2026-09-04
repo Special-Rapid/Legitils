@@ -1,5 +1,6 @@
 import SwiftUI
 
+@main
 struct HypixelLegitilsCompanionApp: App {
     @StateObject private var store = CompanionStore()
 

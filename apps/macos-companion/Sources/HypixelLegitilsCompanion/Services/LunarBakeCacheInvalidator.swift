@@ -13,30 +13,27 @@ final class LunarBakeCacheInvalidator {
     private let cache: LunarBakeCacheService
     private let fileManager: FileManager
     private let minecraftGameWindowExists: () -> Bool
-    private let minecraftProcessExists: () -> Bool
-    private let lunarLauncherIsRunning: () -> Bool
+    private let lunarRuntimeIsActive: () -> Bool
 
     init(
         fingerprintURL: URL = CompanionPaths.lunarBakeCacheFingerprintURL,
         cache: LunarBakeCacheService = LunarBakeCacheService(),
         fileManager: FileManager = .default,
         minecraftGameWindowExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftGameWindowExists,
-        minecraftProcessExists: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultMinecraftProcessExists,
-        lunarLauncherIsRunning: @escaping () -> Bool = LunarLauncherSettingsUpdater.defaultLunarLauncherIsRunning
+        lunarRuntimeIsActive: @escaping () -> Bool = LunarBakeCacheInvalidator.defaultLunarRuntimeIsActive
     ) {
         self.fingerprintURL = fingerprintURL
         self.cache = cache
         self.fileManager = fileManager
         self.minecraftGameWindowExists = minecraftGameWindowExists
-        self.minecraftProcessExists = minecraftProcessExists
-        self.lunarLauncherIsRunning = lunarLauncherIsRunning
+        self.lunarRuntimeIsActive = lunarRuntimeIsActive
     }
 
     /// Records a fingerprint only after safe cleanup, including when no bake archive exists.
     func invalidateIfNeeded(for modFingerprint: String) throws -> Outcome {
         guard !modFingerprint.isEmpty else { throw InvalidatorError.emptyFingerprint }
         if completedFingerprint() == modFingerprint { return .unchanged }
-        if lunarLauncherIsRunning() || minecraftGameWindowExists() || minecraftProcessExists() {
+        if minecraftGameWindowExists() || lunarRuntimeIsActive() {
             return .deferredWhileMinecraftGameWindowExists
         }
         let moved = try cache.moveToTrash(cache.scan())
@@ -69,10 +66,10 @@ final class LunarBakeCacheInvalidator {
         }
     }
 
-    /// Protects Lunar's game process before it creates a visible window and while the
-    /// window is hidden. If process inspection is unavailable, defer rather than risk
-    /// moving a bake archive that the JVM may still be reading.
-    static func defaultMinecraftProcessExists() -> Bool {
+    /// Cache archives are writable only after every Lunar launcher/game process is gone.
+    /// The window check alone misses startup and hidden-game phases; inability to inspect
+    /// processes therefore defers rather than moving an archive a JVM might still read.
+    static func defaultLunarRuntimeIsActive() -> Bool {
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -81,13 +78,13 @@ final class LunarBakeCacheInvalidator {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            // Drain before waiting. `ps` can list enough command lines to fill a Pipe;
-            // waiting first deadlocks the Companion and the headless launchd job.
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return true }
-            guard let commands = String(data: data, encoding: .utf8) else { return true }
-            return containsLunarMinecraftProcess(in: commands)
+            guard process.terminationStatus == 0,
+                  let commands = String(data: data, encoding: .utf8) else { return true }
+            let normalized = commands.lowercased()
+            return normalized.contains("lunar client.app/contents/macos/lunar client")
+                || containsLunarMinecraftProcess(in: normalized)
         } catch {
             return true
         }

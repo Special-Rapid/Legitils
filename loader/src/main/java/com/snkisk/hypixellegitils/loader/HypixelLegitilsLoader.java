@@ -6,8 +6,6 @@ import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.jar.JarFile;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -20,7 +18,6 @@ public final class HypixelLegitilsLoader {
     private static final String BUILD_METADATA_ENTRY = "hypixellegitils-build.properties";
     private static final String BUILD_VERSION_PROPERTY = "hypixellegitils.build.version";
     private static final String BUILD_REVISION_PROPERTY = "hypixellegitils.build.revision";
-    static final int MIXIN_HOST_DIAGNOSTIC_LIMIT = 4;
     private static volatile JarFile systemSearchJar;
 
     private HypixelLegitilsLoader() {
@@ -164,37 +161,6 @@ public final class HypixelLegitilsLoader {
             }
             status("mixin-runtime-timeout");
             diagnostic("Mixin runtime was not observed before the compatibility-spike timeout.");
-            diagnostic("Mixin host candidates: " + describeMixinHostCandidates());
-        }
-
-        /**
-         * Emits only bounded loader identities and recognised Lunar stage labels.
-         * This intentionally avoids thread names, file paths, and arbitrary
-         * toString contents while a real-client compatibility diagnosis is open.
-         */
-        private String describeMixinHostCandidates() {
-            List<String> loadedMixins = new ArrayList<String>();
-            for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
-                if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())) {
-                    addCandidate(loadedMixins, candidate.getClassLoader());
-                }
-            }
-            List<String> ichorContexts = new ArrayList<String>();
-            for (Thread thread : Thread.getAllStackTraces().keySet()) {
-                ClassLoader candidate = thread.getContextClassLoader();
-                if (isIchorClassLoaderName(candidate == null ? null : candidate.getClass().getName())) {
-                    addCandidate(ichorContexts, candidate);
-                }
-            }
-            return "loadedMixins=" + loadedMixins + "; ichorContexts=" + ichorContexts;
-        }
-
-        private void addCandidate(List<String> candidates, ClassLoader loader) {
-            addMixinHostCandidate(
-                candidates,
-                loader == null ? null : loader.getClass().getName(),
-                loader == null ? null : loader.toString()
-            );
         }
 
         private Class<?> findLoadedMixinsClass() {
@@ -274,25 +240,5 @@ public final class HypixelLegitilsLoader {
         return isIchorClassLoaderName(className)
             && description != null
             && description.contains("IchorClassLoader(MIXIN)");
-    }
-
-    static String describeMixinHostLoader(String className, String description) {
-        String loader = className == null ? "bootstrap" : className;
-        return loader + "[stage=" + lunarMixinStage(description) + "]";
-    }
-
-    static void addMixinHostCandidate(List<String> candidates, String className, String description) {
-        String candidate = describeMixinHostLoader(className, description);
-        if (!candidates.contains(candidate) && candidates.size() < MIXIN_HOST_DIAGNOSTIC_LIMIT) {
-            candidates.add(candidate);
-        }
-    }
-
-    private static String lunarMixinStage(String description) {
-        if (description == null) return "unlabeled";
-        if (description.contains("IchorClassLoader(PRE_OPTIFINE_PATCH)")) return "PRE_OPTIFINE_PATCH";
-        if (description.contains("IchorClassLoader(META_MIXIN)")) return "META_MIXIN";
-        if (description.contains("IchorClassLoader(MIXIN)")) return "MIXIN";
-        return "unlabeled";
     }
 }
