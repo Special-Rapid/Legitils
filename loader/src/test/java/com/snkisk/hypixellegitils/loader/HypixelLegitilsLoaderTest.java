@@ -69,7 +69,7 @@ public final class HypixelLegitilsLoaderTest {
     }
 
     @Test
-    public void rejectsMetaAndPreStagesForTheLoadedMinecraftHost() {
+    public void rejectsMetaAndPreStagesForThePrelaunchMixinEnvironmentHost() {
         assertTrue(HypixelLegitilsLoader.isNonMetaOrPreMixinHost("unlabeled Genesis loader"));
         assertFalse(HypixelLegitilsLoader.isNonMetaOrPreMixinHost(
             "IchorClassLoader(META_MIXIN)"

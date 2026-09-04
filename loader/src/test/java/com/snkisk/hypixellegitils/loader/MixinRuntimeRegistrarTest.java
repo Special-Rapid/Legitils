@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class MixinRuntimeRegistrarTest {
@@ -27,6 +28,24 @@ public final class MixinRuntimeRegistrarTest {
         ));
         assertTrue(FixtureBootstrap.initialized);
         assertEquals("mixins.hypixellegitils.json", FixtureMixins.configuration);
+    }
+
+    @Test
+    public void rejectsMixinClassesResolvedFromAParentInsteadOfTheCandidateLoader() throws Exception {
+        Path directory = Files.createTempDirectory("legitils-mixin-runtime-test");
+        Path modJar = LoaderConfigTest.createModJar(directory, true, true);
+        Path configFile = directory.resolve("loader-config.json");
+        String json = "{\"schemaVersion\":1,\"modJar\":\"" + modJar.toString()
+            + "\",\"mixinConfig\":\"mixins.hypixellegitils.json\",\"injectedProperty\":\"hypixellegitils.agent.injected\"}";
+        Files.write(configFile, json.getBytes(StandardCharsets.UTF_8));
+
+        ClassLoader child = new ClassLoader(FixtureBootstrap.class.getClassLoader()) { };
+        assertFalse(MixinRuntimeRegistrar.register(
+            LoaderConfig.load(configFile.toAbsolutePath()),
+            child,
+            FixtureBootstrap.class.getName(),
+            FixtureMixins.class.getName()
+        ));
     }
 
     public static final class FixtureBootstrap {

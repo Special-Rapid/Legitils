@@ -2,7 +2,6 @@ package com.snkisk.hypixellegitils.loader;
 
 import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -20,6 +19,8 @@ public final class HypixelLegitilsLoader {
     private static final String BUILD_METADATA_ENTRY = "hypixellegitils-build.properties";
     private static final String BUILD_VERSION_PROPERTY = "hypixellegitils.build.version";
     private static final String BUILD_REVISION_PROPERTY = "hypixellegitils.build.revision";
+    private static final String MIXIN_ENVIRONMENT_CLASS = "org.spongepowered.asm.mixin.MixinEnvironment";
+    private static final String MIXINS_CLASS = "org.spongepowered.asm.mixin.Mixins";
     static final int MIXIN_HOST_DIAGNOSTIC_LIMIT = 4;
     private static volatile JarFile systemSearchJar;
 
@@ -144,9 +145,9 @@ public final class HypixelLegitilsLoader {
         public void run() {
             long deadline = System.currentTimeMillis() + TIMEOUT_MILLIS;
             while (System.currentTimeMillis() < deadline) {
-                Class<?> mixins = findLoadedMixinsClass();
-                if (mixins != null) {
-                    register(mixins);
+                ClassLoader mixinLoader = findPrelaunchMixinLoader();
+                if (mixinLoader != null && MixinRuntimeRegistrar.register(config, mixinLoader)) {
+                    status("mixin-config-registered");
                     return;
                 }
                 try {
@@ -197,28 +198,21 @@ public final class HypixelLegitilsLoader {
             );
         }
 
-        private Class<?> findLoadedMixinsClass() {
-            ClassLoader minecraftLoader = findLoadedMinecraftClassLoader();
-            if (minecraftLoader == null || !ownsMixinBootstrap(minecraftLoader)) return null;
-            for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
-                if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())
-                    && candidate.getClassLoader() == minecraftLoader) {
-                    return candidate;
-                }
-            }
-            return null;
-        }
-
         /**
-         * Current Genesis exposes the game host as an unlabeled loader. Accept it
-         * only after the same loader is proven to own Minecraft; a META/PRE stage
-         * remains ineligible even if it also carries a Mixin runtime.
+         * Match the prelaunch point used by the working Meowtils agent: the game
+         * Mixin environment exists before Minecraft is defined. A META/PRE stage
+         * is excluded and both MixinEnvironment and Mixins must share one loader.
          */
-        private ClassLoader findLoadedMinecraftClassLoader() {
+        private ClassLoader findPrelaunchMixinLoader() {
             for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
-                if ("net.minecraft.client.Minecraft".equals(candidate.getName())
-                    && isLoadedMinecraftMixinHost(candidate.getClassLoader())) {
-                    return candidate.getClassLoader();
+                if (!MIXIN_ENVIRONMENT_CLASS.equals(candidate.getName())) continue;
+                ClassLoader loader = candidate.getClassLoader();
+                if (!isPrelaunchMixinEnvironmentHost(loader) || !ownsMixinBootstrap(loader)) continue;
+                try {
+                    Class<?> mixins = Class.forName(MIXINS_CLASS, false, loader);
+                    if (mixins.getClassLoader() == loader) return loader;
+                } catch (Throwable ignored) {
+                    // The environment can precede its facade class by one poll.
                 }
             }
             return null;
@@ -235,32 +229,10 @@ public final class HypixelLegitilsLoader {
             }
         }
 
-        private boolean isLoadedMinecraftMixinHost(ClassLoader candidate) {
+        private boolean isPrelaunchMixinEnvironmentHost(ClassLoader candidate) {
             return candidate != null && HypixelLegitilsLoader.isNonMetaOrPreMixinHost(
                 candidate.toString()
             );
-        }
-
-        private void register(Class<?> mixins) {
-            try {
-                ClassLoader mixinLoader = mixins.getClassLoader();
-                if (mixinLoader == null) {
-                    status("unsupported-bootstrap-loader");
-                    diagnostic("Mixin runtime uses the bootstrap loader; MOD JAR cannot be added safely.");
-                    return;
-                }
-                if (MixinRuntimeRegistrar.addJarUrl(mixinLoader, config.modJar.toFile().toURI().toURL())) {
-                    diagnostic("MOD JAR added directly to the Mixin classloader.");
-                } else {
-                    diagnostic("Mixin classloader has no compatible addURL method; using the system classloader search.");
-                }
-                Method addConfiguration = mixins.getMethod("addConfiguration", String.class);
-                addConfiguration.invoke(null, config.mixinConfig);
-                status("mixin-config-registered");
-            } catch (Throwable exception) {
-                status("mixin-registration-error");
-                diagnostic("Mixin registration failed: " + exception.getClass().getSimpleName());
-            }
         }
 
     }

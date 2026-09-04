@@ -31,8 +31,8 @@ final class MixinRuntimeRegistrar {
             bootstrap.getMethod("init").invoke(null);
             Class<?> mixins = Class.forName(mixinsClassName, true, loader);
             ClassLoader mixinLoader = mixins.getClassLoader();
-            if (mixinLoader == null) {
-                HypixelLegitilsLoader.diagnostic("Mixin runtime uses the bootstrap loader; MOD JAR cannot be added safely.");
+            if (mixinLoader != loader) {
+                HypixelLegitilsLoader.diagnostic("Mixin runtime resolved from a different loader; registration skipped.");
                 return false;
             }
             if (addJarUrl(mixinLoader, config.modJar.toFile().toURI().toURL())) {
