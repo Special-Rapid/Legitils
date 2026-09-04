@@ -149,11 +149,6 @@ public final class HypixelLegitilsLoader {
                     register(mixins);
                     return;
                 }
-                ClassLoader ichorLoader = findIchorMixinClassLoader();
-                if (ichorLoader != null && MixinRuntimeRegistrar.register(config, ichorLoader)) {
-                    status("mixin-config-registered");
-                    return;
-                }
                 try {
                     Thread.sleep(25L);
                 } catch (InterruptedException interrupted) {
@@ -203,9 +198,11 @@ public final class HypixelLegitilsLoader {
         }
 
         private Class<?> findLoadedMixinsClass() {
+            ClassLoader minecraftLoader = findLoadedMinecraftClassLoader();
+            if (minecraftLoader == null || !ownsMixinBootstrap(minecraftLoader)) return null;
             for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
                 if ("org.spongepowered.asm.mixin.Mixins".equals(candidate.getName())
-                    && isLoadedLunarGameMixinClassLoader(candidate.getClassLoader())) {
+                    && candidate.getClassLoader() == minecraftLoader) {
                     return candidate;
                 }
             }
@@ -213,49 +210,35 @@ public final class HypixelLegitilsLoader {
         }
 
         /**
-         * Genesis creates an Ichor URLClassLoader between premain and its bake
-         * pass. The game thread exposes that loader as its context loader before
-         * Minecraft classes are loaded, which is the safe time to add our fixed
-         * config. Do not load Mixin through the system loader: that copy has no
-         * Ichor host service and fails JVM startup.
+         * Current Genesis exposes the game host as an unlabeled loader. Accept it
+         * only after the same loader is proven to own Minecraft; a META/PRE stage
+         * remains ineligible even if it also carries a Mixin runtime.
          */
-        private ClassLoader findIchorMixinClassLoader() {
-            for (Thread thread : Thread.getAllStackTraces().keySet()) {
-                ClassLoader candidate = thread.getContextClassLoader();
-                if (!isLunarGameMixinClassLoader(candidate)) continue;
-                try {
-                    Class<?> bootstrap = Class.forName(MixinRuntimeRegistrar.bootstrapClassName(), false, candidate);
-                    if (bootstrap.getClassLoader() == candidate) return candidate;
-                } catch (Throwable ignored) {
-                    // Genesis may expose the loader before its Mixin resources;
-                    // keep polling within the bounded compatibility window.
+        private ClassLoader findLoadedMinecraftClassLoader() {
+            for (Class<?> candidate : instrumentation.getAllLoadedClasses()) {
+                if ("net.minecraft.client.Minecraft".equals(candidate.getName())
+                    && isLoadedMinecraftMixinHost(candidate.getClassLoader())) {
+                    return candidate.getClassLoader();
                 }
             }
             return null;
         }
 
-        private boolean isLunarGameMixinClassLoader(ClassLoader candidate) {
-            // Genesis can obfuscate the concrete Java class name of the context
-            // loader. The following bootstrap-ownership check still proves that
-            // the candidate owns Mixin; use the stable explicit game-stage label
-            // here rather than excluding that real host by its implementation name.
-            return HypixelLegitilsLoader.isLabeledLunarGameMixinHost(
-                candidate == null ? null : candidate.toString()
-            );
+        private boolean ownsMixinBootstrap(ClassLoader candidate) {
+            try {
+                Class<?> bootstrap = Class.forName(MixinRuntimeRegistrar.bootstrapClassName(), false, candidate);
+                return bootstrap.getClassLoader() == candidate;
+            } catch (Throwable ignored) {
+                // Genesis may expose the loader before its Mixin resources;
+                // keep polling within the bounded compatibility window.
+                return false;
+            }
         }
 
-        /**
-         * A current Lunar Ichor host can omit its stage from {@code toString()}.
-         * Do not use that host during the early context-loader probe: only accept it
-         * here after its own Mixins class has already been loaded. Explicitly labeled
-         * META_MIXIN and PRE_OPTIFINE_PATCH hosts remain rejected by the normal rule.
-         */
-        private boolean isLoadedLunarGameMixinClassLoader(ClassLoader candidate) {
-            String className = candidate == null ? null : candidate.getClass().getName();
-            String description = candidate == null ? null : candidate.toString();
-            return HypixelLegitilsLoader.isLunarGameMixinClassLoader(className, description)
-                || HypixelLegitilsLoader.isLabeledLunarGameMixinHost(description)
-                || HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(className, description);
+        private boolean isLoadedMinecraftMixinHost(ClassLoader candidate) {
+            return candidate != null && HypixelLegitilsLoader.isNonMetaOrPreMixinHost(
+                candidate.toString()
+            );
         }
 
         private void register(Class<?> mixins) {
@@ -310,6 +293,13 @@ public final class HypixelLegitilsLoader {
             && !normalized.contains("PRE_OPTIFINE_PATCH");
     }
 
+    static boolean isNonMetaOrPreMixinHost(String description) {
+        if (description == null) return true;
+        String normalized = description.toUpperCase(java.util.Locale.ROOT);
+        return !normalized.contains("META_MIXIN")
+            && !normalized.contains("PRE_OPTIFINE_PATCH");
+    }
+
     static String describeMixinHostLoader(String className, String description) {
         String loader = className == null ? "bootstrap" : className;
         return loader + "[stage=" + lunarMixinStage(description) + "]";
@@ -330,17 +320,4 @@ public final class HypixelLegitilsLoader {
         return "unlabeled";
     }
 
-    /**
-     * Compatibility fallback for a host that no longer renders its stage name.
-     * It is deliberately used only after {@code org.spongepowered.asm.mixin.Mixins}
-     * is known to be loaded by that exact loader; early context-loader discovery keeps
-     * requiring the explicit game-stage label above.
-     */
-    static boolean isUnlabeledLunarIchorMixinClassLoader(String className, String description) {
-        if (!isIchorClassLoaderName(className) || description == null) return false;
-        String normalized = description.toUpperCase(java.util.Locale.ROOT);
-        return !normalized.contains("ICHORCLASSLOADER(")
-            && !normalized.contains("META_MIXIN")
-            && !normalized.contains("PRE_OPTIFINE_PATCH");
-    }
 }

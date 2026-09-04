@@ -69,6 +69,17 @@ public final class HypixelLegitilsLoaderTest {
     }
 
     @Test
+    public void rejectsMetaAndPreStagesForTheLoadedMinecraftHost() {
+        assertTrue(HypixelLegitilsLoader.isNonMetaOrPreMixinHost("unlabeled Genesis loader"));
+        assertFalse(HypixelLegitilsLoader.isNonMetaOrPreMixinHost(
+            "IchorClassLoader(META_MIXIN)"
+        ));
+        assertFalse(HypixelLegitilsLoader.isNonMetaOrPreMixinHost(
+            "IchorClassLoader(PRE_OPTIFINE_PATCH)"
+        ));
+    }
+
+    @Test
     public void emitsOnlyBoundedRecognizedStageDiagnostics() {
         String className = "com.moonsworth.lunar.ichor.IchorClassLoader";
         assertEquals(
@@ -91,20 +102,4 @@ public final class HypixelLegitilsLoaderTest {
         assertEquals("loader.0[stage=unlabeled]", candidates.get(0));
     }
 
-    @Test
-    public void acceptsOnlyAnUnlabeledIchorHostAfterItsMixinClassIsObserved() {
-        String className = "com.moonsworth.lunar.ichor.IchorClassLoader";
-        assertTrue(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
-            className, "com.moonsworth.lunar.ichor.IchorClassLoader@1234"
-        ));
-        assertFalse(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
-            className, "IchorClassLoader(META_MIXIN)"
-        ));
-        assertFalse(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
-            className, "IchorClassLoader(PRE_OPTIFINE_PATCH)"
-        ));
-        assertFalse(HypixelLegitilsLoader.isUnlabeledLunarIchorMixinClassLoader(
-            "org.spongepowered.asm.launch.MixinClassLoader", "unlabeled"
-        ));
-    }
 }
